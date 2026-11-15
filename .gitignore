@@ -9,3 +9,6 @@ out
 next-env.d.ts
 tsconfig.tsbuildinfo
 .next-old
+
+# 로컬 빌드 캐시 잔여물
+.next-broken-*

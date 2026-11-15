@@ -1,6 +1,6 @@
 "use client";
 // ─────────────────────────────────────────────────────────────────────────────
-// ZoneMap — 구역 경계 폴리곤 지도 (Leaflet + CARTO 타일, API 키 불필요)
+// ZoneMap — 구역 경계 폴리곤 지도 (Leaflet + OpenStreetMap 타일, API 키 불필요)
 //
 // ▶ 실무 교체 가이드 (scripts/README-gis.md에 상세):
 //   1) 실제 구역 경계: 서울 열린데이터광장 / VWorld WFS GeoJSON을
@@ -19,15 +19,15 @@ export { TYPE_COLORS };
 
 /**
  * 타일 어댑터 — 주석 해제로 교체.
- *  - CARTO/OSM: 무료, 키 불필요 (MVP 기본)
+ *  - OSM: 무료, 키 불필요 (MVP 기본). 실제 서울 도로·동네 이름이 그대로 보인다.
  *  - VWorld: 국토지리정보원 API 키 필요 (국내 도로/항공 정밀)
  *  - Kakao/Naver: JS SDK 기반 지도(kakao.maps.Polygon 등)로 교체
+ *  * CARTO 베이스맵은 키 없이 호출하면 "API KEY REQUIRED" 워터마크가 찍혀 제외했다.
  */
 const TILE_ADAPTERS = {
-  carto: {
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  osm: {
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
   },
   // vworld: {
   //   url: "https://api.vworld.kr/req/wmts/1.0.0/{VWORLD_KEY}/Base/{z}/{y}/{x}.png",
@@ -61,7 +61,7 @@ export default function ZoneMap({ zones, selectedZoneId, onSelectZone }: ZoneMap
       scrollWheelZoom
       style={{ borderRadius: "0.75rem" }}
     >
-      <TileLayer url={TILE_ADAPTERS.carto.url} attribution={TILE_ADAPTERS.carto.attribution} />
+      <TileLayer url={TILE_ADAPTERS.osm.url} attribution={TILE_ADAPTERS.osm.attribution} />
       {zones.map((zone) => {
         const active = zone.id === selectedZoneId;
         const color = TYPE_COLORS[zone.type];
