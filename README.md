@@ -21,7 +21,7 @@
 
 ## 기술 스택
 
-Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · Leaflet 1.9 (react-leaflet 5, CARTO/OSM 타일 — **지도 API 키 불필요**) · Supabase(Postgres) 준비
+Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · Leaflet 1.9 (react-leaflet 5, OpenStreetMap 타일 — **지도 API 키 불필요**) · Supabase(Postgres) 준비
 
 ## 실행
 
