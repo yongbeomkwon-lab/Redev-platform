@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Leaflet 지도가 탭/모달 아래에 깔리지 않도록 z-index 정리 */
+.leaflet-container {
+  z-index: 0;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 500 !important;
+}
