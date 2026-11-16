@@ -25,6 +25,16 @@
   같은 구역이 여러 레코드로 등록돼 있다(신통기획 후보지 + 실제 사업구역, 재정비촉진구역 + 재개발,
   ‘성수전략2’ + ‘성수전략정비지구2’, ‘목동4단지’ 재건축 + 신통기획 등). 이름을 정규화해 같고
   중심이 250m 이내면 한 구역으로 합치고, **추진단계가 가장 앞선 레코드**의 유형·단계·면적을 쓴다.
+  이름 정규화는 꼬리말 ‘구역/지구’도 떼므로 ‘신길1’과 ‘신길1구역’(같은 구역이 두 레코드로 실린 것),
+  ‘마천1’·‘마천2’·‘전농8’ 등 15쌍이 한 구역으로 합쳐진다. 합칠 때 표시명은 더 서술적인 이름
+  (‘신길1구역’)을 쓰고 짧은 이름(‘신길1’)은 `alias`로 남겨 둘 다 검색된다.
+  단, 이름이 같아도 **면적 규모가 3분의 1 미만으로 다른 쌍은 합치지 않는다** — 큰 계획구역 안에
+  작은 사업구역이 들어 있는 별개 구역이기 때문이다(‘장위13-1’·‘장위13-2’의 신속통합기획 대상지와
+  가로주택정비사업 구역: 13-1은 275m 떨어진 별개 필지, 13-2는 가로주택 구역이 신통기획 구역 안에
+  완전히 들어 있어 각각 따로 둔다).
+  도형·면적은 **자기 고시면적과 도형 면적이 가장 잘 맞는 레코드**의 것을 보되, UQ181 정밀 경계가
+  있으면 그쪽이 우선한다(레코드마다 고시면적과 도형이 어긋나는 경우가 있어, 가장 진행된 레코드의
+  도형이 곧 그 구역의 경계·면적이라고 볼 수 없다).
 
 병합 규칙(도형):
   같은 구역이 두 소스에 있으면 **굴곡이 더 많은(필지 경계를 더 잘 따라가는) 도형**을 쓴다.
@@ -39,6 +49,7 @@ import difflib
 import json
 import math
 import os
+import re
 import sys
 
 import shapefile
@@ -256,11 +267,29 @@ JUNK = ("주택정비형", "도시정비형", "주택재개발사업", "주택�
 
 
 def norm_name(s):
-    """구역명 비교용 정규화 — 사업 유형·꼬리말·기호 제거."""
+    """구역명 비교용 정규화 — 사업 유형·꼬리말·기호 제거.
+    (UQ181 도형 매칭의 이름 유사도에도 쓰이므로 여기서는 ‘구역/지구’를 떼지 않는다.)"""
     s = (s or "").replace(" ", "")
     for junk in JUNK:
         s = s.replace(junk, "")
     return s.strip("()[]{}·-,")
+
+
+def norm_key(s):
+    """중복 구역 판정용 이름 키 — norm_name 에서 꼬리말 ‘구역/지구’까지 뗀다.
+
+    같은 구역이 ‘신길1’과 ‘신길1구역’처럼 두 레코드로 실려도 한 구역으로 묶기 위해서다
+    (붙어 있는 이름이 ‘구역’ 하나 차이로 갈라지던 17쌍의 원인).
+    """
+    s = norm_name(s)
+    while True:
+        t = s
+        for tail in ("구역", "지구"):
+            if s.endswith(tail) and len(s) > len(tail):
+                s = s[: -len(tail)].strip("()[]{}·-,")
+                break
+        if s == t:
+            return s
 
 
 def name_sim(a, b):
@@ -355,22 +384,65 @@ def dist_m(a, b):
     return math.hypot((a["lat"] - b["lat"]) * 111_000, (a["lng"] - b["lng"]) * 88_000)
 
 
+def same_scale(a, b):
+    """두 레코드가 같은 규모의 구역인가 — 면적이 3분의 1 미만으로 다르면 상위 계획구역과
+    그 안의 소규모 사업구역(예: 신통기획 대상지 ↔ 가로주택정비사업 구역)일 수 있어 합치지 않는다."""
+    aa = a.get("areaNotice") or a.get("areaShape") or 0
+    ab = b.get("areaNotice") or b.get("areaShape") or 0
+    if aa <= 0 or ab <= 0:
+        return True
+    return min(aa, ab) / max(aa, ab) >= 0.35
+
+
+def shape_fit(r):
+    """고시면적과 도형 면적의 어긋남(로그비 절댓값). 0에 가까울수록 그 레코드의 도형이
+    자기 고시면적과 맞는다. 고시면적이 없으면 None."""
+    if not r.get("areaNotice") or not r.get("areaShape"):
+        return None
+    return abs(math.log(r["areaShape"] / r["areaNotice"]))
+
+
+def pick_shape_owner(rep, cluster):
+    """합쳐진 구역의 면적을 어느 레코드에서 가져올지 고른다.
+
+    기본은 가장 진행된 레코드(rep)지만, 그 레코드의 도형이 자기 고시면적과 20% 넘게 어긋나면
+    같은 구역의 다른 레코드 중 고시면적과 가장 잘 맞는 도형을 쓴다.
+      예) 전농8 고시 72,436㎡ vs 도형 91,506㎡, 전농8구역 고시 94,729㎡ vs 도형 93,993㎡ → 후자
+          마천2 102,779㎡ vs 도형 77,303㎡, 마천2구역 77,338㎡ vs 도형 77,258㎡ → 후자
+          신길13구역 15,124㎡ vs 도형 29,002㎡, 신길13 15,120㎡ vs 도형 15,316㎡ → 후자
+    고른 레코드의 도형·고시면적을 함께 쓴다(원래 레코드의 도형도 UQ181 정밀 경계를 찾는 후보로
+    남긴다). 어느 쪽이든 UQ181 정밀 경계를 만나면 그 경계가 최종 도형이 된다.
+    """
+    fit = shape_fit(rep)
+    if fit is None or fit <= 0.20:
+        return rep
+    others = [m for m in cluster if m is not rep and shape_fit(m) is not None]
+    if not others:
+        return rep
+    best = min(others, key=shape_fit)
+    return best if shape_fit(best) < fit - 0.05 else rep
+
+
 def merge_same_zone(recs):
     """같은 구역의 여러 레코드(신통기획 후보지/재개발/재건축/재정비촉진구역)를 하나로 합친다.
-    조건: 정규화 이름이 같고 중심거리 250m 이내. 또는 도형이 사실상 동일(중심 12m·면적 2%)."""
+    조건: 정규화 이름이 같고 중심거리 250m 이내. 또는 도형이 사실상 동일(중심 12m·면적 2%).
+    이름이 같아도 면적 규모가 3분의 1 미만으로 다르면 별개 구역으로 둔다(상위 계획 vs 소규모 사업)."""
     ordered = sorted(recs, key=lambda x: (-x["prog"], -x["spec"], -x["ringPts"], -x["area"]))
     clusters = []
     for x in ordered:
-        nx = norm_name(x["name"])
+        nx = norm_key(x["name"])
         hit = None
         for c in clusters:
             rep = c[0]
             d = dist_m(x, rep)
             if d > 400:
                 continue
-            same_name = nx != "" and nx == norm_name(rep["name"])
+            same_name = nx != "" and nx == norm_key(rep["name"])
+            # 이름이 글자까지 같으면 같은 구역으로 실린 레코드 — 예전처럼 규모와 무관하게 합친다.
+            # ‘구역’ 꼬리말만 다른 경우에만 규모를 본다(상위 계획구역 vs 그 안의 소규모 사업구역).
             same_shape = d < 12 and abs(x["areaShape"] - rep["areaShape"]) <= max(50, 0.02 * rep["areaShape"])
-            if (d <= 250 and same_name) or same_shape:
+            same_len_ok = x["name"] == rep["name"] or same_scale(x, rep)
+            if (d <= 250 and same_name and same_len_ok) or same_shape:
                 hit = c
                 break
         if hit is None:
@@ -379,16 +451,37 @@ def merge_same_zone(recs):
             hit.append(x)
     merged = []
     for c in clusters:
-        rep = c[0]
-        # 표시 이름: 같은 구역으로 묶인 이름 중 가장 서술적인(긴) 것
+        rep = dict(c[0])
+        # 표시 이름: 같은 구역으로 묶인 이름 중 가장 서술적인(긴) 것 — '신길1구역' > '신길1'
         name = max((m["name"] for m in c), key=lambda s: (len(s), s))
-        rep = dict(rep)
         rep["name"] = name
         # 고시면적(DGM_AR)이 비어 있는 레코드만 같은 구역의 다른 레코드 값으로 채운다
         if not rep["areaNotice"]:
             notice = max((m["areaNotice"] for m in c), default=0)
             if notice:
                 rep["area"] = notice
+        # 면적: 가장 진행된 레코드의 고시면적이 자기 도형과 크게 어긋나면(예: 전농8 72,436㎡ vs
+        # 도형 91,506㎡) 고시면적·도형이 서로 맞는 같은 구역의 다른 레코드 값을 쓴다.
+        # 도형 자체는 가장 진행된 레코드의 경계를 유지하고, UQ181 정밀 경계가 있으면 그쪽이 이긴다.
+        # 이름이 같은(꼬리말만 다른) 레코드끼리 묶인 구역에만 적용한다 — 이름 유사도로 묶인
+        # 다른 클러스터(예: ‘성수전략2’ + ‘성수전략정비지구2’)는 기존처럼 대표 레코드 면적을 쓴다.
+        tail_merged = len({m["name"] for m in c}) > 1 and len({norm_key(m["name"]) for m in c}) == 1
+        owner = pick_shape_owner(c[0], c) if tail_merged else c[0]
+        if owner is not c[0] and owner.get("areaNotice"):
+            rep["area"] = owner["areaNotice"]
+            rep["areaNotice"] = owner["areaNotice"]
+            rep["areaFrom"] = owner["sid"]
+            # 도형도 면적으로 맞는 쪽을 쓰고, 원래 레코드의 도형은 UQ181 정밀 경계를 찾는
+            # 후보로 남긴다(둘 중 어느 도형이든 UQ181 레코드와 만나면 그 정밀 경계가 이긴다).
+            for k in ("ll", "lls", "lat", "lng", "areaShape", "ringPts"):
+                rep[k] = owner[k]
+            rep["_altShapes"] = [{"name": name, "ll": c[0]["ll"], "lls": c[0]["lls"],
+                                  "lat": c[0]["lat"], "lng": c[0]["lng"], "area": c[0]["area"],
+                                  "areaShape": c[0]["areaShape"]}]
+        # 같은 구역의 다른 이름(‘신길1’ 등)은 alias 로 남겨 검색되게 한다
+        alias = sorted({m["name"] for m in c} - {name})
+        if alias:
+            rep["alias"] = alias
         rep["alts"] = sorted({m["sid"] for m in c})
         merged.append(rep)
     return merged
@@ -440,10 +533,16 @@ class Grid:
 
 
 def pick_geometry(zone, detail, index):
-    """두 소스의 '실제 굴곡량'을 같은 허용오차에서 비교해 더 상세한 도형을 고른다."""
-    m = match_detail(zone, detail, index) if detail else None
-    if m:
-        c_base, c_det = complexity(zone["ll"]), complexity(m["ll"])
+    """두 소스의 '실제 굴곡량'을 같은 허용오차에서 비교해 더 상세한 도형을 고른다.
+
+    병합 구역이 다른 레코드의 도형(_altShapes)을 함께 들고 있으면 두 도형 모두로 UQ181 레코드를
+    찾아보고, 어느 쪽이든 정밀 경계를 만나면 그것을 쓴다.
+    """
+    for cand in [zone] + list(zone.get("_altShapes") or []):
+        m = match_detail(cand, detail, index) if detail else None
+        if not m:
+            continue
+        c_base, c_det = complexity(cand["ll"]), complexity(m["ll"])
         if c_det >= c_base + 5 and c_det >= c_base * 1.3:
             return {
                 "lls": m["lls"],
@@ -474,6 +573,22 @@ def main():
     print(f"정비사업 레코드 {len(cand)} → 중복 구역 병합 ", end="")
     zones = merge_same_zone(cand)
     print(f"{len(zones)}개 구역")
+    # 꼬리말 ‘구역’ 하나 차이로 갈라져 있던 병합(‘신길1’+‘신길1구역’)을 눈으로 확인한다
+    def tail_pair(z):
+        if not z.get("alias") or not z["name"].endswith(("구역", "지구")):
+            return False
+        short = z["name"][:-2]
+        return any(a.replace(" ", "") == short.replace(" ", "") for a in z["alias"])
+
+    tail_merges = [z for z in zones if tail_pair(z)]
+    print(f"  이름 꼬리말(구역)만 다르던 같은 구역 병합: {len(tail_merges)}쌍")
+    for z in tail_merges:
+        print(f"    {z['name']} ({z['kind']}·{z['stage']}, {z['area']:,}㎡, alias {', '.join(z['alias'])}, "
+              f"레코드 {len(z['alts'])}){'' if 'areaFrom' not in z else ' [면적=다른 레코드]'}")
+    for z in zones:
+        if z.get("areaFrom"):
+            print(f"  면적을 도형과 맞는 레코드에서 가져온 구역: {z['name']} ({z['kind']}·{z['stage']}, "
+                  f"{z['area']:,}㎡)")
 
     # 병합 결과에 대표 구역 id를 붙인다
     feat_by_sid = {sid: zid for zid, (sid, _) in FEATURED.items()}
@@ -522,6 +637,7 @@ def main():
                 "featured": z["featured"],
                 "sourceId": z["sid"],
                 "geom": g["source"],
+                **({"alias": z["alias"]} if z.get("alias") else {}),
             },
             "geometry": geom,
         })
@@ -554,7 +670,9 @@ def main():
     #    원천: 서울시 고시·정비사업 정보몽땅·자치구 공개자료 (scripts/data/official-supplement.json)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from official_supplement import apply_supplement  # noqa: E402
-    seoul_list = [{k: v for k, v in z.items() if k not in ("ll", "lls", "lat", "lng", "alts")} for z in zones]
+    seoul_list = [{k: v for k, v in z.items()
+                   if k not in ("ll", "lls", "lat", "lng", "alts") and not k.startswith("_")}
+                  for z in zones]
     supp_stats = apply_supplement(fc, seoul_list, meta)
     print(f"  공식 명칭 {supp_stats['renamed']}건 · 신규 후보지 {supp_stats['added']}건 보강")
     json.dump(meta, open(f"{root}/src/data/zones-meta.json", "w"), ensure_ascii=False, indent=1)

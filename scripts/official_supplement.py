@@ -115,6 +115,8 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         zone["sid"] = base["sourceId"]
         zone["center"] = list(a["center"])
         zone["asOf"] = supp.get("asOf")
+        if sources:
+            zone["sources"] = sources   # export-geojson.mjs 재내보내기도 같은 출처를 싣도록
         for key in ("selectedAt", "centerLabel", "locationMap", "note", "areaNote"):
             if a.get(key):
                 zone[key] = a[key]
