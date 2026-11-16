@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """
-서울시 도시계획사업(서울플랜+) SHP → 앱 GeoJSON 변환 파이프라인
+서울시 정비구역 경계 SHP → 앱 GeoJSON 변환 파이프라인 (2-소스 병합)
 
-원천: 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」 (OA-22712)
-      파일: UQ120_도시계획사업(서울플랜+)_YYYYMM.zip  (CC-Zero, 상업적 이용 가능)
-      좌표계: EPSG:5174 (Korean 1985 / Modified Korea Central Belt, Bessel 1841)
+원천 ① 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」 (OA-22712)
+        파일: 532_UQ120_도시계획사업(서울플랜+)_YYYYMM.zip     → 사업유형·추진단계·고시면적 메타
+원천 ② 서울 열린데이터광장 「서울시 의제처리구역 위치정보」 (OA-20957)
+        파일: 570_UQ181_의제처리구역_YYYYMM.zip               → 정비구역 실경계(필지 경계를 따라가는 정밀 도형)
+      두 소스 모두 좌표계 EPSG:5174 (Korean 1985 / Bessel, TM중부).
 
 출력:
   src/data/zones-geo.json      대표(피처드) 구역 실경계 — 앱 상세·지도 하이라이트
-  src/data/seoul-zones.json    배경 레이어 150개 구역 실경계 (간략화)
-  public/data/zones.geojson    위 150개를 GeoJSON(FeatureCollection)으로
+  src/data/seoul-zones.json    배경 레이어 구역 실경계 (간략화)
+  public/data/zones.geojson    위 구역을 GeoJSON(FeatureCollection)으로
+
+병합 규칙:
+  같은 구역이 두 소스에 있으면 **정점이 더 많은(필지 경계를 더 잘 따라가는) 도형**을 쓴다.
+  → 성수전략정비구역 제2주택정비형 재개발정비구역은 UQ120이 10점(직선 위주)이지만
+    UQ181은 125점으로 필지 경계를 그대로 따라간다. 이런 구역만 UQ181 도형으로 교체되고,
+    UQ181에 없거나 더 거친 구역(신통기획 신규 대상지 등)은 UQ120 도형을 유지한다.
 
 필요 패키지: pip install pyshp pyproj
-사용: python3 scripts/import-seoul-zones.py <추출된 shp 디렉터리>
+사용: python3 scripts/import-seoul-zones.py <UQ120 shp 디렉터리> [<UQ181 shp 디렉터리>]
 """
-import json, math, sys, os
+import json, math, sys, os, difflib
 
 import shapefile
 from pyproj import CRS, Transformer
@@ -75,12 +83,15 @@ GU = {
 }
 
 # ── 대표(피처드) 구역 ↔ 서울시 공식 레코드 매칭 ──────────────────────────────
-# 앱의 구역 id → 서울시 데이터(PRESENT_SN). 구역 명칭이 같은(또는 그 구역을 지칭하는)
-# 실제 고시 레코드를 매칭한다. 괄호 안은 고시 면적·단계.
+# 앱의 구역 id → (UQ120 사업 레코드 PRESENT_SN, 고정밀 우선순위)
+#   UQ181(의제처리구역)은 정비구역 실경계라 정점이 더 많다. 있으면 자동으로 이 도형을 쓴다.
+#   (앱 표시명·유형·단계·면적 메타는 UQ120 레코드 값 유지)
 FEATURED = {
     "sillim-1":   ("11000UQ120PS202407010537", 0.000004),  # 신림1구역 (재정비촉진구역·사업시행인가·223,201㎡)
     "banpo-1":    ("11000UQ120PS202411014218", 0.000004),  # 반포주공1단지(3주구) (재건축·착공·117,114㎡)
-    "noryangjin": ("11000UQ120PS202407010607", 0.000004),  # 노량진2구역 (재정비촉진구역·착공·16,213㎡)
+    # 노량진: 샘플 카드의 2,140세대·대단지 서사와 일치하는 '노량진1구역'(132,187㎡·관리처분계획인가)으로 정합.
+    # (구 표기 '노량진 제2구역'의 서울시 레코드는 16,213㎡ 소구역이라 세대수와 맞지 않았다)
+    "noryangjin": ("11000UQ120PS202407010595", 0.000004),  # 노량진1구역 (재정비촉진구역·관리처분계획인가·132,187㎡)
     "hannam":     ("11000UQ120PS202407010530", 0.000004),  # 한남재정비촉진지구=한남뉴타운 (재정비촉진지구·지구변경·948,390㎡)
     "seongsu":    ("11000UQ120PS202407010881", 0.000004),  # 성수전략정비지구2 (신속통합기획·기획완료·131,980㎡)
     "bukahyeon":  ("11000UQ120PS202407010570", 0.000004),  # 북아현1-1구역 (재정비촉진구역·준공·77,174㎡)
@@ -89,9 +100,16 @@ FEATURED = {
 # 배경 레이어에 담을 사업유형 (존치·시장·재생·역세권 등은 제외)
 BG_KINDS = {"BZ101", "BZ102", "BZ103", "BZ104", "BZ105", "BZ201", "BZ402", "BZ502"}
 TARGET = 150
-AS_OF = "2026-09-10"  # 서울시 데이터 기준일(파일 수정일)
+AS_OF = "2026-09-10"        # UQ120(서울플랜+) 기준일
+AS_OF_DETAIL = "2026-09-11"  # UQ181(의제처리구역) 기준일
 PER_GU_MAX = 9
 PER_GU_MIN = 2
+
+# 간략화 허용오차(도 단위, 위도 1e-5 ≈ 1.1m)
+TOL_FEATURED = 0.000004     # ≈0.45m — 필지 경계의 꺾임을 그대로 남긴다
+CAP_FEATURED = 900
+TOL_BG = 0.000018           # ≈2.0m — 배경 레이어
+CAP_BG = 120
 
 
 def ring_of(shape):
@@ -140,27 +158,41 @@ def dp(pts, tol):
     return [p for p, k in zip(pts, keep) if k]
 
 
-def simplify(ll, tol, cap=48):
+def simplify(ll, tol, cap=48, digits=5):
     ring = ll[:-1] if len(ll) > 1 and ll[0] == ll[-1] else ll
     out = dp(ring, tol)
     while len(out) > cap:
         tol *= 1.6
         out = dp(ring, tol)
-    # [lat,lng] 5자리(≈1.1m) 반올림 + 중복 제거
+    # [lat,lng] 반올림(5자리≈1.1m / 6자리≈0.11m) + 중복 제거
     res = []
     for lng, lat in out:
-        p = [round(lat, 5), round(lng, 5)]
+        p = [round(lat, digits), round(lng, digits)]
         if not res or res[-1] != p:
             res.append(p)
+    if len(res) > 2 and res[0] == res[-1]:
+        res.pop()
     return res
 
 
-def main():
-    src = sys.argv[1]
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    r = shapefile.Reader(src, encoding="cp949")
+def norm_name(s):
+    """구역명 비교용 정규화 — 사업 유형·꼬리말·기호 제거."""
+    s = (s or "").replace(" ", "")
+    for junk in ("주택정비형", "도시정비형", "주택재개발사업", "주택재건축정비사업", "정비사업",
+                 "재개발정비구역", "재개발", "재건축", "정비구역", "(주)", "㈜"):
+        s = s.replace(junk, "")
+    s = s.replace("재정비촉진구역", "구역").replace("재정비촉진지구", "지구")
+    return s
 
-    recs, every = [], {}
+
+def name_sim(a, b):
+    return difflib.SequenceMatcher(None, norm_name(a), norm_name(b)).ratio()
+
+
+def load(path, with_meta=True):
+    """SHP → 레코드 목록. sid 기준 중복은 최신/최대 면적 우선으로 합친다."""
+    r = shapefile.Reader(path, encoding="cp949")
+    out = []
     for sr in r.iterShapeRecords():
         d = sr.record.as_dict()
         if not sr.shape.points:
@@ -169,46 +201,121 @@ def main():
         if not rings:
             continue
         ll = rings[0][1]
-        ring_total = sum(r[0] for r in rings)
+        ring_total = sum(q[0] for q in rings)
         rec = {
-            "sid": d["PRESENT_SN"],
-            "name": (d["DGM_NM"] or "").strip(),
-            "kind": KIND.get(d["SCLAS_CL"], d["SCLAS_CL"]),
-            "type": TYPE.get(d["SCLAS_CL"], "일반재개발"),
-            "bg": d["SCLAS_CL"] in BG_KINDS,
-            "stage": STAGE.get(d["PROPEL_CD"], d["PROPEL_CD"] or "-"),
-            "gu": GU.get(d["SIGNGU_SE"], d["SIGNGU_SE"]),
-            # 면적은 경계 도형의 실제 면적(SHAPE_AREA, ㎡) — 고시면적(DGM_AR)과 1% 내 일치,
-            # 일부 레코드의 DGM_AR 단위 오류를 피한다.
-            "area": round(float(d["SHAPE_AREA"] or d["DGM_AR"] or 0)),
-            "areaNotice": round(float(d["DGM_AR"] or 0)),
-            "date": str(d["CREATE_DAT"] or ""),
+            "sid": d.get("PRESENT_SN"),
+            "name": (d.get("DGM_NM") or "").strip(),
+            "sclass": d.get("SCLAS_CL"),
+            "date": str(d.get("CREATE_DAT") or ""),
+            "area": round(float(d.get("SHAPE_AREA") or d.get("DGM_AR") or 0)),
             "lat": sum(p[1] for p in ll) / len(ll),
             "lng": sum(p[0] for p in ll) / len(ll),
             "ll": ll,
-            "lls": [r[1] for r in rings if r[0] >= max(2000, 0.05 * ring_total)],
+            "ringPts": len(ll),
+            "lls": [q[1] for q in rings if q[0] >= max(2000, 0.05 * ring_total)],
         }
-        every[rec["sid"]] = rec
-        if rec["bg"]:
-            recs.append(rec)
-    by_id = every
+        if with_meta:
+            rec.update({
+                "kind": KIND.get(rec["sclass"], rec["sclass"]),
+                "type": TYPE.get(rec["sclass"], "일반재개발"),
+                "bg": rec["sclass"] in BG_KINDS,
+                "stage": STAGE.get(d.get("PROPEL_CD"), d.get("PROPEL_CD") or "-"),
+                "gu": GU.get(d.get("SIGNGU_SE"), d.get("SIGNGU_SE")),
+                "areaNotice": round(float(d.get("DGM_AR") or 0)),
+            })
+        out.append(rec)
+    return out
 
-    # ── 중복(같은 구역이 단계별로 여러 레코드) 제거 ──
-    def dist(a, b):
-        return math.hypot((a["lat"] - b["lat"]) * 111_000,
-                          (a["lng"] - b["lng"]) * 88_000)
+
+def dedup_by_sid(recs, prefer_big=True):
+    by = {}
+    for x in recs:
+        k = x["sid"]
+        if k not in by:
+            by[k] = x
+        else:
+            cur = by[k]
+            better = (x["ringPts"], x["area"], x["date"]) > (cur["ringPts"], cur["area"], cur["date"]) if prefer_big \
+                else x["date"] > cur["date"]
+            if better:
+                by[k] = x
+    return list(by.values())
+
+
+def dist_m(a, b):
+    return math.hypot((a["lat"] - b["lat"]) * 111_000, (a["lng"] - b["lng"]) * 88_000)
+
+
+def match_detail(zone, detail):
+    """같은 구역의 UQ181(의제처리구역) 레코드 찾기 — 중심거리·면적비·이름 유사도."""
+    best, best_score = None, -9
+    for c in detail:
+        d = dist_m(zone, c)
+        if d > 150:
+            continue
+        if not zone["area"] or not c["area"]:
+            continue
+        ratio = c["area"] / zone["area"]
+        if not (0.5 <= ratio <= 2.0):
+            continue
+        sim = name_sim(zone["name"], c["name"])
+        score = sim * 3 - d / 60 - abs(math.log(ratio))
+        if score > best_score:
+            best, best_score = c, score
+    # 이름이 전혀 닮지 않았고 도형 면적도 20% 이상 차이 나면 다른 구역으로 본다
+    if best is None:
+        return None
+    if name_sim(zone["name"], best["name"]) < 0.25 and abs(best["area"] / zone["area"] - 1) > 0.2:
+        return None
+    return best
+
+
+def complexity(ll, tol=TOL_BG):
+    """공통 허용오차에서 남는 정점 수 = 도형이 실제로 담고 있는 굴곡의 양.
+    (SHP마다 정점 밀도가 달라 단순 정점 수 비교는 의미가 없다 — 노량진1은 1m 간격으로
+     조밀화돼 있어 원본 정점이 603개지만 형상은 43점이면 충분하다.)"""
+    ring = ll[:-1] if len(ll) > 1 and ll[0] == ll[-1] else ll
+    return len(dp(ring, tol))
+
+
+def pick_geometry(zone, detail):
+    """두 소스의 '실제 굴곡량'을 같은 허용오차에서 비교해 더 상세한 도형을 고른다."""
+    m = match_detail(zone, detail) if detail else None
+    if m:
+        c_base, c_det = complexity(zone["ll"]), complexity(m["ll"])
+        if c_det >= c_base + 5 and c_det >= c_base * 1.3:
+            return {
+                "lls": m["lls"],
+                "source": f"UQ181:{m['sid']}",
+                "sourceName": m["name"],
+                "gain": f"굴곡 {c_base}→{c_det}점(2m기준)",
+            }
+    return {"lls": zone["lls"], "source": f"UQ120:{zone['sid']}", "sourceName": zone["name"], "gain": None}
+
+
+def main():
+    uq120_dir = sys.argv[1]
+    uq181_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    every20 = dedup_by_sid(load(uq120_dir, with_meta=True))
+    by_id = {x["sid"]: x for x in every20}
+    detail = dedup_by_sid(load(uq181_dir, with_meta=False)) if uq181_dir else []
+    print(f"UQ120 {len(every20)}레코드 · UQ181 {len(detail)}레코드")
+
+    # ── 배경 후보(사업유형 필터) + 중복(단계별 레코드) 제거 ──
+    recs = [x for x in every20 if x["bg"]]
     recs.sort(key=lambda x: (-x["area"], x["date"]))
     kept = []
     for x in recs:
-        if any(dist(x, k) < 45 and abs(x["area"] - k["area"]) < max(300, 0.4 * max(x["area"], 1))
+        if any(dist_m(x, k) < 45 and abs(x["area"] - k["area"]) < max(300, 0.4 * max(x["area"], 1))
                for k in kept):
             continue
         kept.append(x)
-    print(f"원본 {len(recs)} → 중복제거 {len(kept)}")
+    print(f"배경 후보 {len(recs)} → 중복제거 {len(kept)}")
 
-    # ── 대표 구역 ──
     featured_ids = {v[0] for v in FEATURED.values()}
-    kept = [x for x in kept if x["sid"] not in featured_ids]  # 배경에서 제외(중복 방지)
+    kept = [x for x in kept if x["sid"] not in featured_ids]
 
     # ── 구별 상한을 두고 면적순 선정 ──
     per_gu, sel = {}, []
@@ -219,7 +326,6 @@ def main():
             continue
         per_gu[x["gu"]] = per_gu.get(x["gu"], 0) + 1
         sel.append(x)
-    # 구별 최소 확보
     for gu in GU.values():
         while per_gu.get(gu, 0) < PER_GU_MIN:
             cand = next((x for x in kept if x["gu"] == gu and x not in sel), None)
@@ -230,11 +336,15 @@ def main():
 
     # ── 파일 쓰기 ──
     geo, bg = [], []
+    print("\n[대표 구역]")
     for zid, (sid, tol) in FEATURED.items():
         if sid not in by_id:
             raise SystemExit(f"피처드 레코드 없음: {zid} {sid}")
         z = by_id[sid]
-        polys = [simplify(ll, tol, cap=600) for ll in z["lls"]]
+        g = pick_geometry(z, detail)
+        polys = [simplify(ll, tol, cap=CAP_FEATURED, digits=6) for ll in g["lls"]]
+        print(f"  {zid:11s} {z['name'][:28]:30s} {str(g['gain'] or '-'):22s} "
+              f"사용 {g['source']} → 최종 {len(polys[0])}점")
         geo.append({
             "id": zid, "sourceId": z["sid"], "name": z["name"],
             "area": z["areaNotice"] or z["area"], "shapeArea": z["area"],
@@ -242,6 +352,9 @@ def main():
             "center": [round(z["lat"], 6), round(z["lng"], 6)],
             "polygon": polys[0],
             **(({"parts": polys[1:]}) if len(polys) > 1 else {}),
+            "geomSource": g["source"],
+            "geomSourceName": g["sourceName"],
+            "geomAsOf": AS_OF_DETAIL if g["source"].startswith("UQ181") else AS_OF,
         })
         bg.append({"id": zid, "name": z["name"], "type": z["type"], "gu": z["gu"],
                    "stage": z["stage"], "kind": z["kind"], "area": z["area"],
@@ -249,13 +362,19 @@ def main():
                    "polygon": polys[0],
                    **(({"parts": polys[1:]}) if len(polys) > 1 else {}), "featured": True})
 
+    upgraded = 0
     for z in sel:
-        polys = [simplify(ll, 0.000020, cap=40) for ll in z["lls"]]
+        g = pick_geometry(z, detail)
+        if g["gain"]:
+            upgraded += 1
+        polys = [simplify(ll, TOL_BG, cap=CAP_BG, digits=5) for ll in g["lls"]]
         bg.append({"id": z["sid"], "name": z["name"], "type": z["type"], "gu": z["gu"],
                    "stage": z["stage"], "kind": z["kind"], "area": z["area"],
                    "center": [round(z["lat"], 6), round(z["lng"], 6)],
                    "polygon": polys[0],
-                   **(({"parts": polys[1:]}) if len(polys) > 1 else {}), "featured": False})
+                   **(({"parts": polys[1:]}) if len(polys) > 1 else {}), "featured": False,
+                   "geomSource": g["source"]})
+    print(f"\n[배경] UQ181 고정밀 도형으로 교체 {upgraded} / {len(sel)}곳")
 
     json.dump(geo, open(f"{root}/src/data/zones-geo.json", "w"), ensure_ascii=False, indent=1)
     json.dump(bg, open(f"{root}/src/data/seoul-zones.json", "w"), ensure_ascii=False, separators=(",", ":"))
@@ -267,7 +386,7 @@ def main():
             "type": "Feature", "id": z["id"],
             "properties": {k: z[k] for k in ("id", "name", "type", "gu", "stage", "kind", "area", "featured")},
             "geometry": ({"type": "MultiPolygon", "coordinates": [[r] for r in closed]}
-                         if len(closed) > 1 else {"type": "Polygon", "coordinates": closed[0]}),
+                         if len(closed) > 1 else {"type": "Polygon", "coordinates": [closed[0]]}),
         })
     json.dump(fc, open(f"{root}/public/data/zones.geojson", "w"), ensure_ascii=False, separators=(",", ":"))
 

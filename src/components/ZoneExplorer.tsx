@@ -97,7 +97,7 @@ export default function ZoneExplorer() {
               </span>
             ))}
             <span className="text-slate-400">
-              | 배경 경계는 서울시 도시계획사업(서울플랜+) 실데이터 150여 곳
+              | 배경 경계는 서울시 도시계획사업(서울플랜+)·의제처리구역(서울도시공간포털) 실데이터 150여 곳
             </span>
           </div>
         </div>
@@ -194,6 +194,17 @@ export default function ZoneExplorer() {
                       {selected.official.area.toLocaleString()}㎡
                       {(selected.official.area / 3.3058 / 1000).toFixed(1)}천평
                     </dd>
+                    {selected.official.geomSource?.startsWith("UQ181") && (
+                      <>
+                        <dt className="text-emerald-700/80">경계 도형</dt>
+                        <dd>
+                          의제처리구역 실경계(필지선 추종)
+                          <span className="text-emerald-700/70"> · {selected.official.geomAsOf} 기준</span>
+                        </dd>
+                        <dt className="text-emerald-700/80">경계 명칭</dt>
+                        <dd>{selected.official.geomSourceName}</dd>
+                      </>
+                    )}
                   </dl>
                 </div>
               )}
@@ -220,7 +231,8 @@ export default function ZoneExplorer() {
               </ol>
               <p className="mt-2 text-xs text-slate-400">
                 ※ 구역 경계·면적·추진단계는 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」
-                (OA-22712) 실데이터입니다. 세대수·비례율·시공사·거래·매물은 데모 샘플값입니다.
+                (OA-22712) 실데이터이며, 경계 도형은 같은 구역의 「서울시 의제처리구역 위치정보」
+                (OA-20957/UQ181) 정밀 도형이 있으면 그것을 씁니다. 세대수·비례율·시공사·거래·매물은 데모 샘플값입니다.
               </p>
             </div>
 

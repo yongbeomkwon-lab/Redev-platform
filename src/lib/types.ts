@@ -14,6 +14,10 @@ export type ZoneOfficial = {
   stage: string; // 추진단계 (예: 사업시행인가)
   area: number; // 구역면적 고시값 (㎡)
   asOf: string; // 데이터 기준일
+  /** 경계 도형 출처 — UQ181(의제처리구역)이면 필지 경계형 정밀 도형 */
+  geomSource?: string;
+  geomSourceName?: string;
+  geomAsOf?: string;
 };
 
 /** 추진 단계 (순서대로 진행). stageOrder가 클수록 뒤 단계 */

@@ -1,8 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // 샘플 데이터 — 서울 주요 정비구역
 //
-// · 구역 경계(polygon/center)는 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」
-//   (OA-22712, 기준 2026-09) 실경계를 EPSG:5174 → WGS84로 변환한 값이다.  → src/data/zones-geo.json
+// · 구역 경계(polygon/center)는 서울시 공식 실경계를 EPSG:5174 → WGS84로 변환한 값이다.  → src/data/zones-geo.json
+//   - 사업유형·추진단계·고시면적: 「서울시 도시계획사업 현황(서울플랜+)」 OA-22712 (기준 2026-09)
+//   - 경계 도형: 같은 구역이 「서울시 의제처리구역 위치정보」 OA-20957(UQ181, 기준 2026-09)에
+//     더 정밀한 필지 경계형 도형으로 있으면 그 도형을 쓴다(예: 성수전략2구역 10점→125점).
 // · 세대수·비례율·시공사·입주시기·거래·매물은 서비스 구조 검증용 샘플이다.
 //   (각 구역의 공식 명칭·사업유형·추진단계·면적은 zone.official에 원본 그대로 보관)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,6 +22,9 @@ type ZoneGeo = {
   center: [number, number];
   polygon: [number, number][];
   parts?: [number, number][][];
+  geomSource?: string;
+  geomSourceName?: string;
+  geomAsOf?: string;
 };
 
 /** 폴리곤·중심좌표 단일 출처: src/data/zones-geo.json (서울시 실경계 + 고시 메타) */
@@ -36,6 +41,9 @@ function geo(id: string) {
       stage: g.stage,
       area: g.area,
       asOf: g.asOf ?? "",
+      ...(g.geomSource ? { geomSource: g.geomSource } : {}),
+      ...(g.geomSourceName ? { geomSourceName: g.geomSourceName } : {}),
+      ...(g.geomAsOf ? { geomAsOf: g.geomAsOf } : {}),
     },
   };
 }
@@ -85,10 +93,10 @@ export const ZONES: Zone[] = [
   },
   {
     id: "noryangjin",
-    name: "노량진 제2구역",
+    name: "노량진 제1구역",
     district: "동작구",
-    type: "신통기획",
-    stage: "사업계획승인",
+    type: "일반재개발",
+    stage: "관리처분",
     households: 2140,
     ratioEstimate: 55.0,
     constructor: "대우건설(예정)",
@@ -96,14 +104,12 @@ export const ZONES: Zone[] = [
     toehoApplied: false,
     moveInEstimate: "2032~2034",
     timeline: [
-      { date: "2024-10", label: "신통기획 대상지 선정", sourceUrl: "#" },
-      { date: "2025-06", label: "추진위원회 승인", sourceUrl: "#" },
-      { date: "2026-07", label: "정비구역 지정 고시", sourceUrl: "#" },
+      { date: "2026-09", label: "서울시 도시계획사업 데이터 기준 (재정비촉진구역·관리처분계획인가·132,187㎡)", sourceUrl: "https://data.seoul.go.kr/dataList/OA-22712/F/1/datasetView.do" },
     ],
     ...geo("noryangjin"),
     lowestPrice: 74000,
     lowestInitialInvestment: 75480,
-    summary: "노량진역 세 지구 중 제2구역. 신통기획 통합기획 연계.",
+    summary: "노량진역 인근 13.2만㎡ 재정비촉진구역. 관리처분계획인가 완료 단계.",
   },
   {
     id: "hannam",
@@ -130,7 +136,7 @@ export const ZONES: Zone[] = [
   },
   {
     id: "seongsu",
-    name: "성수 제2구역",
+    name: "성수전략2구역",
     district: "성동구",
     type: "일반재개발",
     stage: "착공",
@@ -149,7 +155,7 @@ export const ZONES: Zone[] = [
     ...geo("seongsu"),
     lowestPrice: 96000,
     lowestInitialInvestment: 97920,
-    summary: "성수역 이남 대단지 재건축. 토허제 적용 구역.",
+    summary: "성수역 이남 주택정비형 재개발 정비구역. 경계는 서울시 의제처리구역(UQ181) 실경계 — 필지선을 따라간다.",
   },
   {
     id: "bukahyeon",

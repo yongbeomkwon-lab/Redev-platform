@@ -33,7 +33,7 @@ const features = zones.map((z) => {
     geometry:
       rings.length > 1
         ? { type: "MultiPolygon", coordinates: rings.map((r) => [r]) }
-        : { type: "Polygon", coordinates: rings[0] },
+        : { type: "Polygon", coordinates: [rings[0]] },
   };
 });
 
