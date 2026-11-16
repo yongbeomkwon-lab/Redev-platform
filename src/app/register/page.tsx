@@ -55,7 +55,7 @@ export default function RegisterPage() {
     salePrice && appraised && brokerName && brokerAgency && brokerPhone && brokerLicense;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <div>
         <h1 className="text-xl font-bold">중개사 매물 등록</h1>
         <p className="text-sm text-slate-600">

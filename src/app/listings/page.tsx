@@ -31,7 +31,7 @@ export default function ListingsPage() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
       <div>
         <h1 className="text-xl font-bold">검증 매물</h1>
         <p className="text-sm text-slate-600">

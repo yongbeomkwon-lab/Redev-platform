@@ -72,6 +72,44 @@ function rgba(hex: string, alpha: number): string {
   return out;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 줌 애니메이션 배율 측정
+//
+// 카카오맵은 레벨이 바뀌면 **이전 레벨 타일을 약 250ms 동안 CSS width/height 로 확대·축소**해
+// 그린 다음(예: 256 → 512), 새 레벨 타일이 도착하면 256 으로 되돌린다. 카카오 자신의
+// Polygon·라벨도 같은 애니메이션을 따라 움직이지만, 우리 canvas 는 getProjection() 값으로
+// 다시 그리기 때문에 레벨이 바뀌는 순간 최종 배율로 먼저 튀어 버린다 → 휠 줌 중 경계가
+// 지도에서 분리돼 보였다.
+//
+// 그래서 지도 한가운데에 실제로 그려진 타일의 **현재 배율**을 읽어,
+//   k = (타일 표시 폭 / 타일 원본 폭) × 2^(현재 레벨 - 타일 레벨)
+// 를 구해 투영 전체를 지도 중심 기준으로 k 배 해 그린다. 타일과 같은 배율로 움직이므로
+// 애니메이션 중에도 경계가 지도에 붙어 있고, 새 타일이 도착해 k=1 이 되면 최종 위치에 안착한다.
+const TILE_LEVEL_RE = /latest\/(\d{1,2})\/\d+\/\d+\.(?:png|jpe?g|webp)/i;
+/** 스카이뷰(항공사진) 타일 — .../map_skyview/L6/245/109.jpg */
+const SKY_TILE_LEVEL_RE = /\/map_skyview\/L(\d{1,2})\/\d+\/\d+\.(?:png|jpe?g|webp)/i;
+
+function measureImageryScale(el: HTMLElement, level: number): number {
+  if (typeof document === "undefined" || typeof document.elementsFromPoint !== "function") return 1;
+  const box = el.getBoundingClientRect();
+  if (box.width < 8 || box.height < 8) return 1;
+  // 지도 중앙에 실제로 칠해진 요소 중 맨 위 타일이 지금 화면의 배율을 말해준다
+  const stack = document.elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+  for (const node of stack) {
+    if (!(node instanceof HTMLImageElement)) continue;
+    const m = TILE_LEVEL_RE.exec(node.src || "") ?? SKY_TILE_LEVEL_RE.exec(node.src || "");
+    if (!m) continue;
+    const tileLevel = Number(m[1]);
+    const shown = node.getBoundingClientRect().width;
+    const natural = node.naturalWidth || 256;
+    if (!(shown > 1) || !(natural > 1) || Math.abs(tileLevel - level) > 3) continue;
+    const k = (shown / natural) * Math.pow(2, level - tileLevel);
+    if (!Number.isFinite(k) || k < 0.2 || k > 5) return 1;
+    return Math.abs(k - 1) < 0.004 ? 1 : k;
+  }
+  return 1;
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 }
@@ -107,6 +145,10 @@ export default function KakaoZoneMap({
   const moveRafRef = useRef(0);
   const drawRafRef = useRef(0);
   const loopUntilRef = useRef(0);
+  /** 줌 애니메이션 배율을 읽을 시간 창 (ms) — zoom_start/zoom_changed 에서 열고, k≠1 인 동안 연장 */
+  const zoomAnimUntilRef = useRef(0);
+  /** 창을 무한히 연장하지 않기 위한 상한 */
+  const zoomDeadlineRef = useRef(0);
   const onSelectRef = useRef(onSelectZone);
   onSelectRef.current = onSelectZone;
 
@@ -150,8 +192,27 @@ export default function KakaoZoneMap({
     const pLat = proj.containerPointFromCoords(new k.maps.LatLng(cLat + probe, cLng));
     const pLng = proj.containerPointFromCoords(new k.maps.LatLng(cLat, cLng + probe));
     const m0 = mercator(cLat);
-    const pxPerMerc = (pLat.y - p0.y) / (mercator(cLat + probe) - m0);
-    const pxPerLng = (pLng.x - p0.x) / probe;
+    const pxPerMercRaw = (pLat.y - p0.y) / (mercator(cLat + probe) - m0);
+    const pxPerLngRaw = (pLng.x - p0.x) / probe;
+
+    // 줌 애니메이션 중이면 지도 타일이 지금 몇 배로 그려져 있는지 읽어 같은 배율을 쓴다 (위 주석 참조)
+    const now = performance.now();
+    let kScale = 1;
+    if (zoomAnimUntilRef.current > now) {
+      kScale = measureImageryScale(el, map.getLevel());
+      if (kScale !== 1 && now < zoomDeadlineRef.current) {
+        zoomAnimUntilRef.current = now + 140;
+        loopUntilRef.current = Math.max(loopUntilRef.current, now + 160);
+      }
+    }
+
+    // 화면 좌상단(0,0)과 우하단이 "투영 좌표"에서 어디인지 — k배 축소·확대된 만큼 되돌려 놓고 경계를 구한다
+    const ccx = cw / 2;
+    const ccy = ch / 2;
+    const p0x = kScale === 1 ? p0.x : ccx + (p0.x - ccx) * kScale;
+    const p0y = kScale === 1 ? p0.y : ccy + (p0.y - ccy) * kScale;
+    const pxPerMerc = pxPerMercRaw * kScale;
+    const pxPerLng = pxPerLngRaw * kScale;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -161,11 +222,15 @@ export default function KakaoZoneMap({
     ctx.lineCap = "round";
 
     const zoomProxy = ZOOM_BASE - map.getLevel();
-    viewRef.current = { p0x: p0.x, p0y: p0.y, cLat, cLng, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
+    viewRef.current = { p0x, p0y, cLat, cLng, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
 
     // 화면에 보이는 지리 범위 — 밖의 구역은 그리지 않는다
-    const tl = proj.coordsFromContainerPoint(new k.maps.Point(0, 0));
-    const br = proj.coordsFromContainerPoint(new k.maps.Point(cw, ch));
+    const inv = (px: number, py: number) =>
+      kScale === 1 ? { x: px, y: py } : { x: ccx + (px - ccx) / kScale, y: ccy + (py - ccy) / kScale };
+    const invTL = inv(0, 0);
+    const invBR = inv(cw, ch);
+    const tl = proj.coordsFromContainerPoint(new k.maps.Point(invTL.x, invTL.y));
+    const br = proj.coordsFromContainerPoint(new k.maps.Point(invBR.x, invBR.y));
     const vMinLat = Math.min(tl.getLat(), br.getLat()) - 0.0003;
     const vMaxLat = Math.max(tl.getLat(), br.getLat()) + 0.0003;
     const vMinLng = Math.min(tl.getLng(), br.getLng()) - 0.0003;
@@ -227,8 +292,8 @@ export default function KakaoZoneMap({
         for (let i = 0; i < n; i++) {
           const lat = ring.pts[i * 2];
           const lng = ring.pts[i * 2 + 1];
-          const x = p0.x + (lng - cLng) * pxPerLng;
-          const y = p0.y + (mercator(lat) - m0) * pxPerMerc;
+          const x = p0x + (lng - cLng) * pxPerLng;
+          const y = p0y + (mercator(lat) - m0) * pxPerMerc;
           buf[i * 2] = x;
           buf[i * 2 + 1] = y;
           if (x < sMinX) sMinX = x;
@@ -272,8 +337,8 @@ export default function KakaoZoneMap({
 
     // 3) 구역계 미고시 후보지(예: 사당21구역) — 점선 원 + 흰 점
     for (const z of data.points) {
-      const x = p0.x + (z.center[1] - cLng) * pxPerLng;
-      const y = p0.y + (mercator(z.center[0]) - m0) * pxPerMerc;
+      const x = p0x + (z.center[1] - cLng) * pxPerLng;
+      const y = p0y + (mercator(z.center[0]) - m0) * pxPerMerc;
       if (x < -40 || y < -40 || x > cw + 40 || y > ch + 40) continue;
       const isSel = z.id === selId;
       const isHover = !isSel && z.id === hoverId;
@@ -325,6 +390,15 @@ export default function KakaoZoneMap({
     map.setMinLevel(1);
     map.setMaxLevel(MAX_LEVEL);
 
+    // 개발용 진단 훅 — 줌 애니메이션 검증 스크립트가 지도 인스턴스/투영 상태를 읽는다
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as Record<string, unknown>).__redevDiag = {
+        map: () => mapRef.current,
+        view: () => viewRef.current,
+        draw: () => draw(),
+      };
+    }
+
     // 폴리곤 캔버스 — 지도 컨테이너 위에 절대배치. 클릭·드래그는 지도로 통과시킨다.
     const canvas = document.createElement("canvas");
     canvas.className = "kakao-zone-canvas";
@@ -344,34 +418,60 @@ export default function KakaoZoneMap({
       new k.maps.LatLng(SEOUL_BOUNDS[1][0], SEOUL_BOUNDS[1][1])
     );
     map.setBounds(seoulBounds, 8);
+    // 화면이 커지면 setBounds 가 너무 멀리 물러난다 — 서울이 화면을 채우도록 레벨을 한 번 조인다
+    if (map.getLevel() > 8) map.setLevel(8);
+    // 첫 화면 맞춤도 줌 애니메이션이다 — 그동안도 타일 배율을 읽어 경계를 붙여 둔다
+    {
+      const t0 = performance.now();
+      zoomAnimUntilRef.current = t0 + 900;
+      zoomDeadlineRef.current = t0 + 2600;
+      loopUntilRef.current = t0 + 900;
+    }
 
     // ── 다시 그리기 스케줄러 ────────────────────────────────────────────────
     //  · 한 프레임에 한 번만 그린다(rAF 병합). 이동·확대 중에는 투영이 실시간으로
     //    갱신되므로 매 프레임 그려도 폴리곤이 타일과 정확히 붙어 있다.
+    //  · 줌 애니메이션(k≠1)이 끝나지 않았으면 draw() 가 loopUntilRef 를 늘려 계속 그린다.
     let rafId = 0;
-    let loopUntil = 0;
     const scheduleDraw = () => {
       if (rafId) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = 0;
         draw();
-        if (performance.now() < loopUntil) scheduleDraw();
+        const t = performance.now();
+        // 줌 애니메이션 창이 열려 있는 동안에만 상한(deadline)을 적용한다 — 이동·드래그 중에는
+        // 지난 줌의 deadline 이 남아 루프를 막으면 안 된다.
+        const zooming = zoomAnimUntilRef.current > t;
+        if (t < loopUntilRef.current && (!zooming || t < zoomDeadlineRef.current + 250)) scheduleDraw();
       });
     };
     const pump = (ms: number) => {
-      loopUntil = Math.max(loopUntil, performance.now() + ms);
+      loopUntilRef.current = Math.max(loopUntilRef.current, performance.now() + ms);
       scheduleDraw();
     };
 
     const onIdle = () => {
-      loopUntil = 0;
-      draw();
+      // 타일이 아직 도착 전이면(k≠1) 한동안 더 그려 제자리를 찾게 한다
+      loopUntilRef.current = Math.max(loopUntilRef.current, performance.now() + 60);
+      scheduleDraw();
+    };
+    // 줌 이벤트 — 카카오 타일 애니메이션이 도는 동안 배율을 읽어 두려고 시간 창을 열어 둔다
+    const openZoomWindow = () => {
+      const now = performance.now();
+      zoomAnimUntilRef.current = now + 600;
+      zoomDeadlineRef.current = now + 2200;
     };
     k.maps.event.addListener(map, "idle", onIdle);
     k.maps.event.addListener(map, "drag", () => pump(120));
     k.maps.event.addListener(map, "center_changed", () => pump(120));
-    k.maps.event.addListener(map, "zoom_start", () => pump(500));
-    k.maps.event.addListener(map, "zoom_changed", () => pump(350));
+    k.maps.event.addListener(map, "zoom_start", () => {
+      openZoomWindow();
+      pump(600);
+    });
+    k.maps.event.addListener(map, "zoom_changed", () => {
+      openZoomWindow();
+      pump(450);
+    });
 
     const hideTip = () => {
       if (tipRef.current) tipRef.current.style.display = "none";
@@ -591,7 +691,8 @@ export default function KakaoZoneMap({
       />
 
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
-      <div className="absolute right-3 top-3 z-[600] flex flex-col items-end gap-1.5">
+      {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}
+      <div className="absolute right-2 top-1/2 z-[600] flex -translate-y-1/2 flex-col items-end gap-1.5 md:bottom-2 md:left-2 md:right-auto md:top-auto md:translate-y-0 md:flex-row md:items-center">
         <div className="flex items-center gap-0.5 rounded-lg border border-slate-300 bg-white/95 p-0.5 shadow-md">
           <button
             type="button"
@@ -624,7 +725,7 @@ export default function KakaoZoneMap({
           }`}
         >
           <span aria-hidden>🛰</span>
-          스카이뷰
+          <span className="hidden md:inline">스카이뷰</span>
         </button>
         <button
           type="button"
@@ -638,7 +739,7 @@ export default function KakaoZoneMap({
           }`}
         >
           <span aria-hidden>📐</span>
-          지적편집도
+          <span className="hidden md:inline">지적편집도</span>
         </button>
         {onToggleCompleted && (
           <button
@@ -653,7 +754,7 @@ export default function KakaoZoneMap({
             }`}
           >
             <span aria-hidden>{showCompleted ? "👁" : "🏁"}</span>
-            준공 포함
+            <span className="hidden md:inline">준공 포함</span>
             {completedCount > 0 && <span className="font-normal text-slate-400">{completedCount}</span>}
           </button>
         )}
