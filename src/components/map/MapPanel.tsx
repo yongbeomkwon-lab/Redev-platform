@@ -1,8 +1,9 @@
 "use client";
-// Leaflet은 window 전용 라이브러리이므로 SSR 비활성 후 동적 로드.
+// 지도 패널 — 브라우저 전용 라이브러리(카카오맵 SDK / Leaflet)를 쓰므로 SSR 비활성 후 동적 로드.
 // (핵심: dynamic(..., { ssr: false }) 없이는 서버 빌드에서 window 오류 발생)
+// 엔진 선택(카카오맵 ↔ OSM 폴백)은 ZoneMap 이 한다.
 import dynamic from "next/dynamic";
-import type { ZoneMapProps } from "./ZoneMap";
+import type { ZoneMapProps } from "./props";
 
 const ZoneMap = dynamic(() => import("./ZoneMap"), {
   ssr: false,

@@ -1,6 +1,35 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+/* ── 카카오맵 오버레이 ─────────────────────────────────────────────────────
+   구역 폴리곤 캔버스는 지도 위 CustomOverlay 에 매달린다 — 클릭·드래그를
+   가로채지 않도록 항상 pointer-events:none. */
+.kakao-zone-canvas {
+  display: block;
+  pointer-events: none;
+}
+.kakao-map-wrap {
+  overflow: hidden;
+}
+
+/* 지도 구역 이름표 — 선택한 구역의 이름 + 지번 별칭 (카카오 CustomOverlay / Leaflet 공용) */
+.zone-name-label {
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.35);
+  pointer-events: none;
+}
+.zone-name-label .zone-name-sub {
+  font-weight: 400;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
 /* Leaflet 지도가 탭/모달 아래에 깔리지 않도록 z-index 정리 */
 .leaflet-container {
   z-index: 0;

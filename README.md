@@ -12,7 +12,10 @@
 
 ## 주요 화면
 
-- `/` **구역 탐색기**: Leaflet 지도에 **서울시 정비구역 전수 1,824곳** 경계 폴리곤(6분류 색상, Canvas 렌더), **수도권 지하철 노선·역명 레이어(기본 ON, 🚇 토글)**, 구역명·지번 별칭 검색, 클릭 시 상세 패널
+- `/` **구역 탐색기**: **카카오맵(JS SDK)** 위에 **서울시 정비구역 전수 1,824곳** 경계 폴리곤(6분류 색상, 단일 Canvas 오버레이), 구역명·지번 별칭 검색, 클릭 시 상세 패널
+  - 카카오 기본지도라 **지하철 출구번호·역명·건물명·지번**이 그대로 나온다 (별도 지하철 레이어 불필요)
+  - 지도 위 토글: **스카이뷰**(위성+라벨 HYBRID) · **지적편집도**(USE_DISTRICT) · **준공 포함(260곳, 기본 OFF)** · 확대/축소
+  - 카카오 키·도메인이 준비되지 않으면 **자동으로 Leaflet/OSM 지도로 폴백**(지도가 비지 않게, 지도 위에 작은 안내)
   - 재개발닷컴 스타일: 유형(신통기획/모아타운/도공복/일반재개발)·단계 필터 칩, 등록매물수·최저가·최저 초기투자금 뱃지
   - 전수 구역 클릭 → 서울시 고시 데이터(구역명·자치구·사업유형·추진단계·고시면적 ㎡/평·경계 도형·기준일)
   - 범례에 유형별 실제 구역 수(일반재개발 681 · 가로주택 718 · 소규모 194 · 신통기획 118 · 모아타운 90 · 도공복 34)
@@ -25,7 +28,12 @@
 
 ## 기술 스택
 
-Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · Leaflet 1.9 (react-leaflet 5, OpenStreetMap 타일 — **지도 API 키 불필요**) · Supabase(Postgres) 준비
+Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · **카카오맵 JavaScript SDK**(기본 지도) + Leaflet 1.9/OpenStreetMap(폴백) · Supabase(Postgres) 준비
+
+> **지도 설정**: `.env.local` 의 `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` 에 카카오 **JavaScript 키**를 넣고,
+> 카카오 Developers → 플랫폼 → Web 사이트 도메인에 배포 주소(`https://redev-platform-iota.vercel.app`)와
+> 로컬 주소(`http://localhost:3100`, `http://localhost:3000`)를 등록한다.
+> 키가 없거나 SDK가 뜨지 않으면 자동으로 OSM 지도로 폴백한다(Admin 키·REST 키는 넣지 말 것 — 서버 전용 비밀 키).
 
 ## 실행
 
