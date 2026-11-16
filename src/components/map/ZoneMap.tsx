@@ -9,6 +9,9 @@
 //    · 갱신: python3 scripts/import-seoul-zones.py <UQ120 shp> <UQ181 shp>
 //  ▶ 렌더링: 1,800여 폴리곤을 SVG로 그리면 브라우저가 버티지 못하므로 Canvas 렌더러를 쓴다
 //    (`preferCanvas: true` + `L.canvas({ padding: 0.5 })`). 줌·이동 시에도 끊김이 없다.
+//  ▶ 지하철 노선·역명: 별도 캔버스 pane(SubwayLayer) — 기본 켜짐, 오른쪽 위 🚇 버튼으로 토글.
+//    역이 어디인지가 재개발 상담의 첫 질문이라 구역 폴리곤과 같은 화면에 올린다.
+//    데이터·재생성 방법은 scripts/README-subway.md
 //  ▶ 카카오맵/네이버맵으로 교체: 키 발급·도메인 등록 후 kakao.maps.Polygon으로
 //    동일 렌더를 구현하고 MapPanel.tsx만 교체하면 된다.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,6 +22,7 @@ import "leaflet/dist/leaflet.css";
 import type { Zone } from "@/lib/types";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
+import SubwayLayer from "./SubwayLayer";
 
 export { TYPE_COLORS };
 
@@ -31,7 +35,8 @@ const SEOUL_BOUNDS: [[number, number], [number, number]] = [
 const TILE_ADAPTERS = {
   osm: {
     url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> · 지하철 노선·역 OpenStreetMap (ODbL)',
   },
 };
 
@@ -161,6 +166,8 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
   //    클릭·호버를 가로챈다(아래 캔버스의 구역은 클릭이 안 됨). 그래서 지도 옵션으로 하나만 준다.
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
   const [zoom, setZoom] = useState(11);
+  // 지하철 노선·역명 레이어 — 재개발 상담에서 “역세권인지”가 첫 질문이라 기본 ON
+  const [showSubway, setShowSubway] = useState(true);
 
   const selectedRing = useMemo(() => {
     const f = zones.find((z) => z.id === selectedZoneId);
@@ -169,7 +176,8 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
   }, [zones, seoulZones, selectedZoneId]);
 
   return (
-    <MapContainer
+    <div className="relative h-full w-full">
+      <MapContainer
       bounds={SEOUL_BOUNDS}
       boundsOptions={{ padding: [8, 8] }}
       minZoom={9}
@@ -181,6 +189,9 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
       style={{ borderRadius: "0.75rem", background: "#eef2f7" }}
     >
       <TileLayer url={TILE_ADAPTERS.osm.url} attribution={TILE_ADAPTERS.osm.attribution} />
+
+      {/* ── 지하철 노선·역명 (별도 캔버스 pane, 클릭 통과) ── */}
+      <SubwayLayer enabled={showSubway} />
 
       {/* ── 서울시 정비구역 전수 (Canvas) ── */}
       <ZoomWatcher onChange={setZoom} />
@@ -205,6 +216,23 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
       })}
 
       <FitSelected ring={selectedRing} />
-    </MapContainer>
+      </MapContainer>
+
+      {/* 지하철 레이어 토글 — 지도 위 오른쪽 위, 구역 클릭과 무관 */}
+      <button
+        type="button"
+        onClick={() => setShowSubway((v) => !v)}
+        aria-pressed={showSubway}
+        title="지하철 노선·역명 표시"
+        className={`absolute right-3 top-3 z-[600] flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+          showSubway
+            ? "border-slate-300 bg-white text-slate-800"
+            : "border-slate-300 bg-white/80 text-slate-400 line-through hover:text-slate-600"
+        }`}
+      >
+        <span aria-hidden>🚇</span>
+        지하철 노선
+      </button>
+    </div>
   );
 }

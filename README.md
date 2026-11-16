@@ -12,7 +12,7 @@
 
 ## 주요 화면
 
-- `/` **구역 탐색기**: Leaflet 지도에 **서울시 정비구역 전수 1,834곳** 경계 폴리곤(6분류 색상, Canvas 렌더), 구역명 검색, 클릭 시 상세 패널
+- `/` **구역 탐색기**: Leaflet 지도에 **서울시 정비구역 전수 1,834곳** 경계 폴리곤(6분류 색상, Canvas 렌더), **수도권 지하철 노선·역명 레이어(기본 ON, 🚇 토글)**, 구역명 검색, 클릭 시 상세 패널
   - 재개발닷컴 스타일: 유형(신통기획/모아타운/도공복/일반재개발)·단계 필터 칩, 등록매물수·최저가·최저 초기투자금 뱃지
   - 전수 구역 클릭 → 서울시 고시 데이터(구역명·자치구·사업유형·추진단계·고시면적 ㎡/평·경계 도형·기준일)
   - 범례에 유형별 실제 구역 수(일반재개발 681 · 가로주택 718 · 소규모 194 · 신통기획 117 · 모아타운 90 · 도공복 34)
@@ -33,6 +33,7 @@ npm install
 npm run dev                  # http://localhost:3100
 npm run build && npm start   # 프로덕션 빌드 확인
 npm run geojson              # 구역 폴리곤 → public/data/zones.geojson
+npm run subway               # 지하철 노선·역 → public/data/subway-*.{geojson,json}  (Overpass API)
 ```
 
 ## Supabase 배포
@@ -54,6 +55,9 @@ npm run geojson              # 구역 폴리곤 → public/data/zones.geojson
      같은 구역이 있으면 굴곡량이 더 많은 도형을 채택한다(예: 성수전략2구역 10점 → 125점, 전수 중 57곳 교체).
   두 파일 모두 EPSG:5174 → WGS84 변환. 재현 절차는 `scripts/README-gis.md`,
   변환 스크립트는 `scripts/import-seoul-zones.py`
+- **지하철 노선·역(적용됨)**: OpenStreetMap Overpass(ODbL) `route=subway` 관계 + 역 정차 노드 →
+  `public/data/subway-lines.geojson`(20개 노선)·`subway-stations.json`(574역).
+  생성 `python3 scripts/build-subway-dataset.py`, 상세 `scripts/README-subway.md`
 - **정비사업 단계·비례율**: 정비사업 정보몽땅 (eum.go.kr)
 
 ## 소스 데이터 고지
@@ -66,6 +70,8 @@ npm run geojson              # 구역 폴리곤 → public/data/zones.geojson
   **공공누리 4유형 — 출처표시·상업적 이용금지·변경금지**) 실데이터. 필지 경계를 따라가는 도형이
   필요한 구역(성수전략2·성수전략1/3·장위8 등)에만 사용하며, 상세 패널에 「경계 도형」·「경계 명칭」으로
   출처를 표시한다. **상업 서비스 출시 전 이 데이터의 이용범위(공공누리 4유형) 확인이 필요하다.**
+- **지하철 노선 형상·역 좌표·역명**: © OpenStreetMap contributors (**ODbL 1.0**).
+  지도 하단 저작자 표기에 함께 표시한다. 노선색은 서울교통공사·국가철도공단 표준색.
 - **세대수·비례율·시공사·입주시기·실거래·매물**: 서비스 구조 검증용 **샘플**.
   실운영 전 국토부 실거래가 API·정보몽땅으로 교체하고, 추정치(비례율·분담금·권리가액)에는
   "참고용 추정" 고지를 유지하세요.
