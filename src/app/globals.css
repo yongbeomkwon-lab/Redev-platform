@@ -15,3 +15,24 @@ body {
   font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Noto Sans KR", "Noto Sans CJK KR", "Malgun Gothic", system-ui, sans-serif;
 }
+
+/* 지도 구역 이름표 — 선택한 구역·경계 미고시 후보지의 이름을 지도 위에 고정 표시 */
+.leaflet-tooltip.zone-name-label {
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.35);
+  white-space: nowrap;
+}
+.leaflet-tooltip.zone-name-label::before {
+  display: none;
+}
+.leaflet-tooltip.zone-name-label .zone-name-sub {
+  font-weight: 400;
+  font-size: 11px;
+  color: #cbd5e1;
+}

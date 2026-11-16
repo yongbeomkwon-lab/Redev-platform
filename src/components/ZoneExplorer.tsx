@@ -72,14 +72,31 @@ export default function ZoneExplorer() {
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   const selectedListings = listings.filter((l) => l.zoneId === selectedId);
 
-  // 구역명·자치구 검색 (1,800여 구역 중 원하는 곳으로 바로 이동)
+  // 구역명·별칭·자치구 검색 (1,800여 구역 중 원하는 곳으로 바로 이동)
+  //   · 공식 별칭까지 훑는다 — '사당동 419-1'로도 '사당15'로도 같은 구역이 뜬다
+  //   · 띄어쓰기를 무시해 '사당동419-1', '사당 15' 같은 입력도 걸린다
   const searchResults = useMemo(() => {
     const term = query.trim();
     if (!term) return [];
-    return seoulZones
-      .filter((z) => z.name.includes(term) || z.gu.includes(term))
-      .sort((a, b) => Number(b.featured) - Number(a.featured) || b.area - a.area)
-      .slice(0, 8);
+    const flat = term.replace(/\s+/g, "");
+    const hit = (s?: string) => !!s && s.replace(/\s+/g, "").includes(flat);
+    const scored = seoulZones
+      .filter((z) => hit(z.name) || z.gu.includes(term) || (z.alias ?? []).some(hit))
+      .map((z) => {
+        // 이름이 직접 맞으면 먼저, 별칭으로만 걸리면 뒤로
+        const rank = hit(z.name) ? 0 : (z.alias ?? []).some(hit) ? 1 : 2;
+        return { z, rank };
+      })
+      .sort(
+        (a, b) =>
+          a.rank - b.rank ||
+          Number(b.z.featured) - Number(a.z.featured) ||
+          Number(!b.z.polygon) - Number(!a.z.polygon) ||
+          b.z.area - a.z.area
+      )
+      .slice(0, 8)
+      .map((r) => r.z);
+    return scored;
   }, [query, seoulZones]);
 
   // 범례 카운터 — 실제 로드된 구역 수
@@ -139,8 +156,11 @@ export default function ZoneExplorer() {
                     >
                       <i className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: TYPE_COLORS[z.type] }} />
                       <span className="font-medium text-slate-800">{z.name}</span>
+                      {z.alias?.[0] && !z.name.includes(z.alias[0]) && (
+                        <span className="text-xs text-slate-400">{z.alias[0]}</span>
+                      )}
                       <span className="text-xs text-slate-500">{z.gu}</span>
-                      <span className="ml-auto text-xs text-slate-400">{z.stage}</span>
+                      <span className="ml-auto text-xs text-slate-400">{z.polygon ? z.stage : "경계 미고시"}</span>
                     </button>
                   </li>
                 ))}
@@ -177,6 +197,9 @@ export default function ZoneExplorer() {
             ))}
             <span className="text-slate-400">
               | 경계·면적·단계: 서울시 도시계획사업(서울플랜+)·의제처리구역(UQ181) 실데이터
+            </span>
+            <span className="text-slate-500">
+              | <b className="font-semibold">점</b>으로 표시된 구역은 구역계 미고시 후보지입니다 (예: 사당21구역 — 2026-05-07 후보지 선정)
             </span>
           </div>
         </div>

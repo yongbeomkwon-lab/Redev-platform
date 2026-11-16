@@ -7,6 +7,8 @@
 //    · 같은 구역이 「서울시 의제처리구역 위치정보」 OA-20957(UQ181)에 더 정밀한 필지 경계형
 //      도형으로 있으면 그 도형을 쓴다 (EPSG:5174 → WGS84 변환·간략화)
 //    · 갱신: python3 scripts/import-seoul-zones.py <UQ120 shp> <UQ181 shp>
+//    · 구역계가 아직 고시되지 않은 후보지(예: 사당21구역)는 폴리곤이 없어 **점**으로 그린다
+//      (없는 경계를 지어내지 않는다 — 정확한 도형은 구역 지정 뒤 UQ120/UQ181에 올라온다)
 //  ▶ 렌더링: 1,800여 폴리곤을 SVG로 그리면 브라우저가 버티지 못하므로 Canvas 렌더러를 쓴다
 //    (`preferCanvas: true` + `L.canvas({ padding: 0.5 })`). 줌·이동 시에도 끊김이 없다.
 //  ▶ 지하철 노선·역명: 별도 캔버스 pane(SubwayLayer) — 기본 켜짐, 오른쪽 위 🚇 버튼으로 토글.
@@ -17,7 +19,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { MapContainer, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Zone } from "@/lib/types";
 import type { SeoulZone } from "@/lib/seoul-zones";
@@ -46,13 +48,16 @@ function labelLine(z: { name: string; kind: string; stage: string; area: number;
   return `${z.name} · ${z.kind} · ${z.stage} · ${area}${z.gu ? ` (${z.gu})` : ""}`;
 }
 
-/** 지도 이동/선택 구역 확대 */
-function FitSelected({ ring }: { ring?: [number, number][] }) {
+/** 지도 이동/선택 구역 확대 — 폴리곤 구역은 경계에 맞추고, 경계 미고시 후보지는 점으로 이동 */
+function FitSelected({ ring, point }: { ring?: [number, number][]; point?: [number, number] }) {
   const map = useMap();
   useEffect(() => {
-    if (!ring || ring.length < 3) return;
-    map.flyToBounds(ring as [number, number][], { padding: [40, 40], maxZoom: 17, duration: 0.7 });
-  }, [ring, map]);
+    if (ring && ring.length >= 3) {
+      map.flyToBounds(ring as [number, number][], { padding: [40, 40], maxZoom: 17, duration: 0.7 });
+      return;
+    }
+    if (point) map.flyTo(point, 16, { duration: 0.7 });
+  }, [ring, point, map]);
   return null;
 }
 
@@ -95,11 +100,11 @@ function SeoulZoneLayer({
     return {
       type: "FeatureCollection",
       features: zones
-        .filter((z) => !z.featured)
+        .filter((z): z is SeoulZone & { polygon: [number, number][] } => !z.featured && !!z.polygon)
         .map((z) => ({
           type: "Feature" as const,
           id: z.id,
-          properties: { id: z.id, name: z.name, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area },
+          properties: { id: z.id, name: z.name, alias: z.alias, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area },
           geometry: {
             type: "Polygon" as const,
             coordinates: [[...z.polygon, z.polygon[0]].map(([lat, lng]) => [lng, lat])],
@@ -126,8 +131,7 @@ function SeoulZoneLayer({
         });
         lyr.bindTooltip(labelLine(p), { direction: "top", sticky: true, opacity: 0.95 });
       },
-    }).addTo(map);
-    layerRef.current = layer;
+    }).addTo(map);    layerRef.current = layer;
     return () => {
       layer.remove();
       layerRef.current = null;
@@ -146,6 +150,37 @@ function SeoulZoneLayer({
       (l as L.Path).setStyle(zoneStyle(p.type as SeoulZone["type"], p.id === selectedId, false, zoom));
     });
   }, [selectedId, zoom]);
+
+  // 선택 구역만 이름표를 고정 표시 — 경계만으로는 어느 구역인지 읽기 어렵다
+  const prevSelRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || prevSelRef.current === selectedId) return;
+    const prev = prevSelRef.current;
+    prevSelRef.current = selectedId;
+    layer.eachLayer((l) => {
+      const path = l as L.Path & { feature?: GeoJSON.Feature };
+      const p = path.feature?.properties as
+        | { id: string; name: string; alias?: string[]; type: string; kind: string; stage: string; gu: string; area: number }
+        | undefined;
+      if (!p) return;
+      if (p.id === selectedId) {
+        // 선택 구역 이름표 — 지번 별칭(예: 사당동 419-1)도 함께 적어 지도에서 바로 대조되게 한다
+        const parcel = (p.alias ?? []).find((a) => /\d+-\d+/.test(a));
+        path.unbindTooltip();
+        path.bindTooltip(parcel ? `<b>${p.name}</b><span class="zone-name-sub"> · ${parcel}</span>` : `<b>${p.name}</b>`, {
+          permanent: true,
+          direction: "center",
+          className: "zone-name-label",
+          opacity: 1,
+        });
+        path.openTooltip();
+      } else if (p.id === prev || path.getTooltip()?.options.permanent) {
+        path.unbindTooltip();
+        path.bindTooltip(labelLine(p), { direction: "top", sticky: true, opacity: 0.95 });
+      }
+    });
+  }, [selectedId, collection]);
 
   return null;
 }
@@ -169,11 +204,17 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
   // 지하철 노선·역명 레이어 — 재개발 상담에서 “역세권인지”가 첫 질문이라 기본 ON
   const [showSubway, setShowSubway] = useState(true);
 
-  const selectedRing = useMemo(() => {
+  // 선택 구역 — 대표 구역(상세 데이터) → 전수 구역 순. 경계 미고시 후보지는 polygon이 없다.
+  const selected = useMemo(() => {
     const f = zones.find((z) => z.id === selectedZoneId);
-    if (f) return f.polygon;
-    return seoulZones.find((z) => z.id === selectedZoneId)?.polygon;
+    if (f) return { ring: f.polygon, point: undefined as [number, number] | undefined };
+    const s = seoulZones.find((z) => z.id === selectedZoneId);
+    if (!s) return { ring: undefined, point: undefined };
+    return { ring: s.polygon, point: s.polygon ? undefined : s.center };
   }, [zones, seoulZones, selectedZoneId]);
+
+  // 구역계가 아직 고시되지 않은 후보지(예: 사당21구역) — 폴리곤 대신 점으로 표시
+  const pointZones = useMemo(() => seoulZones.filter((z) => !z.featured && !z.polygon), [seoulZones]);
 
   return (
     <div className="relative h-full w-full">
@@ -215,7 +256,30 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
         ));
       })}
 
-      <FitSelected ring={selectedRing} />
+      {/* ── 경계 미고시 후보지 (점) ── */}
+      {pointZones.map((z) => (
+        <CircleMarker
+          key={`pt-${z.id}`}
+          center={z.center}
+          radius={z.id === selectedZoneId ? 12 : 9}
+          pathOptions={{
+            color: TYPE_COLORS[z.type] ?? "#7c3aed",
+            weight: z.id === selectedZoneId ? 3 : 2,
+            opacity: 1,
+            fillColor: TYPE_COLORS[z.type] ?? "#7c3aed",
+            fillOpacity: z.id === selectedZoneId ? 0.55 : 0.3,
+            dashArray: "4 3",
+          }}
+          eventHandlers={{ click: () => onSelectZone(z.id) }}
+        >
+          <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
+            <b>{z.name}</b>
+            <span className="zone-name-sub"> · {z.stage} · 경계 미고시</span>
+          </Tooltip>
+        </CircleMarker>
+      ))}
+
+      <FitSelected ring={selected.ring} point={selected.point} />
       </MapContainer>
 
       {/* 지하철 레이어 토글 — 지도 위 오른쪽 위, 구역 클릭과 무관 */}

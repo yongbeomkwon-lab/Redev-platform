@@ -1,0 +1,165 @@
+{
+  "asOf": "2026-11-16",
+  "description": "서울시 도시계획사업 현황(서울플랜+/UQ120) 2026-09 스냅샷에는 구역명이 '사당동 419-1' 같은 지번으로만 실리거나, 2026년에 선정된 신속통합기획 후보지가 아예 빠져 있다. 이 파일은 서울시 고시·정비사업 정보몽땅·자치구 공개자료로 확인한 (1) 공식 구역명·별칭과 (2) 미수록 후보지의 위치·면적·선정일을 담는다. 경계 도형은 공식 GIS 도형이 확인된 경우에만 넣고, 아직 구역계가 고시되지 않은 후보지는 도형 없이 대표 지점만 둔다.",
+  "sources": {
+    "cleanup-selected": {
+      "label": "정비사업 정보몽땅 — 신속통합기획 정비사업 추진현황(선정구역)",
+      "url": "https://cleanup.seoul.go.kr/cleanup/view/publicIntgrPlanSttn.do"
+    },
+    "cleanup-area": {
+      "label": "정비사업 정보몽땅 — 신속통합기획 대상지 위치도·현황",
+      "url": "https://cleanup.seoul.go.kr/cleanup/view/publicIntgrPlanArea.do"
+    },
+    "dongjak-sadang15": {
+      "label": "동작구청 — 사당15구역(사당동 419-1번지 일대) 신속통합기획 주택재개발",
+      "url": "https://www.dongjak.go.kr/portal/bbs/B0001406/view.do?menuNo=201712&nttId=10728476&viewType=BODY"
+    },
+    "dongjak-sadang16": {
+      "label": "동작구청 — 사당16구역(사당동 305-35번지 일대) 신속통합기획 주택재개발",
+      "url": "https://www.dongjak.go.kr/portal/bbs/B0001406/view.do?menuNo=201712&nttId=10728472&viewType=BODY"
+    },
+    "seoul-2025-02-27": {
+      "label": "서울시 — '25년 1차 재개발 후보지 선정위원회 결과(9곳)",
+      "url": "https://news.seoul.go.kr/citybuild/archives/532257"
+    },
+    "seoul-2025-08-27": {
+      "label": "서울시 — '25년 4차 주택재개발 후보지 선정 결과",
+      "url": "https://news.seoul.go.kr/citybuild/archives/531065"
+    },
+    "seoul-archive-sadang15": {
+      "label": "서울시 신속통합기획 온라인 아카이브 — 동작구 사당동 419-1 일대",
+      "url": "https://news.seoul.go.kr/citybuild/archives/542565"
+    },
+    "dongjak-gosi-2026-23": {
+      "label": "동작구 고시 제2026-23호 — 사당12구역 주택정비형 재개발사업 조합설립추진위원회 승인 고시(2026-01-29)",
+      "url": "https://jaegebal.com/gnotices/dj-gs-2026-23"
+    },
+    "seoul-gosi-2026-266": {
+      "label": "서울시 고시 제2026-266호 — 건축허가등 제한 지형도면 고시(2026-05-14, 사당21구역 포함)",
+      "url": "https://cleanup.seoul.go.kr/cleanup/view/publicIntgrPlanArea.do"
+    },
+    "dpnews-sadang21": {
+      "label": "디벨로퍼뉴스 — 사당21구역 재개발, 신통기획 본격 추진(2026-05-27)",
+      "url": "https://www.dpnews.co.kr/news/articleView.html?idxno=1883"
+    },
+    "dpnews-2026-05-07": {
+      "label": "디벨로퍼뉴스 — 2026-05-07 신통기획 후보지 18곳 선정(노량진14·사당19·사당21)",
+      "url": "https://www.dpnews.co.kr/news/articleView.html?idxno=1805"
+    }
+  },
+  "renames": [
+    {
+      "gu": "동작구",
+      "from": "사당동 419-1",
+      "name": "사당15구역",
+      "alias": [
+        "사당동 419-1",
+        "사당동 416-1",
+        "사당15"
+      ],
+      "selectedAt": "2025-08-27",
+      "note": "서울시 데이터에는 '사당동 419-1'로만 실려 있으나 동작구·정보몽땅·서울시 아카이브는 모두 '사당15구역'으로 부른다(2026-11-16 확인).",
+      "sources": [
+        "dongjak-sadang15",
+        "cleanup-selected",
+        "seoul-archive-sadang15",
+        "seoul-2025-08-27"
+      ]
+    },
+    {
+      "gu": "동작구",
+      "from": "사당동 305-35 일대",
+      "name": "사당16구역",
+      "alias": [
+        "사당동 305-35",
+        "사당동 311-30",
+        "사당16"
+      ],
+      "selectedAt": "2025-02-27",
+      "note": "서울시 보도자료가 '사당동 305-35 일대(사당16구역)'로 표기. 2026-10-14 정비계획 공람.",
+      "sources": [
+        "seoul-2025-02-27",
+        "dongjak-sadang16"
+      ]
+    },
+    {
+      "gu": "동작구",
+      "from": "사당동 288",
+      "name": "사당12구역",
+      "alias": [
+        "사당동 288",
+        "사당12"
+      ],
+      "selectedAt": null,
+      "note": "신통기획 후보지 시절 '사당동 288'로 실린 레코드와 '사당12' 재개발 레코드가 같은 구역(면적 26,197/26,241㎡). 2026-01-15 정비구역 지정, 2026-01-28 추진위 승인.",
+      "sources": [
+        "dongjak-gosi-2026-23"
+      ]
+    },
+    {
+      "gu": "동작구",
+      "from": "사당17구역",
+      "name": "사당17구역",
+      "alias": [
+        "사당동 63-1",
+        "사당17"
+      ],
+      "selectedAt": null,
+      "note": "정비구역 지정 고시(2026-01-22). 대표지번 사당동 63-1.",
+      "sources": [
+        "cleanup-selected"
+      ]
+    },
+    {
+      "gu": "용산구",
+      "from": "이태원동 730 일대",
+      "name": "한남1구역",
+      "alias": [
+        "이태원동 730",
+        "한남1"
+      ],
+      "selectedAt": "2025-02-27",
+      "note": "서울시 보도자료가 '이태원동 730일대(한남1구역)'로 표기.",
+      "sources": [
+        "seoul-2025-02-27"
+      ]
+    }
+  ],
+  "additions": [
+    {
+      "id": "sadang-21",
+      "name": "사당21구역",
+      "alias": [
+        "사당동 1026-10",
+        "사당동 1024",
+        "사당동 1028",
+        "사당동 1034",
+        "사당동 1004",
+        "서울남사초",
+        "사당21"
+      ],
+      "type": "신통기획",
+      "kind": "신속통합기획(후보지)",
+      "stage": "후보지선정",
+      "gu": "동작구",
+      "area": 113859,
+      "selectedAt": "2026-05-07",
+      "boundary": "미고시",
+      "center": [
+        37.481078,
+        126.979207
+      ],
+      "centerLabel": "구역 중심부(사당동 1026 일대)",
+      "locationMap": "https://cleanup.seoul.go.kr/share/cleanup/img/content/sadang1026_10.png",
+      "note": "2026-05-07 신속통합기획 주택재개발 후보지 선정(연번부여 2025-12-11). 서울시 도시계획사업 현황(2026-09 스냅샷)에는 아직 수록되지 않았고, 정비구역 지정 전이라 법정 구역계(폴리곤)가 없다. 지도에는 대표 지점만 표시하고 경계는 그리지 않는다. 대표 지점은 정보몽땅 위치도(2026.5.31)를 지오레퍼런싱해 구한 구역 중심(이수역 약 530m)으로, 같은 자료의 '구역 중심 이수역 489m'와 10% 이내에서 맞는다.",
+      "sources": [
+        "cleanup-area",
+        "cleanup-selected",
+        "seoul-gosi-2026-266",
+        "dpnews-sadang21",
+        "dpnews-2026-05-07"
+      ],
+      "areaNote": "정비사업 정보몽땅 113,858.5㎡ / 서울시 고시 제2026-266호 기준"
+    }
+  ]
+}

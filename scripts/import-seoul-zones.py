@@ -545,14 +545,20 @@ def main():
         "sourceDetail": "OA-20957 서울시 의제처리구역 위치정보(UQ181)",
         "asOf": AS_OF, "asOfDetail": AS_OF_DETAIL, "count": len(features),
     }
-    json.dump(meta, open(f"{root}/src/data/zones-meta.json", "w"), ensure_ascii=False, indent=1)
-    json.dump([{k: v for k, v in z.items() if k not in ("ll", "lls", "lat", "lng", "alts")} for z in zones],
-              open(f"{root}/src/data/seoul-zones.json", "w"), ensure_ascii=False, separators=(",", ":"))
     fc = {
         "type": "FeatureCollection",
         "metadata": meta,
         "features": features,
     }
+    # ── 공식 명칭·신규 후보지 보강 (지번 이름 → 공식 구역명, UQ120 미수록 2026 후보지) ──
+    #    원천: 서울시 고시·정비사업 정보몽땅·자치구 공개자료 (scripts/data/official-supplement.json)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from official_supplement import apply_supplement  # noqa: E402
+    seoul_list = [{k: v for k, v in z.items() if k not in ("ll", "lls", "lat", "lng", "alts")} for z in zones]
+    supp_stats = apply_supplement(fc, seoul_list, meta)
+    print(f"  공식 명칭 {supp_stats['renamed']}건 · 신규 후보지 {supp_stats['added']}건 보강")
+    json.dump(meta, open(f"{root}/src/data/zones-meta.json", "w"), ensure_ascii=False, indent=1)
+    json.dump(seoul_list, open(f"{root}/src/data/seoul-zones.json", "w"), ensure_ascii=False, separators=(",", ":"))
     out = f"{root}/public/data/zones.geojson"
     json.dump(fc, open(out, "w"), ensure_ascii=False, separators=(",", ":"))
 

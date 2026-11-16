@@ -6,13 +6,23 @@
 //
 //   · 원천: 「서울시 도시계획사업 현황(서울플랜+)」 실경계 + 「의제처리구역 위치정보」
 //     (두 소스 모두 EPSG:5174 → WGS84 변환·간략화. 자세한 규칙은 scripts/import-seoul-zones.py)
-//   · 페이지 번들에 넣지 않고 클라이언트에서 fetch한다(1,800여 구역 ≈ 1.3MB → gzip 300KB대).
+//   · 공식 구역명·별칭 보강: 서울시 고시·정비사업 정보몽땅·자치구 자료로 확인한 이름을
+//     scripts/data/official-supplement.json 에 두고 `alias`로 함께 검색된다
+//     (예: 사당동 419-1 ↔ 사당15구역).
+//   · 아직 구역계가 고시되지 않은 후보지는 geometry가 null이고 center만 있다(geom: "미고시").
+//     → 지도에는 폴리곤 대신 점으로 그린다. 없는 경계를 지어내지 않는다.
+//   · 페이지 번들에 넣지 않고 클라이언트에서 fetch한다(1,800여 구역 ≈ 1.4MB → gzip 300KB대).
 // ─────────────────────────────────────────────────────────────────────────────
 import type { MapZoneType } from "@/lib/types";
+
+/** 공식 확인 출처(고시·정보몽땅·자치구) */
+export type ZoneSource = { label: string; url: string };
 
 export type SeoulZone = {
   id: string;
   name: string;
+  /** 공식 구역명의 다른 표기(지번·가칭 등) — 검색에 함께 걸린다 */
+  alias?: string[];
   type: MapZoneType;
   kind: string; // 서울시 사업유형 소분류 (예: 재정비촉진구역)
   stage: string; // 서울시 추진단계 (예: 사업시행인가)
@@ -20,10 +30,22 @@ export type SeoulZone = {
   area: number; // 고시 구역면적(㎡)
   featured: boolean; // 대표 구역(상세 데이터 있음)
   sourceId: string; // 서울 열린데이터광장 PRESENT_SN
-  geom: "UQ120" | "UQ181"; // 경계 도형 출처
+  geom: "UQ120" | "UQ181" | "미고시"; // 경계 도형 출처 (미고시 = 구역계 미고시 후보지)
   center: [number, number];
-  polygon: [number, number][];
+  polygon?: [number, number][]; // 미고시 후보지는 없다
   parts?: [number, number][][];
+  /** 신속통합기획 후보지 선정일 등 공식 일자 */
+  selectedAt?: string;
+  /** 경계가 없을 때 대표 지점 설명 */
+  centerLabel?: string;
+  /** 서울시(정보몽땅) 위치도 이미지 — 경계 미고시 구역의 공식 도면 */
+  locationMap?: string;
+  /** 구역 성격·경계 상태 설명 */
+  note?: string;
+  areaNote?: string;
+  nameNote?: string;
+  nameSources?: ZoneSource[];
+  sources?: ZoneSource[];
 };
 
 export type SeoulZonesMeta = {
@@ -32,12 +54,19 @@ export type SeoulZonesMeta = {
   asOf: string;
   asOfDetail: string;
   count: number;
+  /** 공식 명칭·신규 후보지 보강(서울시 고시·정보몽땅) 기준일 */
+  supplement?: { asOf?: string; renamed?: number; added?: number; note?: string };
+};
+
+type RawZoneProps = Omit<SeoulZone, "center" | "polygon" | "parts"> & {
+  id: string;
+  center?: [number, number];
 };
 
 type RawFeature = {
   id?: string;
-  properties: Omit<SeoulZone, "center" | "polygon" | "parts"> & { id: string };
-  geometry: { type: string; coordinates: number[][][] | number[][][][] };
+  properties: RawZoneProps;
+  geometry: { type: string; coordinates: number[][][] | number[][][][] } | null;
 };
 
 type RawCollection = {
@@ -49,7 +78,7 @@ type RawCollection = {
 export type SeoulZonesData = { meta: SeoulZonesMeta; zones: SeoulZone[] };
 
 /** GeoJSON(경도,위도) → Leaflet([위도,경도]) 링 목록 */
-function ringsOf(g: RawFeature["geometry"]): [number, number][][] {
+function ringsOf(g: NonNullable<RawFeature["geometry"]>): [number, number][][] {
   const polys = g.type === "MultiPolygon" ? (g.coordinates as number[][][][]) : [(g.coordinates as number[][][])];
   return polys
     .map((poly) => poly[0].map(([lng, lat]) => [lat, lng] as [number, number]))
@@ -77,12 +106,19 @@ export function loadSeoulZones(): Promise<SeoulZonesData> {
     .then((fc) => {
       const zones: SeoulZone[] = [];
       for (const f of fc.features) {
+        const { id, ...props } = f.properties;
+        const zoneId = id ?? f.id ?? "";
+        // 경계 미고시 후보지 — 폴리곤 없이 대표 지점만
+        if (!f.geometry) {
+          if (!props.center) continue;
+          zones.push({ ...props, id: zoneId, center: props.center });
+          continue;
+        }
         const rings = ringsOf(f.geometry);
         if (!rings.length) continue;
-        const { id, ...props } = f.properties;
         zones.push({
           ...props,
-          id: id ?? f.id ?? "",
+          id: zoneId,
           center: bboxCenter(rings[0]),
           polygon: rings[0],
           ...(rings.length > 1 ? { parts: rings.slice(1) } : {}),
