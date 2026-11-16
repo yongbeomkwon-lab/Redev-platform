@@ -9,3 +9,9 @@
 .leaflet-bottom {
   z-index: 500 !important;
 }
+
+/* 한글·숫자 폰트 스택 — OS 기본 한글 폰트를 우선 사용(리눅스에서는 Noto Sans CJK) */
+body {
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Noto Sans KR", "Noto Sans CJK KR", "Malgun Gothic", system-ui, sans-serif;
+}

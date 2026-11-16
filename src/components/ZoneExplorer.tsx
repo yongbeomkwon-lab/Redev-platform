@@ -6,12 +6,14 @@
 //  · 재개발뷰 스타일: 실거주 의무/토허제 뱃지, 예상 입주 구간
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from "react";
-import type { Listing, Transaction, Zone, ZoneStage, ZoneType } from "@/lib/types";
+import type { Listing, MapZoneType, Transaction, Zone, ZoneStage, ZoneType } from "@/lib/types";
 import { STAGE_ORDER, calcMultiple } from "@/lib/types";
+import { loadSeoulZones, type SeoulZone, type SeoulZonesMeta } from "@/lib/seoul-zones";
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
-import { TYPE_COLORS } from "@/components/map/colors";
+import { TYPE_COLORS, TYPE_ORDER } from "@/components/map/colors";
+import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
@@ -23,6 +25,10 @@ export default function ZoneExplorer() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
+  // 서울시 정비구역 전수 (public/data/zones.geojson → 클라이언트 fetch)
+  const [seoulZones, setSeoulZones] = useState<SeoulZone[]>([]);
+  const [seoulMeta, setSeoulMeta] = useState<SeoulZonesMeta | null>(null);
+  const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ZoneType | "전체">("전체");
   const [stageFilter, setStageFilter] = useState<ZoneStage | "전체">("전체");
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
@@ -42,6 +48,14 @@ export default function ZoneExplorer() {
       .catch(() => setLoading(false));
   }, []);
 
+  // 서울시 정비구역 전수 레이어
+  useEffect(() => {
+    loadSeoulZones().then((d) => {
+      setSeoulZones(d.zones);
+      setSeoulMeta(d.meta);
+    });
+  }, []);
+
   const filtered = useMemo(
     () =>
       zones.filter(
@@ -53,8 +67,27 @@ export default function ZoneExplorer() {
   );
 
   const selected = zones.find((z) => z.id === selectedId);
+  // 대표 구역이 아닌 구역 — 서울시 고시 데이터만 있는 구역
+  const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   const selectedListings = listings.filter((l) => l.zoneId === selectedId);
+
+  // 구역명·자치구 검색 (1,800여 구역 중 원하는 곳으로 바로 이동)
+  const searchResults = useMemo(() => {
+    const term = query.trim();
+    if (!term) return [];
+    return seoulZones
+      .filter((z) => z.name.includes(term) || z.gu.includes(term))
+      .sort((a, b) => Number(b.featured) - Number(a.featured) || b.area - a.area)
+      .slice(0, 8);
+  }, [query, seoulZones]);
+
+  // 범례 카운터 — 실제 로드된 구역 수
+  const typeCounts = useMemo(() => {
+    const m: Partial<Record<MapZoneType, number>> = {};
+    for (const z of seoulZones) m[z.type] = (m[z.type] ?? 0) + 1;
+    return m;
+  }, [seoulZones]);
 
   function unlock(id: string) {
     setUnlocked((prev) => new Set(prev).add(id));
@@ -66,9 +99,9 @@ export default function ZoneExplorer() {
 
   return (
     <div className="space-y-6">
-      {/* ── 필터 칩 ── */}
+      {/* ── 필터 칩 (대표 구역 = 상세 데이터가 있는 구역) ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-slate-500">사업유형</span>
+        <span className="text-xs font-semibold text-slate-500">대표 구역 필터</span>
         {ZONE_TYPES.map((t) => (
           <Chip key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)}>
             {t}
@@ -85,23 +118,72 @@ export default function ZoneExplorer() {
       {/* ── 지도 + 구역 목록 ── */}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <div>
-          <div className="h-[440px] overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-            <MapPanel zones={filtered} selectedZoneId={selectedId} onSelectZone={setSelectedId} />
+          {/* 구역명 검색 — 서울시 정비구역 전수에서 바로 찾기 */}
+          <div className="relative z-20 mb-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="구역명·자치구 검색 — 예: 목동4단지, 성수전략, 은평구"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            {searchResults.length > 0 && (
+              <ul className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+                {searchResults.map((z) => (
+                  <li key={z.id}>
+                    <button
+                      onClick={() => {
+                        setSelectedId(z.id);
+                        setQuery("");
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                    >
+                      <i className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: TYPE_COLORS[z.type] }} />
+                      <span className="font-medium text-slate-800">{z.name}</span>
+                      <span className="text-xs text-slate-500">{z.gu}</span>
+                      <span className="ml-auto text-xs text-slate-400">{z.stage}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="relative">
+            <div className="h-[520px] overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+              <MapPanel
+                zones={filtered}
+                seoulZones={seoulZones}
+                selectedZoneId={selectedId}
+                onSelectZone={setSelectedId}
+              />
+            </div>
+            {/* 로드된 서울시 정비구역 수 — 데이터가 오면 자동 갱신 */}
+            <div className="pointer-events-none absolute right-3 top-3 z-[1000] rounded-full bg-slate-900/85 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
+              서울시 정비구역 {seoulZones.length.toLocaleString()}곳
+              {seoulMeta?.asOf ? <span className="ml-1 font-normal text-slate-300">{seoulMeta.asOf} 기준</span> : null}
+            </div>
+            <div className="pointer-events-none absolute bottom-6 left-3 z-[1000] rounded-md bg-white/85 px-2 py-1 text-[10px] text-slate-500 shadow">
+              구역을 클릭하면 서울시 고시 데이터가 열립니다
+            </div>
           </div>
           {/* 범례 · 데이터 출처 */}
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-            {(Object.keys(TYPE_COLORS) as ZoneType[]).map((t) => (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
+            {TYPE_ORDER.map((t) => (
               <span key={t} className="inline-flex items-center gap-1">
                 <i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: TYPE_COLORS[t] }} />
                 {t}
+                <b className="font-semibold text-slate-800">{(typeCounts[t] ?? 0).toLocaleString()}</b>
               </span>
             ))}
             <span className="text-slate-400">
-              | 배경 경계는 서울시 도시계획사업(서울플랜+)·의제처리구역(서울도시공간포털) 실데이터 150여 곳
+              | 경계·면적·단계: 서울시 도시계획사업(서울플랜+)·의제처리구역(UQ181) 실데이터
             </span>
           </div>
         </div>
-        <div className="max-h-[440px] space-y-3 overflow-y-auto pr-1">
+        <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
+          <p className="text-xs font-semibold text-slate-500">
+            대표 구역 {filtered.length}곳 <span className="font-normal text-slate-400">· 실거래·매물 상세 제공</span>
+          </p>
           {filtered.map((z) => {
             const zListings = listings.filter((l) => l.zoneId === z.id);
             const lowest = transactions.filter((t) => t.zoneId === z.id).reduce((m, t) => Math.min(m, t.price), Infinity);
@@ -289,6 +371,23 @@ export default function ZoneExplorer() {
             <ListingCompare listings={selectedListings} zones={zones} unlockedIds={unlocked} onUnlockRequest={setUnlockTarget} />
           </div>
         </section>
+      )}
+
+      {/* ── 전수 구역 상세: 대표 구역이 아닌 구역의 서울시 고시 데이터 ── */}
+      {selectedSeoul && (
+        <ZoneOfficialPanel
+          zone={selectedSeoul}
+          meta={
+            seoulMeta ?? {
+              source: "서울 열린데이터광장 OA-22712 서울시 도시계획사업 현황(서울플랜+)",
+              sourceDetail: "OA-20957 서울시 의제처리구역 위치정보(UQ181)",
+              asOf: "2026-09-10",
+              asOfDetail: "2026-09-11",
+              count: seoulZones.length,
+            }
+          }
+          onClose={() => setSelectedId(undefined)}
+        />
       )}
 
       {unlockTarget && (

@@ -6,6 +6,9 @@
 /** 사업 유형 (재개발닷컴/갈타맵 유사 분류) */
 export type ZoneType = "신통기획" | "모아타운" | "도공복" | "일반재개발";
 
+/** 지도 색상 분류 — 대표 구역 4분류 + 서울시 전수 지도용 가로주택·소규모 */
+export type MapZoneType = ZoneType | "가로주택" | "소규모";
+
 /** 서울시 도시계획사업(서울플랜+) 공식 레코드 — 구역 경계·면적·추진단계의 근거 */
 export type ZoneOfficial = {
   sourceId: string; // 서울 열린데이터광장 PRESENT_SN
