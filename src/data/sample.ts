@@ -1,14 +1,43 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// 샘플 데이터 — 서울 주요 정비구역 (실무 투입 시 공공 API로 교체)
-// 좌표·금액은 서비스 구조 검증용 샘플이며, 실제 고시 데이터로 대체해야 함.
+// 샘플 데이터 — 서울 주요 정비구역
+//
+// · 구역 경계(polygon/center)는 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」
+//   (OA-22712, 기준 2026-09) 실경계를 EPSG:5174 → WGS84로 변환한 값이다.  → src/data/zones-geo.json
+// · 세대수·비례율·시공사·입주시기·거래·매물은 서비스 구조 검증용 샘플이다.
+//   (각 구역의 공식 명칭·사업유형·추진단계·면적은 zone.official에 원본 그대로 보관)
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Transaction, Zone, Listing } from "@/lib/types";
 import zoneGeo from "@/data/zones-geo.json";
 
-/** 폴리곤·중심좌표 단일 출처: src/data/zones-geo.json (WFS 실데이터로 갱신 대상) */
+type ZoneGeo = {
+  id: string;
+  sourceId: string;
+  name: string;
+  area: number; // 고시 구역면적(㎡)
+  stage: string; // 서울시 추진단계
+  kind: string; // 서울시 사업유형(소분류)
+  asOf?: string;
+  center: [number, number];
+  polygon: [number, number][];
+  parts?: [number, number][][];
+};
+
+/** 폴리곤·중심좌표 단일 출처: src/data/zones-geo.json (서울시 실경계 + 고시 메타) */
 function geo(id: string) {
-  const g = zoneGeo.find((z) => z.id === id)!;
-  return { polygon: g.polygon as [number, number][], center: g.center as [number, number] };
+  const g = (zoneGeo as unknown as ZoneGeo[]).find((z) => z.id === id)!;
+  return {
+    polygon: g.polygon,
+    center: g.center,
+    ...(g.parts ? { parts: g.parts } : {}),
+    official: {
+      sourceId: g.sourceId,
+      name: g.name,
+      kind: g.kind,
+      stage: g.stage,
+      area: g.area,
+      asOf: g.asOf ?? "",
+    },
+  };
 }
 
 export const ZONES: Zone[] = [
@@ -29,34 +58,30 @@ export const ZONES: Zone[] = [
       { date: "2022-08", label: "정비계획 변경 결정·고시", sourceUrl: "https://mediahub.seoul.go.kr/archives/2005021" },
       { date: "2025-03", label: "사업시행계획 인가 (4,185가구)", sourceUrl: "https://www.housingherald.co.kr/news/articleView.html?idxno=49804" },
     ],
-    polygon: geo("sillim-1").polygon,
-    center: geo("sillim-1").center,
+    ...geo("sillim-1"),
     lowestPrice: 58000,
     lowestInitialInvestment: 59900,
     summary: "신림선 서울대벤처타운역 역세권, 22.3만㎡ 규모. 신통기획 1호 사업지.",
   },
   {
     id: "banpo-1",
-    name: "반포1동 민간도심복합",
+    name: "반포주공1단지 3주구",
     district: "서초구",
-    type: "도공복",
-    stage: "사업계획승인",
+    type: "일반재개발",
+    stage: "착공",
     households: 3060,
     ratioEstimate: 44.9,
     constructor: "미정",
     residenceRequired: false,
     toehoApplied: false,
-    moveInEstimate: "2034~2036",
+    moveInEstimate: "2029~2031",
     timeline: [
-      { date: "2023-12", label: "민간도심복합 용역 선정", sourceUrl: "#" },
-      { date: "2025-08", label: "도심복합 특별법 사업계획 승인 신청", sourceUrl: "#" },
-      { date: "2026-09", label: "정비구역 지정 고시", sourceUrl: "#" },
+      { date: "2026-09", label: "서울시 도시계획사업 데이터 기준 (착공 단계·11.7만㎡)", sourceUrl: "https://data.seoul.go.kr/dataList/OA-22712/F/1/datasetView.do" },
     ],
-    polygon: geo("banpo-1").polygon,
-    center: geo("banpo-1").center,
+    ...geo("banpo-1"),
     lowestPrice: 128000,
     lowestInitialInvestment: 130560,
-    summary: "한강뷰 도심복합 사업. 공공기여 확대, 고가권 대표 구역.",
+    summary: "한강변 반포주공1단지 재건축 3주구. 대단지 고가권 대표 구역.",
   },
   {
     id: "noryangjin",
@@ -75,8 +100,7 @@ export const ZONES: Zone[] = [
       { date: "2025-06", label: "추진위원회 승인", sourceUrl: "#" },
       { date: "2026-07", label: "정비구역 지정 고시", sourceUrl: "#" },
     ],
-    polygon: geo("noryangjin").polygon,
-    center: geo("noryangjin").center,
+    ...geo("noryangjin"),
     lowestPrice: 74000,
     lowestInitialInvestment: 75480,
     summary: "노량진역 세 지구 중 제2구역. 신통기획 통합기획 연계.",
@@ -99,8 +123,7 @@ export const ZONES: Zone[] = [
       { date: "2025-03", label: "관리처분계획 인가", sourceUrl: "#" },
       { date: "2026-04", label: "이주·철거 착수", sourceUrl: "#" },
     ],
-    polygon: geo("hannam").polygon,
-    center: geo("hannam").center,
+    ...geo("hannam"),
     lowestPrice: 165000,
     lowestInitialInvestment: 168300,
     summary: "용산 국제업무지구 배후 주거지. 한남동 고가 구역.",
@@ -123,8 +146,7 @@ export const ZONES: Zone[] = [
       { date: "2025-01", label: "관리처분계획 인가", sourceUrl: "#" },
       { date: "2026-06", label: "착공", sourceUrl: "#" },
     ],
-    polygon: geo("seongsu").polygon,
-    center: geo("seongsu").center,
+    ...geo("seongsu"),
     lowestPrice: 96000,
     lowestInitialInvestment: 97920,
     summary: "성수역 이남 대단지 재건축. 토허제 적용 구역.",
@@ -145,8 +167,7 @@ export const ZONES: Zone[] = [
       { date: "2024-11", label: "모아타운 후보지 검토 대상", sourceUrl: "#" },
       { date: "2026-02", label: "추진위원회 구성 승인", sourceUrl: "#" },
     ],
-    polygon: geo("bukahyeon").polygon,
-    center: geo("bukahyeon").center,
+    ...geo("bukahyeon"),
     lowestPrice: 47000,
     lowestInitialInvestment: 47940,
     summary: "홍제역 인근 주공1차 재건축. 모아타운 추진 검토 구역.",
@@ -160,7 +181,7 @@ export const TRANSACTIONS: Transaction[] = [
   { id: "t3", zoneId: "sillim-1", date: "2026-09", kind: "아파트", dong: "103동 12층", areaSqm: 84.9, floor: 12, price: 66500, landShareSqm: 32.1, officialLandValue: 8900 },
   { id: "t4", zoneId: "sillim-1", date: "2026-09", kind: "아파트", dong: "101동 2층", areaSqm: 84.9, floor: 2, price: 58000, landShareSqm: 32.1, officialLandValue: 8900 },
   { id: "t5", zoneId: "sillim-1", date: "2026-08", kind: "오피스텔", dong: "B동 5층", areaSqm: 39.6, floor: 5, price: 32000, landShareSqm: 0, officialLandValue: 0 },
-  // 반포1동
+  // 반포주공1단지 3주구
   { id: "t6", zoneId: "banpo-1", date: "2026-10", kind: "아파트", dong: "201동 5층", areaSqm: 114.2, floor: 5, price: 172000, landShareSqm: 46.8, officialLandValue: 31500 },
   { id: "t7", zoneId: "banpo-1", date: "2026-09", kind: "아파트", dong: "202동 11층", areaSqm: 84.9, floor: 11, price: 139000, landShareSqm: 34.7, officialLandValue: 23400 },
   { id: "t8", zoneId: "banpo-1", date: "2026-08", kind: "아파트", dong: "203동 3층", areaSqm: 59.4, floor: 3, price: 128000, landShareSqm: 29.1, officialLandValue: 19800 },
@@ -233,7 +254,7 @@ export const LISTINGS: Listing[] = [
     transferFee: 8500,
     expectedJeonse: 55000,
     expectedAdditionalCost: 22000,
-    note: "반포1동 도심복합. 지분율 우수 조합원 지위.",
+    note: "반포주공1단지 3주구. 지분율 우수 조합원 지위.",
     verified: true,
     createdAt: "2026-11-12",
   },

@@ -11,6 +11,7 @@ import { STAGE_ORDER, calcMultiple } from "@/lib/types";
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
+import { TYPE_COLORS } from "@/components/map/colors";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
@@ -83,8 +84,22 @@ export default function ZoneExplorer() {
 
       {/* ── 지도 + 구역 목록 ── */}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-        <div className="h-[440px] overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-          <MapPanel zones={filtered} selectedZoneId={selectedId} onSelectZone={setSelectedId} />
+        <div>
+          <div className="h-[440px] overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+            <MapPanel zones={filtered} selectedZoneId={selectedId} onSelectZone={setSelectedId} />
+          </div>
+          {/* 범례 · 데이터 출처 */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+            {(Object.keys(TYPE_COLORS) as ZoneType[]).map((t) => (
+              <span key={t} className="inline-flex items-center gap-1">
+                <i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: TYPE_COLORS[t] }} />
+                {t}
+              </span>
+            ))}
+            <span className="text-slate-400">
+              | 배경 경계는 서울시 도시계획사업(서울플랜+) 실데이터 150여 곳
+            </span>
+          </div>
         </div>
         <div className="max-h-[440px] space-y-3 overflow-y-auto pr-1">
           {filtered.map((z) => {
@@ -159,6 +174,29 @@ export default function ZoneExplorer() {
                 <dt className="text-slate-500">예상 입주</dt>
                 <dd className="text-right font-semibold">{selected.moveInEstimate}</dd>
               </dl>
+
+              {/* 서울시 고시 데이터 (구역 경계·면적·단계의 근거) */}
+              {selected.official && (
+                <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 text-xs">
+                  <div className="mb-1 flex items-center justify-between font-semibold text-emerald-800">
+                    <span>서울시 고시 데이터</span>
+                    <span className="font-normal text-emerald-700/70">{selected.official.asOf} 기준</span>
+                  </div>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-emerald-900">
+                    <dt className="text-emerald-700/80">고시 명칭</dt>
+                    <dd>{selected.official.name}</dd>
+                    <dt className="text-emerald-700/80">사업유형</dt>
+                    <dd>{selected.official.kind}</dd>
+                    <dt className="text-emerald-700/80">추진단계</dt>
+                    <dd>{selected.official.stage}</dd>
+                    <dt className="text-emerald-700/80">구역면적</dt>
+                    <dd>
+                      {selected.official.area.toLocaleString()}㎡
+                      {(selected.official.area / 3.3058 / 1000).toFixed(1)}천평
+                    </dd>
+                  </dl>
+                </div>
+              )}
               <p className="mt-2 text-xs text-slate-500">{selected.summary}</p>
 
               <h3 className="mb-2 mt-5 text-sm font-bold text-slate-700">추진경과</h3>
@@ -181,7 +219,8 @@ export default function ZoneExplorer() {
                 ))}
               </ol>
               <p className="mt-2 text-xs text-slate-400">
-                ※ 고시·공고 근거 링크는 정비사업 정보몽땅/서울시 고시 데이터 연동 후 활성화됩니다.
+                ※ 구역 경계·면적·추진단계는 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」
+                (OA-22712) 실데이터입니다. 세대수·비례율·시공사·거래·매물은 데모 샘플값입니다.
               </p>
             </div>
 

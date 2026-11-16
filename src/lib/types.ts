@@ -6,6 +6,16 @@
 /** 사업 유형 (재개발닷컴/갈타맵 유사 분류) */
 export type ZoneType = "신통기획" | "모아타운" | "도공복" | "일반재개발";
 
+/** 서울시 도시계획사업(서울플랜+) 공식 레코드 — 구역 경계·면적·추진단계의 근거 */
+export type ZoneOfficial = {
+  sourceId: string; // 서울 열린데이터광장 PRESENT_SN
+  name: string; // 고시 명칭
+  kind: string; // 사업유형 소분류 (예: 재정비촉진구역)
+  stage: string; // 추진단계 (예: 사업시행인가)
+  area: number; // 구역면적 고시값 (㎡)
+  asOf: string; // 데이터 기준일
+};
+
 /** 추진 단계 (순서대로 진행). stageOrder가 클수록 뒤 단계 */
 export type ZoneStage =
   | "추진위원회"
@@ -41,9 +51,13 @@ export type Zone = {
   moveInEstimate: string; // 예상 입주 구간 (예: "2031~2033")
   /** 추진 경과 타임라인 — 고시/공고 근거 링크 자리 */
   timeline: { date: string; label: string; sourceUrl?: string }[];
-  /** 지도 폴리곤 (위도, 경도) — 실무 투입 시 WFS GeoJSON으로 교체 (scripts/README-gis.md) */
+  /** 지도 폴리곤 (위도, 경도) — 서울시 도시계획사업 실경계(EPSG:5174→WGS84) */
   polygon: [number, number][];
   center: [number, number];
+  /** 폴리곤 보조 링(여러 필지로 나뉜 구역) */
+  parts?: [number, number][][];
+  /** 서울시 고시 데이터 매칭 정보 */
+  official?: ZoneOfficial;
   /** 요약 지표 (listing/transaction에서 파생 계산도 가능하지만 캐시용으로 보관) */
   lowestPrice?: number; // 최저 매매가 (만원)
   lowestInitialInvestment?: number; // 최저 초기투자금 (만원)
