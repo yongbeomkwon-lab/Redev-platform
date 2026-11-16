@@ -59,6 +59,9 @@ export default function ZoneExplorer() {
   const [addrBusy, setAddrBusy] = useState(false);
   const [addrNote, setAddrNote] = useState<string | null>(null);
   const [addrVerdict, setAddrVerdict] = useState<AddressVerdict | null>(null);
+  // ‘구역 전체 보기’ 요청 토큰 — 주소 핀은 핀 지점을 확대해 보여주므로, 구역 경계 전체는 버튼으로 본다.
+  // 값이 바뀔 때마다 지도가 선택 구역 경계에 화면을 맞춘다(카카오맵·OSM 공통).
+  const [zoneFitRequest, setZoneFitRequest] = useState(0);
 
   // 좁은 화면에서는 상세 패널을 접은 채로 시작해 지도를 가리지 않게 한다
   useEffect(() => {
@@ -312,6 +315,7 @@ export default function ZoneExplorer() {
           onToggleCompleted={toggleCompleted}
           completedCount={completedZones.length}
           addressPin={addressPin}
+          zoneFitRequest={zoneFitRequest}
         />
       </div>
 
@@ -537,10 +541,15 @@ export default function ZoneExplorer() {
                   <div className="mt-1.5 flex flex-wrap items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => pickZone(addrVerdict.inside[0].zone.id)}
+                      data-testid="address-zone-fit"
+                      onClick={() => {
+                        pickZone(addrVerdict.inside[0].zone.id);
+                        setZoneFitRequest((n) => n + 1);
+                      }}
+                      title="이 주소가 속한 구역 경계 전체를 한눈에 봅니다"
                       className="rounded-full bg-emerald-700 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-emerald-800"
                     >
-                      구역 상세 보기
+                      구역 전체 보기
                     </button>
                     {addrVerdict.inside.slice(1, 4).map((h) => (
                       <button
@@ -565,10 +574,15 @@ export default function ZoneExplorer() {
                   <div className="mt-1.5 flex flex-wrap items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => pickZone(addrVerdict.completedHits[0].zone.id)}
+                      data-testid="address-zone-fit"
+                      onClick={() => {
+                        pickZone(addrVerdict.completedHits[0].zone.id);
+                        setZoneFitRequest((n) => n + 1);
+                      }}
+                      title="이 주소가 속한 구역 경계 전체를 한눈에 봅니다"
                       className="rounded-full bg-amber-600 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-amber-700"
                     >
-                      구역 상세 보기
+                      구역 전체 보기
                     </button>
                     {addrVerdict.completedHits.slice(1, 3).map((h) => (
                       <button

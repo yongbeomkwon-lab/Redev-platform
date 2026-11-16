@@ -27,12 +27,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { CircleMarker, MapContainer, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Pane, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import SubwayLayer from "./SubwayLayer";
 import { SEOUL_BOUNDS, type AddressPin, type LeafletZoneMapProps } from "./props";
+import { addressPinHtml } from "./address-pin";
 
 export { TYPE_COLORS };
 
@@ -51,26 +52,62 @@ function labelLine(z: { name: string; kind: string; stage: string; area: number;
 }
 
 /** 지도 이동/선택 구역 확대 — 폴리곤 구역은 경계에 맞추고, 경계 미고시 후보지는 점으로 이동 */
-function FitSelected({ ring, point }: { ring?: [number, number][]; point?: [number, number] }) {
+function FitSelected({
+  ring,
+  point,
+  fitRequest,
+  skip,
+}: {
+  ring?: [number, number][];
+  point?: [number, number];
+  fitRequest?: number;
+  /** 주소 핀으로 들어온 구역 — 핀 지점 확대를 유지하고 구역 전체로 넓히지 않는다 */
+  skip?: boolean;
+}) {
   const map = useMap();
+  const lastReq = useRef<number | undefined>(undefined);
   useEffect(() => {
+    // ‘구역 전체 보기’ 요청이 들어온 순간은 핀 화면이어도 구역 경계로 넓힌다
+    const forced = fitRequest !== undefined && fitRequest !== lastReq.current;
+    lastReq.current = fitRequest;
+    if (skip && !forced) return;
     if (ring && ring.length >= 3) {
       map.flyToBounds(ring as [number, number][], { padding: [40, 40], maxZoom: 17, duration: 0.7 });
       return;
     }
     if (point) map.flyTo(point, 16, { duration: 0.7 });
-  }, [ring, point, map]);
+  }, [ring, point, map, fitRequest, skip]);
   return null;
 }
 
-/** 주소 검색 핀으로 이동 (OSM 폴백용 — 카카오맵과 같은 위치로) */
-function FitAddressPin({ pin }: { pin?: AddressPin | null }) {
+/**
+ * 주소 검색 핀 — 카카오맵과 **같은 생김새**(불투명 흰 카드 + 드롭핀)로, 지도 위 맨 위 pane 에 얹는다.
+ *   · Leaflet 기본 markerPane(600)·tooltipPane(650) 보다 위(900)라 구역 폴리곤 캔버스(400)에 덮이지 않는다.
+ *   · divIcon 아이콘 크기를 0 으로 두고 HTML 이 스스로 translate(-50%,-100%) 로 좌표에 핀 끝을 맞춘다.
+ */
+function AddressPinMarker({ pin }: { pin?: AddressPin | null }) {
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: "redev-address-pin",
+        html: pin ? addressPinHtml(pin) : "",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+    [pin]
+  );
   const map = useMap();
   useEffect(() => {
     if (!pin) return;
+    // 핀 지점 중심으로 확대 — 카카오맵(level 3~4)과 같은 체감. 이미 더 확대돼 있으면 그대로 둔다.
     map.flyTo([pin.lat, pin.lng], Math.max(map.getZoom(), 16), { duration: 0.7 });
   }, [pin?.lat, pin?.lng, map]);
-  return null;
+  if (!pin) return null;
+  return (
+    <Pane name="redevAddressPin" style={{ zIndex: 900 }}>
+      <Marker position={[pin.lat, pin.lng]} icon={icon} interactive={false} keyboard={false} />
+    </Pane>
+  );
 }
 
 /** 확대 수준을 상위로 알린다 — 줌이 바뀌면 선 굵기를 다시 계산한다 */
@@ -209,6 +246,7 @@ export default function LeafletZoneMap({
   onToggleCompleted,
   completedCount = 0,
   addressPin,
+  zoneFitRequest,
   fallbackReason,
 }: LeafletZoneMapProps) {
   // Canvas 렌더러 하나를 지도 전체가 공유한다.
@@ -295,34 +333,14 @@ export default function LeafletZoneMap({
         </CircleMarker>
       ))}
 
-      <FitSelected ring={selected.ring} point={selected.point} />
-      {/* ── 주소 검색 핀 ── */}
-      {addressPin && (
-        <CircleMarker
-          center={[addressPin.lat, addressPin.lng]}
-          radius={9}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 3,
-            opacity: 1,
-            fillColor:
-              addressPin.status === "inside"
-                ? "#059669"
-                : addressPin.status === "completed"
-                  ? "#d97706"
-                  : addressPin.status === "near-candidate"
-                    ? "#7c3aed"
-                    : "#e11d48",
-            fillOpacity: 1,
-          }}
-        >
-          <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
-            <b>{addressPin.message}</b>
-            <span className="zone-name-sub"> · {addressPin.label}</span>
-          </Tooltip>
-        </CircleMarker>
-      )}
-      <FitAddressPin pin={addressPin} />
+      <FitSelected
+        ring={selected.ring}
+        point={selected.point}
+        fitRequest={zoneFitRequest}
+        skip={!!addressPin && !!selectedZoneId && addressPin.zoneId === selectedZoneId}
+      />
+      {/* ── 주소 검색 핀 — 맨 위 pane(불투명 카드 + 드롭핀) ── */}
+      <AddressPinMarker pin={addressPin} />
       </MapContainer>
 
       {/* 카카오맵을 쓸 수 없어 OSM으로 표시 중이라는 안내 (작게, 지도 조작은 그대로) */}

@@ -24,6 +24,11 @@ export type ZoneMapProps = {
   completedCount?: number;
   /** 주소 검색으로 찾은 위치 핀 — null 이면 지운다 */
   addressPin?: AddressPin | null;
+  /**
+   * ‘구역 전체 보기’ 요청 토큰 — 값이 바뀔 때마다 선택 구역 경계에 화면을 맞춘다.
+   * 주소 핀은 핀 지점을 확대해 보여주므로(골목·건물명), 구역 경계 전체는 이 버튼으로 본다.
+   */
+  zoneFitRequest?: number;
 };
 
 /** 주소 → 구역 판별 결과를 지도에 찍는 핀/말풍선 */
@@ -36,7 +41,7 @@ export type AddressPin = {
   status: "inside" | "completed" | "near-candidate" | "outside";
   /** 말풍선 한 줄: ✅ 신림1구역 포함 / 정비구역 밖 주소입니다 … */
   message: string;
-  /** 이 주소가 속한 구역 — 있으면 그 구역 경계와 함께 화면을 맞춘다 */
+  /** 이 주소가 속한 구역 — 있으면 선택 구역과 핀이 같은 곳이다(핀 화면을 유지한다) */
   zoneId?: string;
 };
 

@@ -24,10 +24,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
+import { addressPinHtml, PIN_LAYER_STYLE } from "./address-pin";
 import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type KakaoZoneMapProps } from "./props";
 import type {
-  KakaoCustomOverlay,
   KakaoLatLng,
   KakaoMap,
   KakaoMouseEvent,
@@ -165,22 +165,6 @@ function labelLine(z: { name: string; kind: string; stage: string; area: number;
   return `${z.name} · ${z.kind} · ${z.stage} · ${area}${z.gu ? ` (${z.gu})` : ""}`;
 }
 
-/** 주소 핀 말풍선 색 — 판정 종류별 */
-const PIN_TONES: Record<
-  "inside" | "completed" | "near-candidate" | "outside",
-  { border: string; text: string; tail: string; dot: string }
-> = {
-  inside: { border: "border-emerald-500", text: "text-emerald-700", tail: "border-t-emerald-500", dot: "bg-emerald-600" },
-  completed: { border: "border-amber-500", text: "text-amber-800", tail: "border-t-amber-500", dot: "bg-amber-500" },
-  "near-candidate": {
-    border: "border-violet-500",
-    text: "text-violet-800",
-    tail: "border-t-violet-500",
-    dot: "bg-violet-600",
-  },
-  outside: { border: "border-rose-500", text: "text-rose-700", tail: "border-t-rose-500", dot: "bg-rose-600" },
-};
-
 export default function KakaoZoneMap({
   zones,
   seoulZones,
@@ -190,15 +174,29 @@ export default function KakaoZoneMap({
   onToggleCompleted,
   completedCount = 0,
   addressPin,
+  zoneFitRequest,
   onFail,
 }: KakaoZoneMapProps) {
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<KakaoMap | null>(null);
   const sdkRef = useRef<KakaoSDK | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const labelRef = useRef<KakaoCustomOverlay | null>(null);
-  /** 주소 검색 핀(말풍선) 오버레이 */
-  const pinRef = useRef<KakaoCustomOverlay | null>(null);
+  /**
+   * 화면 좌표에 붙는 DOM 레이어 — 카카오 CustomOverlay 대신 우리가 직접 얹는다.
+   *  · 카카오 오버레이는 z-index 1 레이어에 들어가고 우리 폴리곤 캔버스가 z-index 2 라,
+   *    구역 안에 찍힌 주소 핀·이름표가 폴리곤 색에 반투명하게 덮였다(사용자 스크린샷).
+   *  · 그래서 핀·이름표는 지도 컨테이너 밖(같은 wrapper)의 z-index 100 레이어에 두고,
+   *    draw() 가 매 프레임 좌표를 계산해 transform 으로 옮긴다(지도와 '같은 프레임'에 따라온다).
+   */
+  const pinLayerRef = useRef<HTMLDivElement | null>(null);
+  const labelLayerRef = useRef<HTMLDivElement | null>(null);
+  /** 지금 레이어에 놓인 핀·이름표의 좌표 (draw 에서 읽는다) */
+  const pinAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
+  /** 마지막으로 처리한 ‘구역 전체 보기’ 요청 토큰 */
+  const lastFitReqRef = useRef(0);
+  /** 이름표·화면 맞춤을 마지막으로 적용한 구역 — 핀만 바뀐 경우(핀 지우기) 화면을 흔들지 않으려고 */
+  const lastLabelZoneRef = useRef<string | undefined>(undefined);
+  const labelAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
   const tipRef = useRef<HTMLDivElement | null>(null);
   const bufRef = useRef<Float32Array>(new Float32Array(4096));
   const viewRef = useRef<View | null>(null);
@@ -219,6 +217,12 @@ export default function KakaoZoneMap({
   const anchorModeRef = useRef<"anchor" | "projection">("projection");
   /** 진단용 — draw 횟수 */
   const drawCountRef = useRef(0);
+  /** 진단용 — 기준점 재배치 횟수 */
+  const placeCountRef = useRef(0);
+  /** 기준점 재배치 함수(지도 effect 안에서 채운다) — draw 가 '기준점을 못 읽었다'고 판단할 때 스스로 부른다 */
+  const replaceAnchorsRef = useRef<(() => void) | null>(null);
+  /** 기준점 자가 복구 시도 상태 (무한 재시도 방지) */
+  const healRef = useRef({ at: 0, tries: 0 });
   /** 기준점 사각형 위에서도 지도 클릭·호버가 그대로 동작하도록 넘겨줄 핸들러 */
   const passthroughRef = useRef<{
     click: ((e: KakaoMouseEvent) => void) | null;
@@ -226,10 +230,6 @@ export default function KakaoZoneMap({
   }>({ click: null, move: null });
   const onSelectRef = useRef(onSelectZone);
   onSelectRef.current = onSelectZone;
-
-  /** 핀이 가리키는 구역을 찾을 때 쓰는 최신 목록(효과 의존성을 줄이려고 ref로 읽는다) */
-  const seoulZonesRef = useRef(seoulZones);
-  seoulZonesRef.current = seoulZones;
 
   const prep = useMemo<PreparedZones>(() => prepareZones(seoulZones), [seoulZones]);
   const prepRef = useRef<PreparedZones>(prep);
@@ -316,6 +316,22 @@ export default function KakaoZoneMap({
       anchorModeRef.current = anchored ? "anchor" : "projection";
     }
 
+    // ── 기준점 자가 복구 ───────────────────────────────────────────────────────
+    //   카카오는 지도가 크게 이동하면 기준점 사각형의 화면 좌표를 새로 잡아야 하는데,
+    //   뒷 레이어를 통째로 다시 그리지 않는 경우(예: 주소 검색으로 jump)에는 SVG path 가
+    //   0×0 으로 남아 기준점을 읽을 수 없었다. → idle 만 믿지 않고 draw 가 스스로 재배치를 요청한다.
+    //   (줌 애니메이션 중에는 타일 배율 보정 경로를 쓰므로 건드리지 않는다. 재시도는 제한한다.)
+    if (anchored) {
+      healRef.current.tries = 0;
+    } else if (now > zoomAnimUntilRef.current) {
+      const heal = healRef.current;
+      if (heal.tries < 12 && now - heal.at > 220) {
+        heal.at = now;
+        heal.tries += 1;
+        window.setTimeout(() => replaceAnchorsRef.current?.(), 0);
+      }
+    }
+
     // ── 지도 변환 읽기 ② 예비 경로 — 기준점이 없을 때(초기 1~2프레임·이상 상태) ─────
     if (!anchored) {
       const proj = map.getProjection();
@@ -346,6 +362,20 @@ export default function KakaoZoneMap({
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    // 화면 좌표에 붙어 있는 DOM(구역 이름표·주소 핀)도 같은 변환으로 옮긴다 —
+    //   카카오 오버레이(z-index 1)에 두면 우리 캔버스(z-index 2)가 위에 깔려 폴리곤 색에 덮인다.
+    const placeOnMap = (node: HTMLElement | null, lat: number, lng: number) => {
+      if (!node) return;
+      const x = p0x + (lng - lng0) * pxPerLng;
+      const y = p0y + (mercator(lat) - m0) * pxPerMerc;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      const far = x < -260 || x > cw + 260 || y < -260 || y > ch + 260;
+      node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0)`;
+      node.style.visibility = far ? "hidden" : "visible";
+    };
+    placeOnMap(labelLayerRef.current, labelAtRef.current.lat, labelAtRef.current.lng);
+    placeOnMap(pinLayerRef.current, pinAtRef.current.lat, pinAtRef.current.lng);
+
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
     ctx.lineJoin = "round";
@@ -355,8 +385,11 @@ export default function KakaoZoneMap({
     viewRef.current = { p0x, p0y, cLat, cLng: lng0, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
 
     // 화면에 보이는 지리 범위 — 밖의 구역은 그리지 않는다(변환의 역함수로 바로 구한다)
-    const vLng0 = (0 - p0x) / pxPerLng;
-    const vLng1 = (cw - p0x) / pxPerLng;
+    //  ⚠️ 예비 경로(projection)에서는 p0x 가 **지도 중심(경도 lng0)의 화면 x** 이므로,
+    //     경도를 되돌릴 때 lng0 를 반드시 더해야 한다. 이 항이 빠져 있으면 화면 밖 범위가
+    //     경도 -0.02~0.02 로 계산돼 서울 구역이 전부 컬링됐다(주소 검색 직후 폴리곤이 사라진 원인).
+    const vLng0 = lng0 + (0 - p0x) / pxPerLng;
+    const vLng1 = lng0 + (cw - p0x) / pxPerLng;
     const vLat0 = unmercator((0 - p0y) / pxPerMerc + m0);
     const vLat1 = unmercator((ch - p0y) / pxPerMerc + m0);
     const vMinLat = Math.min(vLat0, vLat1) - 0.0003;
@@ -530,6 +563,19 @@ export default function KakaoZoneMap({
         draw: () => draw(),
         anchor: () => anchorModeRef.current,
         draws: () => drawCountRef.current,
+        places: () => placeCountRef.current,
+        anchorInfo: () => {
+          const pair = anchorsRef.current;
+          const el = mapElRef.current;
+          if (!pair || !el) return null;
+          const box = el.getBoundingClientRect();
+          const one = (a: MapAnchor) => {
+            const connected = !!a.el && a.el.isConnected;
+            const r = a.el ? a.el.getBoundingClientRect() : null;
+            return { connected, lat: a.lat, lng: a.lng, half: a.half, r: r ? { x: Math.round(r.x - box.left), y: Math.round(r.y - box.top), w: Math.round(r.width), h: Math.round(r.height) } : null };
+          };
+          return { a: one(pair.a), b: one(pair.b), box: { w: Math.round(box.width), h: Math.round(box.height) } };
+        },
       };
     }
 
@@ -605,6 +651,7 @@ export default function KakaoZoneMap({
 
     // 기준점을 지금 화면 안(가운데에서 ±25%)으로 옮긴다 — 화면 밖으로 나가면 SVG 에서 빠질 수 있다
     const placeAnchors = () => {
+      placeCountRef.current += 1;
       const b = map.getBounds();
       const sw = b.getSouthWest();
       const ne = b.getNorthEast();
@@ -629,6 +676,7 @@ export default function KakaoZoneMap({
       draw();
     };
     placeAnchors();
+    replaceAnchorsRef.current = placeAnchors;
     // 첫 화면 맞춤도 줌 애니메이션이다 — 그동안도 타일 배율을 읽어 경계를 붙여 둔다
     {
       const t0 = performance.now();
@@ -835,13 +883,14 @@ export default function KakaoZoneMap({
       if (moveRafRef.current) window.cancelAnimationFrame(moveRafRef.current);
       ro?.disconnect();
       k.maps.event.removeListener(map, "idle", onIdle);
-      labelRef.current?.setMap(null);
-      labelRef.current = null;
+      labelAtRef.current = { lat: NaN, lng: NaN };
+      pinAtRef.current = { lat: NaN, lng: NaN };
       passthroughRef.current = { click: null, move: null };
       anchors.a.poly?.setMap(null);
       anchors.b.poly?.setMap(null);
       mo?.disconnect();
       anchorsRef.current = null;
+      replaceAnchorsRef.current = null;
       canvas.remove();
       canvasRef.current = null;
       mapRef.current = null;
@@ -860,41 +909,61 @@ export default function KakaoZoneMap({
     draw();
   }, [selectedZoneId, draw]);
 
+  /**
+   * 프로그램으로 지도를 옮긴 뒤(점프 애니메이션 ~350ms) 기준점을 새 화면에 다시 놓는다.
+   *   카카오는 큰 이동 뒤 벡터 레이어를 다시 그리지 않을 때가 있어(기준점 path 가 0×0 으로 남음)
+   *   idle 이벤트만 믿으면 기준점이 옛 화면에 남아 경계가 엉뚱한 배율로 그려질 수 있다.
+   */
+  const settleView = useCallback(() => {
+    window.setTimeout(() => {
+      replaceAnchorsRef.current?.();
+      draw();
+    }, 430);
+  }, [draw]);
+
   // ── 선택 구역 이름표 + 부드러운 이동 ────────────────────────────────────────
+  //   이름표도 우리 DOM 레이어(z-index 100)에 둔다 — 카카오 오버레이에 두면 폴리곤 캔버스가
+  //   위에 깔려 구역 안쪽에 있을 때 이름표가 구역 색에 반투명하게 덮였다.
+  const labelHtml = useMemo(() => {
+    if (!selectedZoneId) return "";
+    const seoul = seoulZones.find((z) => z.id === selectedZoneId);
+    const featured = zones.find((z) => z.id === selectedZoneId);
+    const name = seoul?.name ?? featured?.name;
+    if (!name) return "";
+    const parcel = (seoul?.alias ?? []).find((a) => /\d+-\d+/.test(a));
+    return `<b>${escapeHtml(name)}</b>${
+      parcel ? `<span class="zone-name-sub"> · ${escapeHtml(parcel)}</span>` : ""
+    }`;
+  }, [selectedZoneId, seoulZones, zones]);
+
   useEffect(() => {
     const k = sdkRef.current;
     const map = mapRef.current;
     if (!k || !map || !selectedZoneId) {
-      labelRef.current?.setMap(null);
-      labelRef.current = null;
+      labelAtRef.current = { lat: NaN, lng: NaN };
+      if (labelLayerRef.current) labelLayerRef.current.style.visibility = "hidden";
       return;
     }
     const seoul = seoulZones.find((z) => z.id === selectedZoneId);
     const featured = zones.find((z) => z.id === selectedZoneId);
-    const name = seoul?.name ?? featured?.name;
-    if (!name) return;
+    const zoneChanged = lastLabelZoneRef.current !== selectedZoneId;
+    lastLabelZoneRef.current = selectedZoneId;
+    const lat = seoul ? seoul.center[0] : featured?.polygon?.[0]?.[0];
+    const lng = seoul ? seoul.center[1] : featured?.polygon?.[0]?.[1];
+    if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    labelAtRef.current = { lat, lng };
 
-    const parcel = (seoul?.alias ?? []).find((a) => /\d+-\d+/.test(a));
-    const lat = seoul ? seoul.center[0] : featured?.polygon?.[0]?.[0] ?? 37.5665;
-    const lng = seoul ? seoul.center[1] : featured?.polygon?.[0]?.[1] ?? 126.978;
-
-    labelRef.current?.setMap(null);
-    const labelEl = document.createElement("div");
-    labelEl.className = "zone-name-label";
-    labelEl.innerHTML = `<b>${escapeHtml(name)}</b>${
-      parcel ? `<span class="zone-name-sub"> · ${escapeHtml(parcel)}</span>` : ""
-    }`;
-    const label = new k.maps.CustomOverlay({
-      content: labelEl,
-      position: new k.maps.LatLng(lat, lng),
-      xAnchor: 0.5,
-      yAnchor: 1.4,
-      zIndex: 30,
-      clickable: false,
-    });
-    label.setMap(map);
-    if (labelEl.parentElement) labelEl.parentElement.style.pointerEvents = "none";
-    labelRef.current = label;
+    // 주소 핀으로 들어온 구역이면 화면은 핀(골목·건물명)에 맞춰 둔다 — 구역 전체는 ‘구역 전체 보기’ 버튼
+    const pinned = addressPin && addressPin.zoneId === selectedZoneId;
+    if (pinned) {
+      draw();
+      return;
+    }
+    // 핀만 지운 경우(같은 구역)에는 화면을 그대로 둔다 — 핀 지우기가 지도를 튕기게 하지 않는다
+    if (!zoneChanged) {
+      draw();
+      return;
+    }
 
     // 경계가 있으면 경계에 맞춰, 후보지는 점으로 이동
     if (seoul?.polygon && seoul.polygon.length >= 3) {
@@ -902,53 +971,28 @@ export default function KakaoZoneMap({
     } else if (seoul) {
       map.jump(new k.maps.LatLng(seoul.center[0], seoul.center[1]), 5, { animate: { duration: 350 } });
     }
-  }, [selectedZoneId, seoulZones, zones]);
+    draw();
+    settleView();
+  }, [selectedZoneId, seoulZones, zones, addressPin, draw, settleView]);
 
-  // ── 주소 검색 핀 + 말풍선 ──────────────────────────────────────────────
-  //   주소 판별 결과(핀)가 바뀔 때만 다시 찍고 화면을 맞춘다. 말풍선 안내문은
-  //   “주소 + 판정 한 줄”이라 사용자가 지도에서 바로 읽을 수 있다.
+  // ── ‘구역 전체 보기’ 요청 — 주소 핀 화면에서 구역 경계 전체로 넓힌다 ─────────
+  //   요청 토큰이 **바뀐 순간에만** 움직인다(다른 구역을 골랐을 때 다시 맞추지 않도록).
   useEffect(() => {
     const k = sdkRef.current;
     const map = mapRef.current;
-    pinRef.current?.setMap(null);
-    pinRef.current = null;
-    if (!k || !map || !addressPin) return;
-
-    const tone = PIN_TONES[addressPin.status] ?? PIN_TONES.outside;
-    const el = document.createElement("div");
-    el.className = "address-pin";
-    el.dataset.testid = "address-pin";
-    el.innerHTML = `
-      <div class="flex flex-col items-center">
-        <div class="max-w-[240px] rounded-xl border-2 ${tone.border} bg-white/95 px-2.5 py-1.5 text-center shadow-xl">
-          <div class="truncate text-[10px] font-medium text-slate-500">${escapeHtml(addressPin.label)}</div>
-          <div class="mt-0.5 text-[11px] font-bold ${tone.text}">${escapeHtml(addressPin.message)}</div>
-        </div>
-        <div class="-mt-px h-0 w-0 border-x-[7px] border-t-[9px] border-x-transparent ${tone.tail}"></div>
-        <div class="h-2.5 w-2.5 rounded-full border-2 border-white ${tone.dot} shadow"></div>
-      </div>`;
-
-    const overlay = new k.maps.CustomOverlay({
-      content: el,
-      position: new k.maps.LatLng(addressPin.lat, addressPin.lng),
-      xAnchor: 0.5,
-      yAnchor: 1,
-      zIndex: 60,
-      clickable: false,
-    });
-    overlay.setMap(map);
-    if (el.parentElement) el.parentElement.style.pointerEvents = "none";
-    pinRef.current = overlay;
-
-    // 화면 맞춤 — 속한 구역이 보이면 그 경계까지, 아니면 주소 지점을 확대해서
-    const zone = addressPin.zoneId ? seoulZonesRef.current.find((z) => z.id === addressPin.zoneId) : undefined;
-    if (zone?.polygon && zone.polygon.length >= 3) {
-      let minLat = addressPin.lat;
-      let maxLat = addressPin.lat;
-      let minLng = addressPin.lng;
-      let maxLng = addressPin.lng;
-      for (const ring of [zone.polygon, ...(zone.parts ?? [])]) {
-        for (const [lat, lng] of ring) {
+    if (!k || !map || !selectedZoneId || !zoneFitRequest) return;
+    if (lastFitReqRef.current === zoneFitRequest) return;
+    lastFitReqRef.current = zoneFitRequest;
+    const seoul = seoulZones.find((z) => z.id === selectedZoneId);
+    const featured = zones.find((z) => z.id === selectedZoneId);
+    const ring = seoul?.polygon ?? featured?.polygon;
+    if (ring && ring.length >= 3) {
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+      let minLng = Infinity;
+      let maxLng = -Infinity;
+      for (const r of [ring, ...(seoul?.parts ?? featured?.parts ?? [])]) {
+        for (const [lat, lng] of r) {
           if (lat < minLat) minLat = lat;
           if (lat > maxLat) maxLat = lat;
           if (lng < minLng) minLng = lng;
@@ -956,10 +1000,31 @@ export default function KakaoZoneMap({
         }
       }
       fitLatLngSpan(k, map, minLat, minLng, maxLat, maxLng, mapElRef.current);
-    } else {
-      map.jump(new k.maps.LatLng(addressPin.lat, addressPin.lng), 4, { animate: { duration: 350 } });
+      settleView();
     }
-  }, [addressPin]);
+  }, [zoneFitRequest, selectedZoneId, seoulZones, zones, settleView]);
+
+  // ── 주소 검색 핀 + 말풍선 ──────────────────────────────────────────────
+  //   핀은 카카오 CustomOverlay 가 아니라 wrapper 안의 z-index 100 레이어에 둔다(z-index 전쟁 종결).
+  //   화면 맞춤은 **핀 지점 중심으로 확대**(카카오 level 3) — 예전에는 구역 경계 전체를 담으려다
+  //   지도가 너무 멀어져 사용자가 찾은 집·골목이 보이지 않았다. 구역 전체는 ‘구역 전체 보기’ 버튼.
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    if (!k || !map) return;
+    if (!addressPin) {
+      pinAtRef.current = { lat: NaN, lng: NaN };
+      if (pinLayerRef.current) pinLayerRef.current.style.visibility = "hidden";
+      return;
+    }
+    pinAtRef.current = { lat: addressPin.lat, lng: addressPin.lng };
+    // 좌표를 먼저 잡고 한 번 그려 두면 말풍선이 지도보다 한 프레임 늦게 따라오지 않는다
+    draw();
+    map.jump(new k.maps.LatLng(addressPin.lat, addressPin.lng), addressPin.zoneId ? 3 : 4, {
+      animate: { duration: 350 },
+    });
+    settleView();
+  }, [addressPin, draw, settleView]);
 
   // ── 지도 타입 토글 ──────────────────────────────────────────────────────────
   const toggleSkyview = useCallback(() => {
@@ -994,6 +1059,35 @@ export default function KakaoZoneMap({
   return (
     <div className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl">
       <div ref={mapElRef} className="h-full w-full" />
+
+      {/* ── 선택 구역 이름표 — z-index 100 우리 레이어(폴리곤 캔버스 위) ── */}
+      <div ref={labelLayerRef} style={PIN_LAYER_STYLE} aria-hidden>
+        {labelHtml && (
+          <div
+            className="zone-name-label"
+            style={{
+              position: "absolute",
+              left: 0,
+              bottom: 0,
+              // 0×0 레이어 안의 절대배치 박스는 폭이 0 으로 잡혀 글자가 잘린다 → 내용 폭을 명시한다
+              width: "max-content",
+              transform: "translate(-50%,-6px)",
+            }}
+            dangerouslySetInnerHTML={{ __html: labelHtml }}
+          />
+        )}
+      </div>
+
+      {/* ── 주소 검색 핀 — 항상 최상단(불투명 흰 카드 + 드롭핀) ── */}
+      <div ref={pinLayerRef} style={PIN_LAYER_STYLE}>
+        {addressPin && (
+          <div
+            data-testid="address-pin"
+            style={{ position: "absolute", left: 0, top: 0, width: "max-content" }}
+            dangerouslySetInnerHTML={{ __html: addressPinHtml(addressPin) }}
+          />
+        )}
+      </div>
 
       {/* 호버 툴팁 */}
       <div
