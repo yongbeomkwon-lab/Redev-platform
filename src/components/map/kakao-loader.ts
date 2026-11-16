@@ -30,6 +30,12 @@ export type KakaoProjection = {
   coordsFromPoint(point: KakaoPoint): KakaoLatLng;
 };
 
+export type KakaoPolygon = {
+  setMap(map: KakaoMap | null): void;
+  setPath(path: KakaoLatLng[]): void;
+  setOptions(options: Record<string, unknown>): void;
+};
+
 export type KakaoCustomOverlay = {
   setMap(map: KakaoMap | null): void;
   setPosition(latlng: KakaoLatLng): void;
@@ -68,6 +74,7 @@ export type KakaoSDK = {
     LatLngBounds: new (sw?: KakaoLatLng, ne?: KakaoLatLng) => KakaoBounds;
     Point: new (x: number, y: number) => KakaoPoint;
     CustomOverlay: new (options: Record<string, unknown>) => KakaoCustomOverlay;
+    Polygon: new (options: Record<string, unknown>) => KakaoPolygon;
     MapTypeId: Record<string, string>;
     ControlPosition: Record<string, number>;
     event: {

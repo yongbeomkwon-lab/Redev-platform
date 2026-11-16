@@ -26,7 +26,14 @@ import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type KakaoZoneMapProps } from "./props";
-import type { KakaoCustomOverlay, KakaoLatLng, KakaoMap, KakaoMouseEvent, KakaoSDK } from "./kakao-loader";
+import type {
+  KakaoCustomOverlay,
+  KakaoLatLng,
+  KakaoMap,
+  KakaoMouseEvent,
+  KakaoPolygon,
+  KakaoSDK,
+} from "./kakao-loader";
 
 /** 카카오 레벨(1=최대 확대, 14=최대 축소)을 Leaflet 줌(클수록 확대)처럼 다루기 위한 기준값 */
 const ZOOM_BASE = 20;
@@ -55,6 +62,44 @@ type Batch = {
 };
 
 const mercator = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * (Math.PI / 180)) / 2));
+/** 메르카토르 y → 위도 (경계 계산용 역변환) */
+const unmercator = (m: number) => ((2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180) / Math.PI;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 지도 변환을 "읽는" 기준점(anchor)
+//
+// 카카오는 벡터 오버레이(Polygon·라벨)를 자기 SVG 레이어에 그리고, 이동할 때는 그 SVG의
+// left/top 을, 확대 애니메이션 중에는 SVG 의 CSS width/height(배율)를 매 프레임 바꾼다.
+// 즉 "지도가 지금 무엇을 어디에 그렸는가"는 우리가 추정할 값이 아니라 **DOM 에 이미 있는 값**이다.
+//
+// 그래서 우리 캔버스와 같은 레이어에 아주 작은 사각형 두 개를 몰래 그려 두고(투명도 0.02 —
+// 화면에서는 보이지 않는다), 매 프레임 그 두 점의 실제 화면 좌표를 읽어 지도 변환을 그대로
+// 재구성한다. 배율을 추정하지 않고, 줌 중심이 어디였는지도 가정하지 않는다 → 휠 줌·버튼 줌·
+// 드래그 어느 경우에도 경계가 지도와 같은 프레임에 같은 자리에 놓인다.
+const ANCHOR_COLORS = ["rgb(255, 0, 170)", "rgb(0, 170, 255)"] as const;
+/** 기준점 사각형을 화면에서 몇 px 로 그릴지(반폭) — bbox 중심이 곧 좌표다 */
+const ANCHOR_PX = 2.5;
+/** 메르카토르 y 1단위당 각도 비 — 360/(2π) */
+const MERC_PER_DEG = 360 / (2 * Math.PI);
+
+type MapAnchor = {
+  poly: KakaoPolygon | null;
+  el: SVGPathElement | null;
+  lat: number;
+  lng: number;
+  /** 사각형 반경(도) — 화면 배율에 맞춰 매번 다시 정한다 */
+  half: number;
+  color: string;
+};
+
+/** 기준점 SVG path 를 찾는다(고유한 stroke 색으로 식별 — 캐시가 끊겼을 때만 다시 부른다) */
+function findAnchorEl(container: HTMLElement, color: string): SVGPathElement | null {
+  const paths = container.querySelectorAll("svg path");
+  for (const p of paths) {
+    if (p instanceof SVGPathElement && getComputedStyle(p).stroke === color) return p;
+  }
+  return null;
+}
 
 /** #rrggbb + 알파 → rgba() 문자열 (캔버스 fillStyle/strokeStyle) */
 const rgbaCache = new Map<string, string>();
@@ -149,6 +194,17 @@ export default function KakaoZoneMap({
   const zoomAnimUntilRef = useRef(0);
   /** 창을 무한히 연장하지 않기 위한 상한 */
   const zoomDeadlineRef = useRef(0);
+  /** 지도 변환 기준점(카카오가 직접 그리는 보이지 않는 사각형 2개) */
+  const anchorsRef = useRef<{ a: MapAnchor; b: MapAnchor } | null>(null);
+  /** 진단용 — 기준점으로 변환을 읽고 있는지 */
+  const anchorModeRef = useRef<"anchor" | "projection">("projection");
+  /** 진단용 — draw 횟수 */
+  const drawCountRef = useRef(0);
+  /** 기준점 사각형 위에서도 지도 클릭·호버가 그대로 동작하도록 넘겨줄 핸들러 */
+  const passthroughRef = useRef<{
+    click: ((e: KakaoMouseEvent) => void) | null;
+    move: ((e: KakaoMouseEvent) => void) | null;
+  }>({ click: null, move: null });
   const onSelectRef = useRef(onSelectZone);
   onSelectRef.current = onSelectZone;
 
@@ -170,6 +226,7 @@ export default function KakaoZoneMap({
     const cw = el.clientWidth;
     const ch = el.clientHeight;
     if (cw < 20 || ch < 20) return;
+    drawCountRef.current += 1;
 
     // 카카오가 컨테이너 내부를 다시 그려 캔버스가 문서에서 떨어지면 스스로 다시 얹는다
     if (!canvas.isConnected) el.appendChild(canvas);
@@ -182,37 +239,87 @@ export default function KakaoZoneMap({
       canvas.height = bh;
     }
 
-    const proj = map.getProjection();
     const center = map.getCenter();
     const cLat = center.getLat();
     const cLng = center.getLng();
-    const p0 = proj.containerPointFromCoords(center);
-    // 투영 상수 2회 호출로 배율을 보정한 뒤, 나머지 점은 산술로만 변환한다
-    const probe = 0.002;
-    const pLat = proj.containerPointFromCoords(new k.maps.LatLng(cLat + probe, cLng));
-    const pLng = proj.containerPointFromCoords(new k.maps.LatLng(cLat, cLng + probe));
-    const m0 = mercator(cLat);
-    const pxPerMercRaw = (pLat.y - p0.y) / (mercator(cLat + probe) - m0);
-    const pxPerLngRaw = (pLng.x - p0.x) / probe;
-
-    // 줌 애니메이션 중이면 지도 타일이 지금 몇 배로 그려져 있는지 읽어 같은 배율을 쓴다 (위 주석 참조)
     const now = performance.now();
-    let kScale = 1;
-    if (zoomAnimUntilRef.current > now) {
-      kScale = measureImageryScale(el, map.getLevel());
-      if (kScale !== 1 && now < zoomDeadlineRef.current) {
-        zoomAnimUntilRef.current = now + 140;
-        loopUntilRef.current = Math.max(loopUntilRef.current, now + 160);
+
+    // ── 지도 변환 읽기 ① 기준점(anchor) — 카카오가 방금 그린 실제 화면 좌표 ──────────
+    //   p0x/p0y + (경도·메르카토르y)×배율 만 알면 되므로, 서로 먼 두 점의 화면 위치에서
+    //   배율과 기준점을 동시에 얻는다(축별로 따로 — 메르카토르는 등각이라 두 값이 거의 같다).
+    let p0x = 0;
+    let p0y = 0;
+    let pxPerLng = 0;
+    let pxPerMerc = 0;
+    let m0 = 0;
+    // p0x 가 "어느 경도"의 화면 x 인지 — 기준점 경로는 0, 예비 경로는 지도 중심
+    let lng0 = cLng;
+    let anchored = false;
+    const pair = anchorsRef.current;
+    if (pair && pair.a && pair.b) {
+      const box = el.getBoundingClientRect();
+      const read = (a: MapAnchor) => {
+        if (!a.el || !a.el.isConnected) a.el = findAnchorEl(el, a.color);
+        if (!a.el) return null;
+        const r = a.el.getBoundingClientRect();
+        if (!(r.width || r.height)) return null;
+        return { x: r.left + r.width / 2 - box.left, y: r.top + r.height / 2 - box.top };
+      };
+      const pa = read(pair.a);
+      const pb = read(pair.b);
+      if (pa && pb) {
+        const dLng = pair.b.lng - pair.a.lng;
+        const dM = mercator(pair.b.lat) - mercator(pair.a.lat);
+        const sx = (pb.x - pa.x) / dLng;
+        const sy = (pb.y - pa.y) / dM;
+        // 배율이 정상 범위이고, 축 배율의 비가 메르카토르 기하(경도 1도 = 2π/360 메르카토르)와
+        // 맞으면 신뢰한다 — 엉뚱한 요소(예: 색이 같은 다른 path)를 읽었을 때 걸러내는 안전장치.
+        if (
+          Number.isFinite(sx) &&
+          Number.isFinite(sy) &&
+          sx > 0 &&
+          sy < 0 &&
+          Math.abs(Math.abs(sy / sx) / MERC_PER_DEG - 1) < 0.05
+        ) {
+          p0x = pa.x - pair.a.lng * sx;
+          p0y = pa.y;
+          pxPerLng = sx;
+          pxPerMerc = sy;
+          m0 = mercator(pair.a.lat);
+          lng0 = 0;
+          anchored = true;
+        }
       }
+      anchorModeRef.current = anchored ? "anchor" : "projection";
     }
 
-    // 화면 좌상단(0,0)과 우하단이 "투영 좌표"에서 어디인지 — k배 축소·확대된 만큼 되돌려 놓고 경계를 구한다
-    const ccx = cw / 2;
-    const ccy = ch / 2;
-    const p0x = kScale === 1 ? p0.x : ccx + (p0.x - ccx) * kScale;
-    const p0y = kScale === 1 ? p0.y : ccy + (p0.y - ccy) * kScale;
-    const pxPerMerc = pxPerMercRaw * kScale;
-    const pxPerLng = pxPerLngRaw * kScale;
+    // ── 지도 변환 읽기 ② 예비 경로 — 기준점이 없을 때(초기 1~2프레임·이상 상태) ─────
+    if (!anchored) {
+      const proj = map.getProjection();
+      const p0 = proj.containerPointFromCoords(center);
+      // 투영 상수 2회 호출로 배율을 보정한 뒤, 나머지 점은 산술로만 변환한다
+      const probe = 0.002;
+      const pLat = proj.containerPointFromCoords(new k.maps.LatLng(cLat + probe, cLng));
+      const pLng = proj.containerPointFromCoords(new k.maps.LatLng(cLat, cLng + probe));
+      m0 = mercator(cLat);
+      const pxPerMercRaw = (pLat.y - p0.y) / (mercator(cLat + probe) - m0);
+      const pxPerLngRaw = (pLng.x - p0.x) / probe;
+      // 줌 애니메이션 중이면 지도 타일이 지금 몇 배로 그려져 있는지 읽어 같은 배율을 쓴다
+      let kScale = 1;
+      if (zoomAnimUntilRef.current > now) {
+        kScale = measureImageryScale(el, map.getLevel());
+        if (kScale !== 1 && now < zoomDeadlineRef.current) {
+          zoomAnimUntilRef.current = now + 140;
+          loopUntilRef.current = Math.max(loopUntilRef.current, now + 160);
+        }
+      }
+      const ccx = cw / 2;
+      const ccy = ch / 2;
+      p0x = kScale === 1 ? p0.x : ccx + (p0.x - ccx) * kScale;
+      p0y = kScale === 1 ? p0.y : ccy + (p0.y - ccy) * kScale;
+      pxPerMerc = pxPerMercRaw * kScale;
+      pxPerLng = pxPerLngRaw * kScale;
+    }
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -222,19 +329,17 @@ export default function KakaoZoneMap({
     ctx.lineCap = "round";
 
     const zoomProxy = ZOOM_BASE - map.getLevel();
-    viewRef.current = { p0x, p0y, cLat, cLng, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
+    viewRef.current = { p0x, p0y, cLat, cLng: lng0, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
 
-    // 화면에 보이는 지리 범위 — 밖의 구역은 그리지 않는다
-    const inv = (px: number, py: number) =>
-      kScale === 1 ? { x: px, y: py } : { x: ccx + (px - ccx) / kScale, y: ccy + (py - ccy) / kScale };
-    const invTL = inv(0, 0);
-    const invBR = inv(cw, ch);
-    const tl = proj.coordsFromContainerPoint(new k.maps.Point(invTL.x, invTL.y));
-    const br = proj.coordsFromContainerPoint(new k.maps.Point(invBR.x, invBR.y));
-    const vMinLat = Math.min(tl.getLat(), br.getLat()) - 0.0003;
-    const vMaxLat = Math.max(tl.getLat(), br.getLat()) + 0.0003;
-    const vMinLng = Math.min(tl.getLng(), br.getLng()) - 0.0003;
-    const vMaxLng = Math.max(tl.getLng(), br.getLng()) + 0.0003;
+    // 화면에 보이는 지리 범위 — 밖의 구역은 그리지 않는다(변환의 역함수로 바로 구한다)
+    const vLng0 = (0 - p0x) / pxPerLng;
+    const vLng1 = (cw - p0x) / pxPerLng;
+    const vLat0 = unmercator((0 - p0y) / pxPerMerc + m0);
+    const vLat1 = unmercator((ch - p0y) / pxPerMerc + m0);
+    const vMinLat = Math.min(vLat0, vLat1) - 0.0003;
+    const vMaxLat = Math.max(vLat0, vLat1) + 0.0003;
+    const vMinLng = Math.min(vLng0, vLng1) - 0.0003;
+    const vMaxLng = Math.max(vLng0, vLng1) + 0.0003;
 
     const data = prepRef.current;
     const selId = selectedRef.current;
@@ -292,7 +397,7 @@ export default function KakaoZoneMap({
         for (let i = 0; i < n; i++) {
           const lat = ring.pts[i * 2];
           const lng = ring.pts[i * 2 + 1];
-          const x = p0x + (lng - cLng) * pxPerLng;
+          const x = p0x + (lng - lng0) * pxPerLng;
           const y = p0y + (mercator(lat) - m0) * pxPerMerc;
           buf[i * 2] = x;
           buf[i * 2 + 1] = y;
@@ -337,7 +442,7 @@ export default function KakaoZoneMap({
 
     // 3) 구역계 미고시 후보지(예: 사당21구역) — 점선 원 + 흰 점
     for (const z of data.points) {
-      const x = p0x + (z.center[1] - cLng) * pxPerLng;
+      const x = p0x + (z.center[1] - lng0) * pxPerLng;
       const y = p0y + (mercator(z.center[0]) - m0) * pxPerMerc;
       if (x < -40 || y < -40 || x > cw + 40 || y > ch + 40) continue;
       const isSel = z.id === selId;
@@ -390,12 +495,18 @@ export default function KakaoZoneMap({
     map.setMinLevel(1);
     map.setMaxLevel(MAX_LEVEL);
 
-    // 개발용 진단 훅 — 줌 애니메이션 검증 스크립트가 지도 인스턴스/투영 상태를 읽는다
-    if (process.env.NODE_ENV !== "production") {
+    // 개발용 진단 훅 — 검증 스크립트가 지도 인스턴스/투영 상태를 읽는다.
+    //   배포본에서는 `?diag=1` 로 열 때만 노출한다(경계 동기화를 배포 URL 에서도 측정하기 위해).
+    const diagOn =
+      process.env.NODE_ENV !== "production" ||
+      (typeof window !== "undefined" && /[?&]diag=1\b/.test(window.location.search));
+    if (diagOn) {
       (window as unknown as Record<string, unknown>).__redevDiag = {
         map: () => mapRef.current,
         view: () => viewRef.current,
         draw: () => draw(),
+        anchor: () => anchorModeRef.current,
+        draws: () => drawCountRef.current,
       };
     }
 
@@ -420,6 +531,81 @@ export default function KakaoZoneMap({
     map.setBounds(seoulBounds, 8);
     // 화면이 커지면 setBounds 가 너무 멀리 물러난다 — 서울이 화면을 채우도록 레벨을 한 번 조인다
     if (map.getLevel() > 8) map.setLevel(8);
+
+    // ── 지도 변환 기준점 ────────────────────────────────────
+    //   보이지 않는 작은 사각형 두 개. 카카오가 자기 벡터 레이어에 직접 그리므로, 그 화면 위치를
+    //   읽으면 이동·확대 애니메이션 중의 지도 변환을 그대로 알 수 있다(위 ANCHOR_COLORS 주석).
+    // 사각형은 화면에서 5px 남짓 — 너무 크면 화면 밖으로 잘려 bbox 중심이 어긋나고,
+    // 너무 작으면 렌더링에서 빠진다. 배율은 마지막 draw 의 view(px/도)에서 읽는다.
+    const halfFor = () => {
+      // 배율은 지도의 현재 투영에서 직접 읽는다(정지 상태에서는 정확하다).
+      //  viewRef 는 직전 프레임 값이라 레벨을 크게 건너뛰면 엉뚱한 크기가 된다.
+      let scale = 0;
+      try {
+        const proj = map.getProjection();
+        const c = map.getCenter();
+        const p0 = proj.containerPointFromCoords(c);
+        const p1 = proj.containerPointFromCoords(new k.maps.LatLng(c.getLat(), c.getLng() + 0.002));
+        scale = Math.abs((p1.x - p0.x) / 0.002);
+      } catch {
+        scale = 0;
+      }
+      if (!(scale > 0)) scale = viewRef.current && viewRef.current.pxPerLng > 0 ? viewRef.current.pxPerLng : 3000;
+      return Math.min(0.02, Math.max(2e-7, ANCHOR_PX / scale));
+    };
+    const makeAnchor = (lat: number, lng: number, color: string, half: number): MapAnchor => {
+      const poly = new k.maps.Polygon({
+        path: [
+          new k.maps.LatLng(lat - half, lng - half),
+          new k.maps.LatLng(lat - half, lng + half),
+          new k.maps.LatLng(lat + half, lng + half),
+          new k.maps.LatLng(lat + half, lng - half),
+        ],
+        strokeWeight: 1,
+        strokeColor: color,
+        strokeOpacity: 0.02,
+        fillColor: color,
+        fillOpacity: 0.02,
+        zIndex: 0,
+      });
+      poly.setMap(map);
+      // 5px 짜리 투명 사각형이라도 그 위에서 클릭·호버가 "죽은 자리"가 되면 안 된다 — 지도로 넘긴다
+      k.maps.event.addListener(poly, "click", (e: KakaoMouseEvent) => passthroughRef.current.click?.(e));
+      k.maps.event.addListener(poly, "mousemove", (e: KakaoMouseEvent) => passthroughRef.current.move?.(e));
+      return { poly, el: null, lat, lng, half, color };
+    };
+    const anchors = {
+      a: makeAnchor(37.72, 126.78, ANCHOR_COLORS[0], halfFor()),
+      b: makeAnchor(37.30, 127.24, ANCHOR_COLORS[1], halfFor()),
+    };
+    anchorsRef.current = anchors;
+
+    // 기준점을 지금 화면 안(가운데에서 ±25%)으로 옮긴다 — 화면 밖으로 나가면 SVG 에서 빠질 수 있다
+    const placeAnchors = () => {
+      const b = map.getBounds();
+      const sw = b.getSouthWest();
+      const ne = b.getNorthEast();
+      const dLat = (ne.getLat() - sw.getLat()) * 0.24;
+      const dLng = (ne.getLng() - sw.getLng()) * 0.24;
+      const half = halfFor();
+      const put = (a: MapAnchor, lat: number, lng: number) => {
+        if (Math.abs(a.lat - lat) < 1e-9 && Math.abs(a.lng - lng) < 1e-9 && Math.abs(a.half - half) < 1e-12) return;
+        a.lat = lat;
+        a.lng = lng;
+        a.half = half;
+        a.poly?.setPath([
+          new k.maps.LatLng(lat - half, lng - half),
+          new k.maps.LatLng(lat - half, lng + half),
+          new k.maps.LatLng(lat + half, lng + half),
+          new k.maps.LatLng(lat + half, lng - half),
+        ]);
+      };
+      put(anchors.a, sw.getLat() + dLat * 2, sw.getLng() + dLng * 2);
+      put(anchors.b, sw.getLat() + dLat, sw.getLng() + dLng);
+      // setPath 는 같은 태스크에서 바로 DOM 에 반영된다(확인함) — 옮긴 즉시 다시 그리면 된다.
+      draw();
+    };
+    placeAnchors();
     // 첫 화면 맞춤도 줌 애니메이션이다 — 그동안도 타일 배율을 읽어 경계를 붙여 둔다
     {
       const t0 = performance.now();
@@ -453,6 +639,28 @@ export default function KakaoZoneMap({
     const onIdle = () => {
       // 타일이 아직 도착 전이면(k≠1) 한동안 더 그려 제자리를 찾게 한다
       loopUntilRef.current = Math.max(loopUntilRef.current, performance.now() + 60);
+      // 기준점을 다시 놓아야 하는 경우:
+      //  · 화면 밖으로 밀렸거나 읽히지 않을 때
+      //  · 두 기준점이 화면에서 너무 가까울 때 — 확대/축소로 간격이 줄면 배율 정밀도가 떨어진다
+      const box = el.getBoundingClientRect();
+      const centerOf = (a: MapAnchor) => {
+        if (!a.el || !a.el.isConnected) a.el = findAnchorEl(el, a.color);
+        if (!a.el) return null;
+        const r = a.el.getBoundingClientRect();
+        if (!(r.width || r.height)) return null;
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      };
+      const pair = anchorsRef.current;
+      const ca = pair ? centerOf(pair.a) : null;
+      const cb = pair ? centerOf(pair.b) : null;
+      if (!ca || !cb) {
+        placeAnchors();
+      } else {
+        const inside = (p: { x: number; y: number }) =>
+          p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom;
+        const spread = Math.hypot(ca.x - cb.x, ca.y - cb.y);
+        if (!inside(ca) || !inside(cb) || spread < 160) placeAnchors();
+      }
       scheduleDraw();
     };
     // 줌 이벤트 — 카카오 타일 애니메이션이 도는 동안 배율을 읽어 두려고 시간 창을 열어 둔다
@@ -461,6 +669,24 @@ export default function KakaoZoneMap({
       zoomAnimUntilRef.current = now + 600;
       zoomDeadlineRef.current = now + 2200;
     };
+    // ── 카카오 벡터 레이어 갱신에 맞춰 그리기 ────────────────────────────────
+    //   카카오는 벡터 레이어(SVG)의 left/top/width/height 를 **매 프레임 JS 로** 바꾼다.
+    //   그 style 변경은 마이크로태스크에서 관찰되므로, 그 자리에서 바로 다시 그리면 같은 프레임의
+    //   페인트에 지도·경계가 함께 실린다 → rAF 순서에 따른 1프레임 지연이 사라진다.
+    let mo: MutationObserver | null = null;
+    if (typeof MutationObserver !== "undefined") {
+      mo = new MutationObserver((records) => {
+        for (const r of records) {
+          const t = r.target as Element | undefined;
+          if (t && t.tagName && t.tagName.toLowerCase() === "svg") {
+            draw();
+            return;
+          }
+        }
+      });
+      mo.observe(el, { attributes: true, attributeFilter: ["style"], subtree: true });
+    }
+
     k.maps.event.addListener(map, "idle", onIdle);
     k.maps.event.addListener(map, "drag", () => pump(120));
     k.maps.event.addListener(map, "center_changed", () => pump(120));
@@ -555,6 +781,7 @@ export default function KakaoZoneMap({
       }
     };
 
+    passthroughRef.current = { click: onMapClick, move: onMousemove };
     k.maps.event.addListener(map, "mousemove", onMousemove);
     k.maps.event.addListener(map, "click", onMapClick);
     k.maps.event.addListener(map, "dragstart", hideTip);
@@ -587,6 +814,11 @@ export default function KakaoZoneMap({
       k.maps.event.removeListener(map, "idle", onIdle);
       labelRef.current?.setMap(null);
       labelRef.current = null;
+      passthroughRef.current = { click: null, move: null };
+      anchors.a.poly?.setMap(null);
+      anchors.b.poly?.setMap(null);
+      mo?.disconnect();
+      anchorsRef.current = null;
       canvas.remove();
       canvasRef.current = null;
       mapRef.current = null;

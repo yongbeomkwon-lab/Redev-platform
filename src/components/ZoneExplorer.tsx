@@ -389,14 +389,14 @@ export default function ZoneExplorer() {
 
                 <div>
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">사업개요</h3>
-                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl border border-slate-200 p-3 text-xs">
-                    <dt className="text-slate-500">총 세대수</dt>
+                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-xl border border-slate-200 p-3 text-xs">
+                    <dt className="whitespace-nowrap text-slate-500">총 세대수</dt>
                     <dd className="text-right font-semibold">{selected.households.toLocaleString()}세대</dd>
-                    <dt className="text-slate-500">추정 비례율</dt>
+                    <dt className="whitespace-nowrap text-slate-500">추정 비례율</dt>
                     <dd className="text-right font-semibold">{selected.ratioEstimate}%</dd>
-                    <dt className="text-slate-500">시공사</dt>
+                    <dt className="whitespace-nowrap text-slate-500">시공사</dt>
                     <dd className="text-right font-semibold">{selected.constructor}</dd>
-                    <dt className="text-slate-500">예상 입주</dt>
+                    <dt className="whitespace-nowrap text-slate-500">예상 입주</dt>
                     <dd className="text-right font-semibold">{selected.moveInEstimate}</dd>
                   </dl>
                 </div>
@@ -408,22 +408,24 @@ export default function ZoneExplorer() {
                       <span>서울시 고시 데이터</span>
                       <span className="font-normal text-emerald-700/70">{selected.official.asOf} 기준</span>
                     </div>
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-emerald-900">
-                      <dt className="text-emerald-700/80">고시 명칭</dt>
-                      <dd>{selected.official.name}</dd>
-                      <dt className="text-emerald-700/80">사업유형</dt>
-                      <dd>{selected.official.kind}</dd>
-                      <dt className="text-emerald-700/80">추진단계</dt>
-                      <dd>{selected.official.stage}</dd>
-                      <dt className="text-emerald-700/80">구역면적</dt>
-                      <dd>
+                    <dl className="grid grid-cols-[4.6rem_minmax(0,1fr)] gap-x-2.5 gap-y-0.5 text-emerald-900">
+                      <dt className="whitespace-nowrap text-emerald-700/80">고시 명칭</dt>
+                      <dd className="min-w-0 break-words">{selected.official.name}</dd>
+                      <dt className="whitespace-nowrap text-emerald-700/80">사업유형</dt>
+                      <dd className="min-w-0 break-words">{selected.official.kind}</dd>
+                      <dt className="whitespace-nowrap text-emerald-700/80">추진단계</dt>
+                      <dd className="min-w-0 break-words">{selected.official.stage}</dd>
+                      <dt className="whitespace-nowrap text-emerald-700/80">구역면적</dt>
+                      <dd className="min-w-0">
                         {selected.official.area.toLocaleString()}㎡
-                        {(selected.official.area / 3.3058 / 1000).toFixed(1)}천평
+                        <span className="ml-1 whitespace-nowrap">
+                          {(selected.official.area / 3.3058 / 1000).toFixed(1)}천평
+                        </span>
                       </dd>
                       {selected.official.geomSource?.startsWith("UQ181") && (
                         <>
-                          <dt className="text-emerald-700/80">경계 도형</dt>
-                          <dd>
+                          <dt className="whitespace-nowrap text-emerald-700/80">경계 도형</dt>
+                          <dd className="min-w-0 break-words">
                             의제처리구역 실경계(필지선 추종)
                             <span className="text-emerald-700/70"> · {selected.official.geomAsOf} 기준</span>
                           </dd>
@@ -459,8 +461,8 @@ export default function ZoneExplorer() {
                 <div>
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">실거래가 분석</h3>
                   <TransactionTrend transactions={selectedTx} />
-                  <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-200">
-                    <table className="w-full text-[11px]">
+                  <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-slate-200">
+                    <table className="w-full min-w-[520px] text-[11px]">
                       <thead className="sticky top-0 bg-slate-50 text-left text-slate-500">
                         <tr>
                           <th className="px-2 py-1.5 font-medium">거래월</th>
@@ -627,7 +629,7 @@ function TransactionTrend({ transactions }: { transactions: Transaction[] }) {
   const kinds = [...new Set(transactions.map((t) => t.kind))];
   if (transactions.length === 0) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-2">
       {kinds.map((k) => {
         const rows = transactions.filter((t) => t.kind === k).sort((a, b) => a.date.localeCompare(b.date));
         const max = Math.max(...rows.map((r) => r.price));
