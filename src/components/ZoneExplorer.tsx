@@ -359,7 +359,7 @@ export default function ZoneExplorer() {
         <aside className="absolute z-[610] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl inset-x-2 bottom-2 top-auto max-h-[62dvh] md:inset-x-auto md:left-auto md:right-3 md:top-3 md:bottom-3 md:max-h-none md:w-[400px]">
           <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
             <b className="text-sm font-bold text-slate-900">
-              {selected ? selected.name : selectedSeoul ? selectedSeoul.name : "대표 구역"}
+              {selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "대표 구역"}
             </b>
             {!selected && !selectedSeoul && (
               <span className="text-[11px] text-slate-500">{filtered.length}곳 · 실거래·매물 상세</span>
