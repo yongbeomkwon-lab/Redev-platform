@@ -67,8 +67,75 @@ export type KakaoMouseEvent = {
   point?: KakaoPoint;
 };
 
+// ── services 라이브러리 (주소·키워드 검색) ─────────────────────────────────
+//   주소 검색은 `libraries=services` 로만 열린다. SDK 스크립트 URL 이 곧 계약이므로
+//   KAKAO_SDK_URL 에 라이브러리를 붙여 두고, 이미 열린 SDK 에 services 가 없으면
+//   loadKakaoServices() 가 라이브러리를 붙인 스크립트를 한 번 더 부른다.
+export type KakaoAddressDoc = {
+  address_name: string;
+  address_type?: "REGION" | "ROAD" | "REGION_ADDR" | "ROAD_ADDR";
+  x: string;
+  y: string;
+  address?: {
+    address_name: string;
+    region_1depth_name?: string;
+    region_2depth_name?: string;
+    region_3depth_name?: string;
+    main_address_no?: string;
+    sub_address_no?: string;
+    b_code?: string;
+    h_code?: string;
+  } | null;
+  road_address?: {
+    address_name: string;
+    building_name?: string;
+    main_building_no?: string;
+    sub_building_no?: string;
+    region_1depth_name?: string;
+    region_2depth_name?: string;
+    road_name?: string;
+  } | null;
+};
+
+export type KakaoKeywordDoc = {
+  id?: string;
+  place_name: string;
+  category_name?: string;
+  category_group_name?: string;
+  phone?: string;
+  address_name: string;
+  road_address_name?: string;
+  x: string;
+  y: string;
+  place_url?: string;
+  distance?: string;
+};
+
+export type KakaoGeocoder = {
+  addressSearch(
+    address: string,
+    callback: (data: KakaoAddressDoc[], status: string) => void,
+    options?: Record<string, unknown>
+  ): void;
+};
+
+export type KakaoPlaces = {
+  keywordSearch(
+    keyword: string,
+    callback: (data: KakaoKeywordDoc[], status: string) => void,
+    options?: Record<string, unknown>
+  ): void;
+};
+
+export type KakaoServices = {
+  Geocoder: new () => KakaoGeocoder;
+  Places: new () => KakaoPlaces;
+  Status: Record<string, string>;
+};
+
 export type KakaoSDK = {
   maps: {
+    services?: KakaoServices;
     Map: new (container: HTMLElement, options: Record<string, unknown>) => KakaoMap;
     LatLng: new (lat: number, lng: number) => KakaoLatLng;
     LatLngBounds: new (sw?: KakaoLatLng, ne?: KakaoLatLng) => KakaoBounds;
@@ -96,7 +163,10 @@ export type SdkResult = { ok: true; sdk: KakaoSDK } | { ok: false; reason: MapFa
 const FALLBACK_APP_KEY = "93c96d5852b48c1ad762359abe536869";
 export const KAKAO_APP_KEY = (process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY ?? "").trim() || FALLBACK_APP_KEY;
 
-export const KAKAO_SDK_URL = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_APP_KEY}&autoload=false`;
+//  · libraries=services — 주소(지번·도로명)·키워드 검색(Geocoder / Places).
+//    이 파라미터가 빠지면 kakao.maps.services 가 없어 주소 검색이 통째로 죽는다.
+export const KAKAO_LIBRARIES = "services";
+export const KAKAO_SDK_URL = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_APP_KEY}&autoload=false&libraries=${KAKAO_LIBRARIES}`;
 
 function kakaoGlobal(): KakaoSDK | undefined {
   return (window as unknown as { kakao?: KakaoSDK }).kakao;
@@ -164,4 +234,39 @@ export function loadKakaoSdk(): Promise<SdkResult> {
   });
 
   return pending;
+}
+
+/**
+ * services 라이브러리(주소·키워드 검색)가 준비된 SDK 를 돌려준다.
+ *  · 정상 경로: SDK URL 에 libraries=services 가 있어 첫 로드에 함께 온다.
+ *  · 예외: 라이브러리 없이 먼저 열린 SDK(다른 탭·이전 배포본 캐시)라면 서비스가 없다.
+ *    그때만 라이브러리를 붙인 스크립트를 한 번 더 불러 채운다(전체 재방문 없이).
+ */
+export function loadKakaoServices(): Promise<{ ok: true; sdk: KakaoSDK } | { ok: false; detail?: string }> {
+  return loadKakaoSdk().then(
+    (r) =>
+      new Promise<{ ok: true; sdk: KakaoSDK } | { ok: false; detail?: string }>((resolve) => {
+        if (!r.ok) return resolve({ ok: false, detail: r.reason });
+        if (r.sdk.maps.services) return resolve({ ok: true, sdk: r.sdk });
+
+        let settled = false;
+        const finish = (v: { ok: true; sdk: KakaoSDK } | { ok: false; detail?: string }) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(v);
+        };
+        const timer = window.setTimeout(() => finish({ ok: false, detail: "services-timeout" }), 8_000);
+        const script = document.createElement("script");
+        script.src = KAKAO_SDK_URL;
+        script.async = true;
+        script.onload = () => {
+          const sdk = kakaoGlobal();
+          const done = () => (sdk?.maps?.services ? finish({ ok: true, sdk }) : finish({ ok: false, detail: "services-missing" }));
+          sdk?.maps?.load ? sdk.maps.load(done) : done();
+        };
+        script.onerror = () => finish({ ok: false, detail: "services-script-error" });
+        document.head.appendChild(script);
+      })
+  );
 }

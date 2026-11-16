@@ -33,7 +33,10 @@ export type SeoulZone = {
   geom: "UQ120" | "UQ181" | "미고시"; // 경계 도형 출처 (미고시 = 구역계 미고시 후보지)
   center: [number, number];
   polygon?: [number, number][]; // 미고시 후보지는 없다
+  /** MultiPolygon 의 나머지 조각(외곽 링) */
   parts?: [number, number][][];
+  /** 구역 안에 뚫린 구멍(홀) 링 — 있으면 그 안은 구역 밖이다 */
+  holes?: [number, number][][];
   /** 신속통합기획 후보지 선정일 등 공식 일자 */
   selectedAt?: string;
   /** 경계가 없을 때 대표 지점 설명 */
@@ -88,12 +91,24 @@ type RawCollection = {
 
 export type SeoulZonesData = { meta: SeoulZonesMeta; zones: SeoulZone[] };
 
-/** GeoJSON(경도,위도) → Leaflet([위도,경도]) 링 목록 */
-function ringsOf(g: NonNullable<RawFeature["geometry"]>): [number, number][][] {
+/** GeoJSON(경도,위도) → Leaflet([위도,경도]) 링 — 외곽 링과 구멍(홀) 링을 나눠 돌려준다 */
+function ringsOf(g: NonNullable<RawFeature["geometry"]>): {
+  outer: [number, number][][];
+  holes: [number, number][][];
+} {
   const polys = g.type === "MultiPolygon" ? (g.coordinates as number[][][][]) : [(g.coordinates as number[][][])];
-  return polys
-    .map((poly) => poly[0].map(([lng, lat]) => [lat, lng] as [number, number]))
-    .filter((ring) => ring.length >= 3);
+  const toRing = (ring: number[][]) => ring.map(([lng, lat]) => [lat, lng] as [number, number]);
+  const outer: [number, number][][] = [];
+  const holes: [number, number][][] = [];
+  for (const poly of polys) {
+    const first = poly[0] ? toRing(poly[0]) : [];
+    if (first.length >= 3) outer.push(first);
+    for (const h of poly.slice(1)) {
+      const ring = toRing(h);
+      if (ring.length >= 3) holes.push(ring);
+    }
+  }
+  return { outer, holes };
 }
 
 function bboxCenter(ring: [number, number][]): [number, number] {
@@ -125,14 +140,15 @@ export function loadSeoulZones(): Promise<SeoulZonesData> {
           zones.push({ ...props, id: zoneId, center: props.center });
           continue;
         }
-        const rings = ringsOf(f.geometry);
-        if (!rings.length) continue;
+        const { outer, holes } = ringsOf(f.geometry);
+        if (!outer.length) continue;
         zones.push({
           ...props,
           id: zoneId,
-          center: bboxCenter(rings[0]),
-          polygon: rings[0],
-          ...(rings.length > 1 ? { parts: rings.slice(1) } : {}),
+          center: bboxCenter(outer[0]),
+          polygon: outer[0],
+          ...(outer.length > 1 ? { parts: outer.slice(1) } : {}),
+          ...(holes.length ? { holes } : {}),
         });
       }
       return { meta: fc.metadata, zones };

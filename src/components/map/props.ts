@@ -22,6 +22,22 @@ export type ZoneMapProps = {
   onToggleCompleted?: () => void;
   /** 준공 완료 구역 수 (토글에 병기) */
   completedCount?: number;
+  /** 주소 검색으로 찾은 위치 핀 — null 이면 지운다 */
+  addressPin?: AddressPin | null;
+};
+
+/** 주소 → 구역 판별 결과를 지도에 찍는 핀/말풍선 */
+export type AddressPin = {
+  lat: number;
+  lng: number;
+  /** 주소(지번·도로명) */
+  label: string;
+  /** 판정 종류 — 핀·말풍선 색을 가른다 */
+  status: "inside" | "completed" | "near-candidate" | "outside";
+  /** 말풍선 한 줄: ✅ 신림1구역 포함 / 정비구역 밖 주소입니다 … */
+  message: string;
+  /** 이 주소가 속한 구역 — 있으면 그 구역 경계와 함께 화면을 맞춘다 */
+  zoneId?: string;
 };
 
 /** 카카오맵이 뜨지 않을 때(키 종류·도메인 문제 등) 폴백으로 넘기기 위한 신호 */

@@ -17,6 +17,15 @@ import MapPanel from "@/components/map/MapPanel";
 import { TYPE_COLORS, TYPE_ORDER } from "@/components/map/colors";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
+import { looksLikeAddress, searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
+import {
+  judgeAddress,
+  meters,
+  prepareAllZones,
+  verdictHeadline,
+  type AddressVerdict,
+} from "@/lib/address-verdict";
+import type { AddressPin } from "@/components/map/props";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 
@@ -43,6 +52,13 @@ export default function ZoneExplorer() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
+  // ── 주소 검색 → 소속 구역 판별 ─────────────────────────────────────────────
+  //   입력이 주소 형태면 카카오 주소 검색 결과를 드롭다운에 함께 보여주고,
+  //   후보를 고르면(또는 엔터) 전체 구역 폴리곤에 대고 포함 여부를 판정한다.
+  const [addrCandidates, setAddrCandidates] = useState<AddressCandidate[]>([]);
+  const [addrBusy, setAddrBusy] = useState(false);
+  const [addrNote, setAddrNote] = useState<string | null>(null);
+  const [addrVerdict, setAddrVerdict] = useState<AddressVerdict | null>(null);
 
   // 좁은 화면에서는 상세 패널을 접은 채로 시작해 지도를 가리지 않게 한다
   useEffect(() => {
@@ -132,6 +148,133 @@ export default function ZoneExplorer() {
     return { results, hidden };
   }, [query, visibleSeoulZones, completedZones, showCompleted]);
 
+  // ── 주소 판별용 전체 구역 사전계산 ─────────────────────────────────────────
+  //   준공 구역도 "주소가 속한 곳"을 말할 때는 빠지면 안 된다 — 표시 여부(visibleSeoulZones)와
+  //   무관하게 전체(진행 중 1,564 + 준공 260)에 대고 판정하고, 숨겨졌으면 안내문으로 알린다.
+  const allPrep = useMemo(() => prepareAllZones(seoulZones), [seoulZones]);
+
+  // 입력이 주소 형태면 350ms 뒤 카카오 주소 검색 — 구역명 검색 결과와 나란히 보여준다
+  useEffect(() => {
+    const term = query.trim();
+    if (!looksLikeAddress(term)) {
+      setAddrCandidates([]);
+      setAddrNote(null);
+      setAddrBusy(false);
+      return;
+    }
+    let alive = true;
+    setAddrBusy(true);
+    const timer = window.setTimeout(() => {
+      searchAddresses(term)
+        .then((r) => {
+          if (!alive) return;
+          setAddrBusy(false);
+          setAddrCandidates(r.candidates);
+          setAddrNote(
+            r.ok
+              ? r.candidates.length
+                ? null
+                : "서울 지역 주소를 찾지 못했습니다."
+              : "주소 검색을 쓸 수 없습니다(카카오 서비스 라이브러리 미로드)."
+          );
+        })
+        .catch(() => {
+          if (!alive) return;
+          setAddrBusy(false);
+          setAddrCandidates([]);
+          setAddrNote("주소 검색 중 오류가 났습니다.");
+        });
+    }, 350);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
+  /** 주소 핀·판정 카드 초기화 — 구역 선택은 그대로 둔다 */
+  function clearAddress() {
+    setAddrVerdict(null);
+    setAddrCandidates([]);
+    setAddrNote(null);
+  }
+
+  /** 주소 후보 확정 — 판정 → 핀 → (속한 구역이 있으면) 그 구역 선택 */
+  function acceptAddress(c: AddressCandidate) {
+    const v = judgeAddress(c, seoulZones, allPrep);
+    setAddrVerdict(v);
+    setQuery("");
+    setAddrCandidates([]);
+    setAddrNote(null);
+    if (v.status === "inside") {
+      pickZone(v.inside[0].zone.id);
+    } else if (v.status === "completed") {
+      // 준공 구역은 기본으로 숨겨져 있다 — 주소가 그 안이라는 사실을 보이게 토글을 켜 준다
+      setShowCompleted(true);
+      pickZone(v.completedHits[0].zone.id);
+    } else {
+      // 구역 밖·후보지 인근 — 엉뚱한 구역이 선택된 채로 남아 오해하지 않게 선택을 풀고,
+      // 가까운 구역 목록(카드)만 보여준다. 목록에서 고르면 그때 상세가 열린다.
+      setSelectedId(undefined);
+      setPanelOpen(true);
+    }
+  }
+
+  async function runAddressSearch(): Promise<AddressCandidate[]> {
+    const term = query.trim();
+    if (!term) return [];
+    setAddrBusy(true);
+    const r = await searchAddresses(term);
+    setAddrBusy(false);
+    setAddrCandidates(r.candidates);
+    setAddrNote(
+      r.ok
+        ? r.candidates.length
+          ? null
+          : "서울 지역 주소를 찾지 못했습니다."
+        : "주소 검색을 쓸 수 없습니다(카카오 서비스 라이브러리 미로드)."
+    );
+    return r.candidates;
+  }
+
+  /** 엔터 — 주소 후보가 있으면 첫 주소, 없으면 주소 검색 → 그래도 없으면 구역명 첫 결과 */
+  async function submitSearch() {
+    const term = query.trim();
+    if (!term) return;
+    let first = addrCandidates[0];
+    if (!first && looksLikeAddress(term)) first = (await runAddressSearch())[0];
+    if (first) {
+      acceptAddress(first);
+      return;
+    }
+    if (search.results.length > 0) {
+      pickZone(search.results[0].id);
+      setQuery("");
+      return;
+    }
+    if (search.hidden.length > 0) {
+      setShowCompleted(true);
+      pickZone(search.hidden[0].id);
+      setQuery("");
+    }
+  }
+
+  const addressPin: AddressPin | null = useMemo(() => {
+    if (!addrVerdict) return null;
+    return {
+      lat: addrVerdict.address.lat,
+      lng: addrVerdict.address.lng,
+      label: addrVerdict.address.label,
+      status: addrVerdict.status,
+      message: verdictHeadline(addrVerdict),
+      zoneId:
+        addrVerdict.status === "inside"
+          ? addrVerdict.inside[0].zone.id
+          : addrVerdict.status === "completed"
+            ? addrVerdict.completedHits[0].zone.id
+            : undefined,
+    };
+  }, [addrVerdict]);
+
   // 범례 카운터 — 지금 지도에 깔린 구역 수(준공 숨김 상태면 진행 중 구역만)
   const typeCounts = useMemo(() => {
     const m: Partial<Record<MapZoneType, number>> = {};
@@ -168,6 +311,7 @@ export default function ZoneExplorer() {
           showCompleted={showCompleted}
           onToggleCompleted={toggleCompleted}
           completedCount={completedZones.length}
+          addressPin={addressPin}
         />
       </div>
 
@@ -181,13 +325,37 @@ export default function ZoneExplorer() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="구역명·자치구 검색 — 예: 목동4단지, 성수전략, 은평구"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submitSearch();
+                }
+                if (e.key === "Escape") {
+                  setQuery("");
+                  clearAddress();
+                }
+              }}
+              placeholder="구역명·자치구·주소 검색 — 예: 신림동 362-32, 목동4단지"
+              aria-label="구역명·자치구·주소 검색"
+              data-testid="zone-search-input"
               className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
+            <button
+              type="button"
+              onClick={() => void runAddressSearch()}
+              title="입력한 주소로 지번·도로명 주소를 찾아 소속 정비구역을 판별합니다"
+              className="shrink-0 rounded-md border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:border-slate-500 hover:text-slate-900"
+            >
+              주소
+            </button>
             {query && (
               <button
                 type="button"
-                onClick={() => setQuery("")}
+                onClick={() => {
+                  setQuery("");
+                  setAddrCandidates([]);
+                  setAddrNote(null);
+                }}
                 aria-label="검색어 지우기"
                 className="rounded px-1 text-xs text-slate-400 hover:text-slate-700"
               >
@@ -196,8 +364,12 @@ export default function ZoneExplorer() {
             )}
           </div>
 
-          {/* 검색 결과 */}
-          {(search.results.length > 0 || search.hidden.length > 0) && (
+          {/* 검색 결과 — 구역명·자치구 결과 + 주소(지번·도로명) 후보 */}
+          {(search.results.length > 0 ||
+            search.hidden.length > 0 ||
+            addrCandidates.length > 0 ||
+            addrBusy ||
+            (addrNote !== null && looksLikeAddress(query))) && (
             <div className="absolute inset-x-0 top-full z-[660] mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
               {search.results.length > 0 && (
                 <ul className="max-h-[46vh] overflow-y-auto">
@@ -227,6 +399,49 @@ export default function ZoneExplorer() {
                   ))}
                 </ul>
               )}
+
+              {/* 주소 후보 — 고르면(또는 엔터) 소속 정비구역을 판별한다 */}
+              {(addrCandidates.length > 0 || addrBusy || addrNote) && (
+                <div className="border-t border-slate-200 bg-slate-50/70">
+                  <p className="flex items-center gap-1.5 px-3 pt-2 text-[10px] font-semibold text-slate-500">
+                    <span aria-hidden>📍</span> 주소 · 지번·도로명
+                    <span className="font-normal text-slate-400">(카카오)</span>
+                    {addrBusy && <span className="ml-auto font-normal text-slate-400">찾는 중…</span>}
+                  </p>
+                  {addrCandidates.length > 0 && (
+                    <ul className="max-h-[32vh] overflow-y-auto pb-1">
+                      {addrCandidates.map((c) => (
+                        <li key={c.key}>
+                          <button
+                            type="button"
+                            data-testid="address-candidate"
+                            onClick={() => acceptAddress(c)}
+                            className="flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-blue-50/70"
+                          >
+                            <span aria-hidden className="mt-0.5 text-xs text-slate-400">
+                              ⌖
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-slate-800">{c.label}</span>
+                              {c.detail && (
+                                <span className="block truncate text-[11px] text-slate-500">{c.detail}</span>
+                              )}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-slate-400">{c.kind}</span>
+                          </button>
+                        </li>
+                      ))}
+                      <li className="px-3 pb-1 pt-0.5 text-[10px] text-slate-400">
+                        엔터를 누르면 첫 번째 주소로 구역을 판별합니다
+                      </li>
+                    </ul>
+                  )}
+                  {addrNote && addrCandidates.length === 0 && !addrBusy && (
+                    <p className="px-3 pb-2 pt-1 text-[11px] text-slate-500">{addrNote}</p>
+                  )}
+                </div>
+              )}
+
               {/* 준공 완료라 숨겨진 구역만 검색됐을 때 — 데이터 누락으로 오해하지 않도록 안내 */}
               {search.hidden.length > 0 && (
                 <div className="border-t border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -248,6 +463,186 @@ export default function ZoneExplorer() {
             </div>
           )}
         </div>
+
+        {/* ── 주소 판정 카드 — 핀을 찍은 주소의 결론과 다음 행동 ── */}
+        {addrVerdict && (
+          <div
+            data-testid="address-card"
+            className="pointer-events-auto rounded-2xl border border-slate-200 bg-white/97 p-3 shadow-xl backdrop-blur"
+          >
+            <div className="flex items-start gap-2">
+              <span aria-hidden className="mt-0.5 text-sm">
+                📍
+              </span>
+              <div className="min-w-0 flex-1">
+                <p
+                  data-testid="address-pin-label"
+                  className="truncate text-xs font-bold text-slate-900"
+                  title={addrVerdict.address.label}
+                >
+                  {addrVerdict.address.label}
+                </p>
+                {addrVerdict.address.detail && (
+                  <p className="truncate text-[10px] text-slate-500">{addrVerdict.address.detail}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={clearAddress}
+                data-testid="address-pin-clear"
+                title="주소 핀과 안내를 지웁니다"
+                className="shrink-0 rounded-lg border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:border-slate-400 hover:text-slate-800"
+              >
+                핀 지우기 ✕
+              </button>
+            </div>
+
+            {/* 결론 — 판정 종류별 색 */}
+            <div
+              data-testid="address-status"
+              className={
+                "mt-2 rounded-xl border px-2.5 py-2 " +
+                (addrVerdict.status === "inside"
+                  ? "border-emerald-200 bg-emerald-50"
+                  : addrVerdict.status === "completed"
+                    ? "border-amber-300 bg-amber-50"
+                    : addrVerdict.status === "near-candidate"
+                      ? "border-violet-200 bg-violet-50"
+                      : "border-rose-200 bg-rose-50")
+              }
+            >
+              <p
+                data-testid="address-status-headline"
+                className={
+                  "text-[13px] font-bold leading-snug " +
+                  (addrVerdict.status === "inside"
+                    ? "text-emerald-800"
+                    : addrVerdict.status === "completed"
+                      ? "text-amber-900"
+                      : addrVerdict.status === "near-candidate"
+                        ? "text-violet-900"
+                        : "text-rose-800")
+                }
+              >
+                {verdictHeadline(addrVerdict)}
+              </p>
+
+              {addrVerdict.status === "inside" && (
+                <>
+                  <p className="mt-0.5 text-[11px] leading-snug text-emerald-900/80">
+                    {addrVerdict.inside[0].zone.gu} · {addrVerdict.inside[0].zone.stage} ·{" "}
+                    {addrVerdict.inside[0].zone.area.toLocaleString()}㎡
+                    {addrVerdict.inside.length > 1 ? " · 겹친 구역이 있습니다" : ""}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => pickZone(addrVerdict.inside[0].zone.id)}
+                      className="rounded-full bg-emerald-700 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-emerald-800"
+                    >
+                      구역 상세 보기
+                    </button>
+                    {addrVerdict.inside.slice(1, 4).map((h) => (
+                      <button
+                        key={h.zone.id}
+                        type="button"
+                        onClick={() => pickZone(h.zone.id)}
+                        title="이 주소를 함께 포함하는 다른 구역"
+                        className="rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100"
+                      >
+                        겹침 · {h.zone.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {addrVerdict.status === "completed" && (
+                <>
+                  <p className="mt-0.5 text-[11px] leading-snug text-amber-900/80">
+                    이미 준공·입주가 끝난 구역입니다. 기본 지도에서는 숨겨져 있어 함께 켜 두었습니다.
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => pickZone(addrVerdict.completedHits[0].zone.id)}
+                      className="rounded-full bg-amber-600 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-amber-700"
+                    >
+                      구역 상세 보기
+                    </button>
+                    {addrVerdict.completedHits.slice(1, 3).map((h) => (
+                      <button
+                        key={h.zone.id}
+                        type="button"
+                        onClick={() => pickZone(h.zone.id)}
+                        className="rounded-full border border-amber-400 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+                      >
+                        겹침 · {h.zone.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {addrVerdict.status === "near-candidate" && (
+                <>
+                  <p className="mt-0.5 text-[11px] leading-snug text-violet-900/80">
+                    {addrVerdict.nearCandidates[0].zone.name}까지 약{" "}
+                    {meters(addrVerdict.nearCandidates[0].distance)} · 구역계가 아직 고시되지 않아
+                    포함 여부는 확정할 수 없습니다.
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => pickZone(addrVerdict.nearCandidates[0].zone.id)}
+                      className="rounded-full bg-violet-700 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-violet-800"
+                    >
+                      후보지 보기
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 구역 밖·후보지 인근 — 가장 가까운 정비구역 1~3곳(클릭하면 그 구역으로 이동) */}
+            {(addrVerdict.status === "outside" || addrVerdict.status === "near-candidate") &&
+              addrVerdict.nearest.length > 0 && (
+                <div className="mt-2">
+                  <p className="mb-1 text-[10px] font-semibold text-slate-500">
+                    가까운 정비구역 · 직선거리
+                  </p>
+                  <ul className="space-y-1">
+                    {addrVerdict.nearest.slice(0, 3).map((n) => (
+                      <li key={n.zone.id}>
+                        <button
+                          type="button"
+                          data-testid="nearest-zone"
+                          onClick={() => pickZone(n.zone.id)}
+                          className="flex w-full items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-left text-[11px] hover:border-blue-300 hover:bg-blue-50/60"
+                        >
+                          <i
+                            className="h-2 w-2 shrink-0 rounded-sm"
+                            style={{ backgroundColor: TYPE_COLORS[n.zone.type] }}
+                          />
+                          <span className="truncate font-semibold text-slate-800">{n.zone.name}</span>
+                          <span className="truncate text-[10px] text-slate-500">
+                            {n.completed ? "준공" : n.zone.stage}
+                          </span>
+                          <span className="ml-auto shrink-0 font-mono text-[10px] text-slate-600">
+                            {meters(n.distance)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+            <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
+              경계는 서울시 고시 도형 기준입니다. 실제 필지 경계와는 다를 수 있어요.
+            </p>
+          </div>
+        )}
 
         {/* 필터 — 접었다 펼 수 있는 카드 */}
         <div className="pointer-events-auto rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">

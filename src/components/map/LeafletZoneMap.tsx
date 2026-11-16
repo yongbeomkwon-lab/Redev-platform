@@ -32,7 +32,7 @@ import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import SubwayLayer from "./SubwayLayer";
-import { SEOUL_BOUNDS, type LeafletZoneMapProps } from "./props";
+import { SEOUL_BOUNDS, type AddressPin, type LeafletZoneMapProps } from "./props";
 
 export { TYPE_COLORS };
 
@@ -60,6 +60,16 @@ function FitSelected({ ring, point }: { ring?: [number, number][]; point?: [numb
     }
     if (point) map.flyTo(point, 16, { duration: 0.7 });
   }, [ring, point, map]);
+  return null;
+}
+
+/** 주소 검색 핀으로 이동 (OSM 폴백용 — 카카오맵과 같은 위치로) */
+function FitAddressPin({ pin }: { pin?: AddressPin | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!pin) return;
+    map.flyTo([pin.lat, pin.lng], Math.max(map.getZoom(), 16), { duration: 0.7 });
+  }, [pin?.lat, pin?.lng, map]);
   return null;
 }
 
@@ -198,6 +208,7 @@ export default function LeafletZoneMap({
   showCompleted = false,
   onToggleCompleted,
   completedCount = 0,
+  addressPin,
   fallbackReason,
 }: LeafletZoneMapProps) {
   // Canvas 렌더러 하나를 지도 전체가 공유한다.
@@ -285,6 +296,33 @@ export default function LeafletZoneMap({
       ))}
 
       <FitSelected ring={selected.ring} point={selected.point} />
+      {/* ── 주소 검색 핀 ── */}
+      {addressPin && (
+        <CircleMarker
+          center={[addressPin.lat, addressPin.lng]}
+          radius={9}
+          pathOptions={{
+            color: "#ffffff",
+            weight: 3,
+            opacity: 1,
+            fillColor:
+              addressPin.status === "inside"
+                ? "#059669"
+                : addressPin.status === "completed"
+                  ? "#d97706"
+                  : addressPin.status === "near-candidate"
+                    ? "#7c3aed"
+                    : "#e11d48",
+            fillOpacity: 1,
+          }}
+        >
+          <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
+            <b>{addressPin.message}</b>
+            <span className="zone-name-sub"> · {addressPin.label}</span>
+          </Tooltip>
+        </CircleMarker>
+      )}
+      <FitAddressPin pin={addressPin} />
       </MapContainer>
 
       {/* 카카오맵을 쓸 수 없어 OSM으로 표시 중이라는 안내 (작게, 지도 조작은 그대로) */}

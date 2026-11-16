@@ -165,6 +165,22 @@ function labelLine(z: { name: string; kind: string; stage: string; area: number;
   return `${z.name} · ${z.kind} · ${z.stage} · ${area}${z.gu ? ` (${z.gu})` : ""}`;
 }
 
+/** 주소 핀 말풍선 색 — 판정 종류별 */
+const PIN_TONES: Record<
+  "inside" | "completed" | "near-candidate" | "outside",
+  { border: string; text: string; tail: string; dot: string }
+> = {
+  inside: { border: "border-emerald-500", text: "text-emerald-700", tail: "border-t-emerald-500", dot: "bg-emerald-600" },
+  completed: { border: "border-amber-500", text: "text-amber-800", tail: "border-t-amber-500", dot: "bg-amber-500" },
+  "near-candidate": {
+    border: "border-violet-500",
+    text: "text-violet-800",
+    tail: "border-t-violet-500",
+    dot: "bg-violet-600",
+  },
+  outside: { border: "border-rose-500", text: "text-rose-700", tail: "border-t-rose-500", dot: "bg-rose-600" },
+};
+
 export default function KakaoZoneMap({
   zones,
   seoulZones,
@@ -173,6 +189,7 @@ export default function KakaoZoneMap({
   showCompleted = false,
   onToggleCompleted,
   completedCount = 0,
+  addressPin,
   onFail,
 }: KakaoZoneMapProps) {
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -180,6 +197,8 @@ export default function KakaoZoneMap({
   const sdkRef = useRef<KakaoSDK | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelRef = useRef<KakaoCustomOverlay | null>(null);
+  /** 주소 검색 핀(말풍선) 오버레이 */
+  const pinRef = useRef<KakaoCustomOverlay | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
   const bufRef = useRef<Float32Array>(new Float32Array(4096));
   const viewRef = useRef<View | null>(null);
@@ -207,6 +226,10 @@ export default function KakaoZoneMap({
   }>({ click: null, move: null });
   const onSelectRef = useRef(onSelectZone);
   onSelectRef.current = onSelectZone;
+
+  /** 핀이 가리키는 구역을 찾을 때 쓰는 최신 목록(효과 의존성을 줄이려고 ref로 읽는다) */
+  const seoulZonesRef = useRef(seoulZones);
+  seoulZonesRef.current = seoulZones;
 
   const prep = useMemo<PreparedZones>(() => prepareZones(seoulZones), [seoulZones]);
   const prepRef = useRef<PreparedZones>(prep);
@@ -881,6 +904,63 @@ export default function KakaoZoneMap({
     }
   }, [selectedZoneId, seoulZones, zones]);
 
+  // ── 주소 검색 핀 + 말풍선 ──────────────────────────────────────────────
+  //   주소 판별 결과(핀)가 바뀔 때만 다시 찍고 화면을 맞춘다. 말풍선 안내문은
+  //   “주소 + 판정 한 줄”이라 사용자가 지도에서 바로 읽을 수 있다.
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    pinRef.current?.setMap(null);
+    pinRef.current = null;
+    if (!k || !map || !addressPin) return;
+
+    const tone = PIN_TONES[addressPin.status] ?? PIN_TONES.outside;
+    const el = document.createElement("div");
+    el.className = "address-pin";
+    el.dataset.testid = "address-pin";
+    el.innerHTML = `
+      <div class="flex flex-col items-center">
+        <div class="max-w-[240px] rounded-xl border-2 ${tone.border} bg-white/95 px-2.5 py-1.5 text-center shadow-xl">
+          <div class="truncate text-[10px] font-medium text-slate-500">${escapeHtml(addressPin.label)}</div>
+          <div class="mt-0.5 text-[11px] font-bold ${tone.text}">${escapeHtml(addressPin.message)}</div>
+        </div>
+        <div class="-mt-px h-0 w-0 border-x-[7px] border-t-[9px] border-x-transparent ${tone.tail}"></div>
+        <div class="h-2.5 w-2.5 rounded-full border-2 border-white ${tone.dot} shadow"></div>
+      </div>`;
+
+    const overlay = new k.maps.CustomOverlay({
+      content: el,
+      position: new k.maps.LatLng(addressPin.lat, addressPin.lng),
+      xAnchor: 0.5,
+      yAnchor: 1,
+      zIndex: 60,
+      clickable: false,
+    });
+    overlay.setMap(map);
+    if (el.parentElement) el.parentElement.style.pointerEvents = "none";
+    pinRef.current = overlay;
+
+    // 화면 맞춤 — 속한 구역이 보이면 그 경계까지, 아니면 주소 지점을 확대해서
+    const zone = addressPin.zoneId ? seoulZonesRef.current.find((z) => z.id === addressPin.zoneId) : undefined;
+    if (zone?.polygon && zone.polygon.length >= 3) {
+      let minLat = addressPin.lat;
+      let maxLat = addressPin.lat;
+      let minLng = addressPin.lng;
+      let maxLng = addressPin.lng;
+      for (const ring of [zone.polygon, ...(zone.parts ?? [])]) {
+        for (const [lat, lng] of ring) {
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+        }
+      }
+      fitLatLngSpan(k, map, minLat, minLng, maxLat, maxLng, mapElRef.current);
+    } else {
+      map.jump(new k.maps.LatLng(addressPin.lat, addressPin.lng), 4, { animate: { duration: 350 } });
+    }
+  }, [addressPin]);
+
   // ── 지도 타입 토글 ──────────────────────────────────────────────────────────
   const toggleSkyview = useCallback(() => {
     const k = sdkRef.current;
@@ -1020,6 +1100,20 @@ function fitBounds(k: KakaoSDK, map: KakaoMap, zone: SeoulZone, container: HTMLE
       if (lng > maxLng) maxLng = lng;
     }
   }
+  if (!Number.isFinite(minLat) || minLat > maxLat) return;
+  fitLatLngSpan(k, map, minLat, minLng, maxLat, maxLng, container);
+}
+
+/** 경위도 사각형이 화면에 꽉 차도록 레벨을 정해 이동한다(주소 핀 + 구역 경계 공용) */
+function fitLatLngSpan(
+  k: KakaoSDK,
+  map: KakaoMap,
+  minLat: number,
+  minLng: number,
+  maxLat: number,
+  maxLng: number,
+  container: HTMLElement | null
+) {
   if (!Number.isFinite(minLat) || minLat > maxLat) return;
 
   const proj = map.getProjection();
