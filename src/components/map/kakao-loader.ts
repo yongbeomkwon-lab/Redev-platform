@@ -6,8 +6,10 @@
 //  ▶ 도메인: 카카오 Developers → 플랫폼 → Web 에 사이트 도메인을 등록해야 SDK가 열린다.
 //     (https://redev-platform-iota.vercel.app, http://localhost:3000 등)
 //  ▶ 실패 처리: 키가 없거나, 키 종류가 다르거나(예: ADMIN_KEY), 도메인 미등록이면 SDK 응답이
-//     오류 JSON이라 window.kakao 가 생기지 않는다. 그때는 같은 탭 세션에서 재시도를 건너뛰고
-//     즉시 OSM 폴백으로 내려가 지도가 비어 보이지 않게 한다.
+//     오류 JSON이라 window.kakao 가 생기지 않는다. 그때는 즉시 OSM 폴백으로 내려가 지도가
+//     비어 보이지 않게 한다.
+//  ▶ 재시도: 실패를 세션 스토리지에 캐시하지 않는다. 새로고침·재방문마다 SDK를 다시 불러
+//     일시적 실패(네트워크·카카오 응답 지연) 한 번으로 탭 전체가 OSM에 고정되지 않게 한다.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { MapFailReason } from "./props";
 
@@ -89,8 +91,6 @@ export const KAKAO_APP_KEY = (process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY ?? "").t
 
 export const KAKAO_SDK_URL = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_APP_KEY}&autoload=false`;
 
-const FAIL_KEY = "redev.kakao.sdk.failed";
-
 function kakaoGlobal(): KakaoSDK | undefined {
   return (window as unknown as { kakao?: KakaoSDK }).kakao;
 }
@@ -125,28 +125,12 @@ export function loadKakaoSdk(): Promise<SdkResult> {
   }
   if (pending) return pending;
 
-  // 같은 탭에서 이미 실패한 키라면 다시 기다리지 않는다(방문자 체감 속도)
-  try {
-    if (sessionStorage.getItem(FAIL_KEY) === KAKAO_APP_KEY) {
-      return Promise.resolve({ ok: false, reason: "sdk-error" });
-    }
-  } catch {
-    /* 세션 스토리지 차단 환경은 무시 */
-  }
-
   pending = new Promise<SdkResult>((resolve) => {
     let settled = false;
     const finish = (r: SdkResult) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
-      if (!r.ok) {
-        try {
-          sessionStorage.setItem(FAIL_KEY, KAKAO_APP_KEY);
-        } catch {
-          /* ignore */
-        }
-      }
       resolve(r);
     };
 
