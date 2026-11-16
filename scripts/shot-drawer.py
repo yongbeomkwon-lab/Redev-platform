@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """오른쪽 드로어 UI 확인 — 효창공원앞역 인근(서울시 고시 구역) 상세를 열고 캡처."""
+import os
 import sys
 import time
 
@@ -13,7 +14,7 @@ with sync_playwright() as p:
     ctx = b.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
     page = ctx.new_page()
     page.on("pageerror", lambda e: print("PAGEERROR", str(e)[:300]))
-    page.goto("http://localhost:3100/", wait_until="domcontentloaded")
+    page.goto(os.environ.get("TARGET_URL", "http://localhost:3100/"), wait_until="domcontentloaded")
     page.wait_for_selector(".kakao-zone-canvas", timeout=30000)
     time.sleep(3.5)
     page.fill('input[placeholder^="구역명"]', NAME)
