@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Listing, MapZoneType, Transaction, Zone, ZoneStage, ZoneType } from "@/lib/types";
 import { STAGE_ORDER, calcMultiple } from "@/lib/types";
-import { loadSeoulZones, type SeoulZone, type SeoulZonesMeta } from "@/lib/seoul-zones";
+import { loadSeoulZones, isCompletedZone, type SeoulZone, type SeoulZonesMeta } from "@/lib/seoul-zones";
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
@@ -35,6 +35,8 @@ export default function ZoneExplorer() {
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
   const [unlockTarget, setUnlockTarget] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
+  // 준공 완료 구역 표시 여부 — 기본은 숨김(진행 중 구역만 보여준다)
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     const p = getProvider();
@@ -72,39 +74,56 @@ export default function ZoneExplorer() {
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   const selectedListings = listings.filter((l) => l.zoneId === selectedId);
 
+  // ── 준공 완료 구역(준공·준공(일부) 260곳) 숨김 ──────────────────────────────
+  //   이미 입주까지 끝나 아파트가 된 구역이라 상담 대상이 아니다. 기본 지도·검색·
+  //   범례 숫자에서 모두 빼고, ‘준공 완료 포함’ 토글을 켠 때만 다시 보여준다(점선 표시).
+  const completedZones = useMemo(() => seoulZones.filter(isCompletedZone), [seoulZones]);
+  const visibleSeoulZones = useMemo(
+    () => (showCompleted ? seoulZones : seoulZones.filter((z) => !isCompletedZone(z))),
+    [seoulZones, showCompleted]
+  );
+
+  function toggleCompleted() {
+    const next = !showCompleted;
+    setShowCompleted(next);
+    // 숨기는 순간 준공 구역이 선택돼 있으면 선택을 풀어 유령 선택이 남지 않게 한다
+    if (!next) {
+      const z = seoulZones.find((s) => s.id === selectedId);
+      if (z && isCompletedZone(z)) setSelectedId(undefined);
+    }
+  }
+
   // 구역명·별칭·자치구 검색 (1,800여 구역 중 원하는 곳으로 바로 이동)
   //   · 공식 별칭까지 훑는다 — '사당동 419-1'로도 '사당15'로도 같은 구역이 뜬다
   //   · 띄어쓰기를 무시해 '사당동419-1', '사당 15' 같은 입력도 걸린다
-  const searchResults = useMemo(() => {
+  //   · 기본(준공 숨김)에서는 준공 구역이 결과에 안 뜨고, 그 구역만 맞았을 때
+  //     '준공 완료라 숨겨져 있다'는 안내를 대신 보여준다(데이터가 없는 줄 오해하지 않게)
+  const search = useMemo(() => {
     const term = query.trim();
-    if (!term) return [];
+    const empty = { results: [] as SeoulZone[], hidden: [] as SeoulZone[] };
+    if (!term) return empty;
     const flat = term.replace(/\s+/g, "");
     const hit = (s?: string) => !!s && s.replace(/\s+/g, "").includes(flat);
-    const scored = seoulZones
-      .filter((z) => hit(z.name) || z.gu.includes(term) || (z.alias ?? []).some(hit))
-      .map((z) => {
-        // 이름이 직접 맞으면 먼저, 별칭으로만 걸리면 뒤로
-        const rank = hit(z.name) ? 0 : (z.alias ?? []).some(hit) ? 1 : 2;
-        return { z, rank };
-      })
-      .sort(
-        (a, b) =>
-          a.rank - b.rank ||
-          Number(b.z.featured) - Number(a.z.featured) ||
-          Number(!b.z.polygon) - Number(!a.z.polygon) ||
-          b.z.area - a.z.area
-      )
-      .slice(0, 8)
-      .map((r) => r.z);
-    return scored;
-  }, [query, seoulZones]);
+    const rank = (z: SeoulZone) => (hit(z.name) ? 0 : (z.alias ?? []).some(hit) ? 1 : 2);
+    const matches = (list: SeoulZone[]) =>
+      list.filter((z) => hit(z.name) || z.gu.includes(term) || (z.alias ?? []).some(hit));
+    const sortFn = (a: SeoulZone, b: SeoulZone) =>
+      rank(a) - rank(b) ||
+      Number(b.featured) - Number(a.featured) ||
+      Number(!b.polygon) - Number(!a.polygon) ||
+      b.area - a.area;
+    const results = matches(visibleSeoulZones).sort(sortFn).slice(0, 8);
+    const hidden =
+      !showCompleted && results.length === 0 ? matches(completedZones).sort(sortFn).slice(0, 3) : [];
+    return { results, hidden };
+  }, [query, visibleSeoulZones, completedZones, showCompleted]);
 
-  // 범례 카운터 — 실제 로드된 구역 수
+  // 범례 카운터 — 지금 지도에 깔린 구역 수(준공 숨김 상태면 진행 중 구역만)
   const typeCounts = useMemo(() => {
     const m: Partial<Record<MapZoneType, number>> = {};
-    for (const z of seoulZones) m[z.type] = (m[z.type] ?? 0) + 1;
+    for (const z of visibleSeoulZones) m[z.type] = (m[z.type] ?? 0) + 1;
     return m;
-  }, [seoulZones]);
+  }, [visibleSeoulZones]);
 
   function unlock(id: string) {
     setUnlocked((prev) => new Set(prev).add(id));
@@ -132,6 +151,35 @@ export default function ZoneExplorer() {
         ))}
       </div>
 
+      {/* ── 표시 범위: 준공 완료 구역(260곳) 기본 숨김 ── */}
+      <div className="-mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-slate-500">표시 범위</span>
+        <button
+          type="button"
+          onClick={toggleCompleted}
+          aria-pressed={showCompleted}
+          title={
+            showCompleted
+              ? "준공·입주 완료 구역을 지도에서 다시 숨깁니다"
+              : "이미 준공·입주가 끝난 구역까지 지도에 표시합니다"
+          }
+          className={
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition " +
+            (showCompleted
+              ? "border-amber-400 bg-amber-50 text-amber-900"
+              : "border-dashed border-slate-300 bg-white text-slate-500 hover:border-slate-500 hover:text-slate-700")
+          }
+        >
+          <span aria-hidden>{showCompleted ? "👁" : "🏁"}</span>
+          준공 완료 포함 ({completedZones.length})
+        </button>
+        <span className="text-[11px] text-slate-500">
+          {showCompleted
+            ? `준공·입주 완료 ${completedZones.length}곳까지 표시 중 (점선)`
+            : `이미 아파트가 된 준공 구역 ${completedZones.length}곳은 숨김 · 진행 중 ${visibleSeoulZones.length.toLocaleString()}곳`}
+        </span>
+      </div>
+
       {/* ── 지도 + 구역 목록 ── */}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <div>
@@ -143,9 +191,9 @@ export default function ZoneExplorer() {
               placeholder="구역명·자치구 검색 — 예: 목동4단지, 성수전략, 은평구"
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
-            {searchResults.length > 0 && (
+            {search.results.length > 0 && (
               <ul className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
-                {searchResults.map((z) => (
+                {search.results.map((z) => (
                   <li key={z.id}>
                     <button
                       onClick={() => {
@@ -166,20 +214,45 @@ export default function ZoneExplorer() {
                 ))}
               </ul>
             )}
+            {/* 준공 완료라 숨겨진 구역만 검색됐을 때 — 데이터 누락으로 오해하지 않도록 안내 */}
+            {search.hidden.length > 0 && (
+              <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 shadow-xl">
+                <p>
+                  <b>{search.hidden[0].name}</b>
+                  {search.hidden[0].stage ? ` (${search.hidden[0].stage})` : ""}
+                  {search.hidden.length > 1 ? ` 외 ${search.hidden.length - 1}곳` : ""}은 준공 완료 구역이라 기본 지도에서
+                  숨겨져 있습니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowCompleted(true)}
+                  className="mt-1 rounded-full border border-amber-400 bg-white px-2 py-0.5 font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  준공 완료 포함해서 보기
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="relative">
             <div className="h-[520px] overflow-hidden rounded-xl border border-slate-200 shadow-sm">
               <MapPanel
                 zones={filtered}
-                seoulZones={seoulZones}
+                seoulZones={visibleSeoulZones}
                 selectedZoneId={selectedId}
                 onSelectZone={setSelectedId}
+                showCompleted={showCompleted}
+                onToggleCompleted={toggleCompleted}
+                completedCount={completedZones.length}
               />
             </div>
-            {/* 로드된 서울시 정비구역 수 — 데이터가 오면 자동 갱신 */}
-            <div className="pointer-events-none absolute right-3 top-3 z-[1000] rounded-full bg-slate-900/85 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
-              서울시 정비구역 {seoulZones.length.toLocaleString()}곳
+            {/* 로드된 서울시 정비구역 수 — 준공 숨김 상태면 진행 중 구역만 센다 */}
+            <div className="pointer-events-none absolute bottom-11 left-3 z-[1000] rounded-full bg-slate-900/85 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
+              서울시 {showCompleted ? "정비구역 전체" : "진행 중 정비구역"}{" "}
+              {visibleSeoulZones.length.toLocaleString()}곳
+              {!showCompleted && completedZones.length > 0 && (
+                <span className="ml-1 font-normal text-slate-300">· 준공 {completedZones.length}곳 숨김</span>
+              )}
               {seoulMeta?.asOf ? <span className="ml-1 font-normal text-slate-300">{seoulMeta.asOf} 기준</span> : null}
             </div>
             <div className="pointer-events-none absolute bottom-6 left-3 z-[1000] rounded-md bg-white/85 px-2 py-1 text-[10px] text-slate-500 shadow">
@@ -200,6 +273,10 @@ export default function ZoneExplorer() {
             </span>
             <span className="text-slate-500">
               | <b className="font-semibold">점</b>으로 표시된 구역은 구역계 미고시 후보지입니다 (예: 사당21구역 — 2026-05-07 후보지 선정)
+            </span>
+            <span className="text-slate-500">
+              | <b className="font-semibold">준공·입주 완료 {completedZones.length}곳</b>은 기본 숨김 — 위{" "}
+              <b className="font-semibold">준공 완료 포함</b>을 켜면 점선으로 보입니다
             </span>
           </div>
         </div>

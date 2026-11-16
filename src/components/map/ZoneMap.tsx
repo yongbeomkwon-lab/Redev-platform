@@ -14,6 +14,9 @@
 //  ▶ 지하철 노선·역명: 별도 캔버스 pane(SubwayLayer) — 기본 켜짐, 오른쪽 위 🚇 버튼으로 토글.
 //    역이 어디인지가 재개발 상담의 첫 질문이라 구역 폴리곤과 같은 화면에 올린다.
 //    데이터·재생성 방법은 scripts/README-subway.md
+//  ▶ 준공 완료 구역(준공·준공(일부) 260곳)은 기본으로 숨긴다 — 이미 아파트가 된 구역이라
+//    상담 대상이 아니다. 지도 위 ‘준공 포함’ 버튼을 켜면 점선으로 함께 보인다.
+//    (필터는 ZoneExplorer가 하고, 이 컴포넌트는 넘겨받은 목록만 그린다)
 //  ▶ 카카오맵/네이버맵으로 교체: 키 발급·도메인 등록 후 kakao.maps.Polygon으로
 //    동일 렌더를 구현하고 MapPanel.tsx만 교체하면 된다.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,7 +25,7 @@ import L from "leaflet";
 import { CircleMarker, MapContainer, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Zone } from "@/lib/types";
-import type { SeoulZone } from "@/lib/seoul-zones";
+import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import SubwayLayer from "./SubwayLayer";
 
@@ -121,7 +124,8 @@ function SeoulZoneLayer({
           (f?.properties?.type ?? "일반재개발") as SeoulZone["type"],
           f?.properties?.id === selectedRef.current,
           false,
-          zoomRef.current
+          zoomRef.current,
+          isCompletedZone({ stage: (f?.properties?.stage as string) ?? "" })
         ),
       onEachFeature: (feature, lyr) => {
         const p = feature.properties as { id: string; name: string; type: string; kind: string; stage: string; gu: string; area: number };
@@ -147,7 +151,9 @@ function SeoulZoneLayer({
     layer.eachLayer((l) => {
       const p = (l as L.Path & { feature?: GeoJSON.Feature }).feature?.properties;
       if (!p) return;
-      (l as L.Path).setStyle(zoneStyle(p.type as SeoulZone["type"], p.id === selectedId, false, zoom));
+      (l as L.Path).setStyle(
+        zoneStyle(p.type as SeoulZone["type"], p.id === selectedId, false, zoom, isCompletedZone({ stage: p.stage ?? "" }))
+      );
     });
   }, [selectedId, zoom]);
 
@@ -188,13 +194,27 @@ function SeoulZoneLayer({
 export type ZoneMapProps = {
   /** 대표 구역 (상세 데이터 보유 — 실거래·매물 포함) */
   zones: Zone[];
-  /** 서울시 정비구역 전수 */
+  /** 서울시 정비구역 전수 (호출측이 표시 범위만 걸러서 넘긴다 — 준공 숨김 등) */
   seoulZones: SeoulZone[];
   selectedZoneId?: string;
   onSelectZone: (id: string) => void;
+  /** 준공·입주 완료 구역까지 표시 중인지 (지도 위 토글 표시용) */
+  showCompleted?: boolean;
+  /** 지도 위 ‘준공 포함’ 토글 — 상태는 ZoneExplorer가 갖는다 */
+  onToggleCompleted?: () => void;
+  /** 준공 완료 구역 수 (토글에 병기) */
+  completedCount?: number;
 };
 
-export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZone }: ZoneMapProps) {
+export default function ZoneMap({
+  zones,
+  seoulZones,
+  selectedZoneId,
+  onSelectZone,
+  showCompleted = false,
+  onToggleCompleted,
+  completedCount = 0,
+}: ZoneMapProps) {
   // Canvas 렌더러 하나를 지도 전체가 공유한다.
   //  · 1,800여 폴리곤을 SVG로 그리면 프레임이 떨어진다 → Canvas.
   //  · 레이어마다 렌더러를 따로 만들면 <canvas>가 여러 장 겹쳐 맨 위 캔버스가
@@ -282,21 +302,40 @@ export default function ZoneMap({ zones, seoulZones, selectedZoneId, onSelectZon
       <FitSelected ring={selected.ring} point={selected.point} />
       </MapContainer>
 
-      {/* 지하철 레이어 토글 — 지도 위 오른쪽 위, 구역 클릭과 무관 */}
-      <button
-        type="button"
-        onClick={() => setShowSubway((v) => !v)}
-        aria-pressed={showSubway}
-        title="지하철 노선·역명 표시"
-        className={`absolute right-3 top-3 z-[600] flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
-          showSubway
-            ? "border-slate-300 bg-white text-slate-800"
-            : "border-slate-300 bg-white/80 text-slate-400 line-through hover:text-slate-600"
-        }`}
-      >
-        <span aria-hidden>🚇</span>
-        지하철 노선
-      </button>
+      {/* 지도 위 토글 — 지하철 노선 · 준공 포함 (구역 클릭과 무관) */}
+      <div className="absolute right-3 top-3 z-[600] flex flex-col items-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => setShowSubway((v) => !v)}
+          aria-pressed={showSubway}
+          title="지하철 노선·역명 표시"
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+            showSubway
+              ? "border-slate-300 bg-white text-slate-800"
+              : "border-slate-300 bg-white/80 text-slate-400 line-through hover:text-slate-600"
+          }`}
+        >
+          <span aria-hidden>🚇</span>
+          지하철 노선
+        </button>
+        {onToggleCompleted && (
+          <button
+            type="button"
+            onClick={onToggleCompleted}
+            aria-pressed={showCompleted}
+            title="준공·입주까지 끝난 구역도 지도에 표시"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+              showCompleted
+                ? "border-amber-400 bg-amber-50 text-amber-900"
+                : "border-slate-300 bg-white text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <span aria-hidden>{showCompleted ? "👁" : "🏁"}</span>
+            준공 포함
+            {completedCount > 0 && <span className="font-normal text-slate-400">{completedCount}</span>}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

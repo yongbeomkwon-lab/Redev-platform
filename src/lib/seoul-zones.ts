@@ -48,6 +48,17 @@ export type SeoulZone = {
   sources?: ZoneSource[];
 };
 
+/**
+ * 사업이 끝난 구역(준공·입주 완료)인지 — 지도에서는 기본으로 숨긴다.
+ *   · 서울플랜+ 추진단계 '준공'(252곳) / '준공(일부)'(8곳) = 260곳
+ *   · 사용승인·입주·입주중·사업완료는 다른 사업유형(역세권·청년안심·도시재생 등)의 종료 단계라
+ *     현재 전수 레이어에는 없지만, 단계명이 바뀌어 들어와도 같은 규칙으로 숨겨지도록 함께 본다.
+ */
+export function isCompletedZone(z: { stage: string }): boolean {
+  const s = z.stage ?? "";
+  return s.startsWith("준공") || s === "사용승인" || s === "입주" || s === "입주중" || s === "사업완료";
+}
+
 export type SeoulZonesMeta = {
   source: string;
   sourceDetail: string;

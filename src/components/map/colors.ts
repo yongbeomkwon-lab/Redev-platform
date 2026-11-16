@@ -28,10 +28,22 @@ export const TYPE_ORDER: MapZoneType[] = [
  * 지도 폴리곤 스타일 — 전수 레이어와 대표 구역이 공유.
  *  · 서울 전경(zoom ≤ 12): 선 1.4 · 채움 0.3 — 1,800곳이 겹쳐도 도시가 살아 보이게
  *  · 확대할수록 선을 굵게(zoom 13~14 ×1.5, 15+ ×2) — 구역 경계가 또렷하게 읽히도록
+ *  · completed(준공 완료) = 점선 + 옅은 채움 — ‘끝난 구역’임을 한눈에 구분한다
  */
-export function zoneStyle(type: MapZoneType, active = false, featured = false, zoom = 11) {
+export function zoneStyle(type: MapZoneType, active = false, featured = false, zoom = 11, completed = false) {
   const color = TYPE_COLORS[type] ?? "#64748b";
   const grow = zoom >= 15 ? 2 : zoom >= 13 ? 1.5 : 1;
+
+  if (completed) {
+    return {
+      color,
+      weight: Math.min((active ? 2.2 : 1.1) * grow, active ? 4 : 3),
+      opacity: active ? 1 : 0.75,
+      dashArray: "4 3",
+      fillColor: color,
+      fillOpacity: active ? 0.3 : 0.1,
+    };
+  }
 
   if (featured) {
     return {
