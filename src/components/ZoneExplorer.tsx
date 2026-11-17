@@ -144,9 +144,11 @@ export default function ZoneExplorer() {
     }
   }
 
-  // 구역명·별칭·자치구 검색 (2,100여 구역 중 원하는 곳으로 바로 이동)
+  // 구역명·별칭·사업유형·자치구 검색 (2,100여 구역 중 원하는 곳으로 바로 이동)
   //   · 공식 별칭까지 훑는다 — '사당동 419-1'로도 '사당15'로도 같은 구역이 뜬다
   //   · 띄어쓰기를 무시해 '사당동419-1', '사당 15' 같은 입력도 걸린다
+  //   · 서울시 사업유형(kind)도 같이 본다 — ‘청년안심’·‘미리내집’·‘장기전세’·‘역세권활성화’처럼
+  //     지번 이름만으로는 찾기 어려운 새 레이어도 이름으로 바로 찾을 수 있게(이름·별칭에 이어 낮은 순위)
   //   · 기본(준공 숨김)에서는 준공 구역이 결과에 안 뜨고, 그 구역만 맞았을 때
   //     '준공 완료라 숨겨져 있다'는 안내를 대신 보여준다(데이터가 없는 줄 오해하지 않게)
   const search = useMemo(() => {
@@ -155,9 +157,10 @@ export default function ZoneExplorer() {
     if (!term) return empty;
     const flat = term.replace(/\s+/g, "");
     const hit = (s?: string) => !!s && s.replace(/\s+/g, "").includes(flat);
-    const rank = (z: SeoulZone) => (hit(z.name) ? 0 : (z.alias ?? []).some(hit) ? 1 : 2);
+    const rank = (z: SeoulZone) =>
+      hit(z.name) ? 0 : (z.alias ?? []).some(hit) ? 1 : hit(z.kind) || hit(z.type) ? 2 : 3;
     const matches = (list: SeoulZone[]) =>
-      list.filter((z) => hit(z.name) || z.gu.includes(term) || (z.alias ?? []).some(hit));
+      list.filter((z) => hit(z.name) || hit(z.kind) || hit(z.type) || z.gu.includes(term) || (z.alias ?? []).some(hit));
     const sortFn = (a: SeoulZone, b: SeoulZone) =>
       rank(a) - rank(b) ||
       Number(b.featured) - Number(a.featured) ||
@@ -363,7 +366,7 @@ export default function ZoneExplorer() {
                   clearAddress();
                 }
               }}
-              placeholder="구역명·자치구·주소 검색 — 예: 신림동 362-32, 목동4단지"
+              placeholder="구역명·사업유형·자치구·주소 검색 — 예: 신림동 362-32, 청년안심"
               aria-label="구역명·자치구·주소 검색"
               data-testid="zone-search-input"
               className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
