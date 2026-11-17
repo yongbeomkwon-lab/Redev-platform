@@ -79,12 +79,14 @@ npm run subway               # 지하철 노선·역 → public/data/subway-*.{g
 ## 공공 데이터 연동
 
 - **실거래가(적용됨)**: 국토부 실거래가 공개 API `https://apis.data.go.kr/1613000/`
-  · 아파트 매매 상세 `RTMSDataSvcAptTradeDev` · 단독/다가구 매매 `RTMSDataSvcSHTrade` · 연립/다세대 매매 `RTMSDataSvcRHTrade`
+  · 아파트 매매 상세 `RTMSDataSvcAptTradeDev` · 단독/다가구 매매 `RTMSDataSvcSHTrade` · 연립/다세대 매매 `RTMSDataSvcRHTrade2`
   · `LAWD_CD`(자치구 5자리) + `DEAL_YMD`(YYYYMM)로 **구 단위 월별 조회** → 서버에서 법정동·유형으로 걸러 `GET /api/transactions`가 내려준다
   · 서버 캐시 **(구·월·유형) 1시간** — 같은 구의 다른 구역을 눌러도 국토부를 다시 부르지 않는다(콜드 1.3초 → 캐시 0.04초)
   · `MOLIT_API_KEY` 는 **서버 전용**이다. `NEXT_PUBLIC_` 접두사를 붙이면 브라우저에 노출되므로 금지
-  · 연립·다세대는 아직 활용신청 전이라 `returnReasonCode 30`이 오는데, 그때도 나머지 유형은 정상 표시하고
-    화면에 **`연립·다세대 미연동`** 배지만 붙인다(승인되면 자동 반영)
+  · 연립·다세대는 **신버전 `RTMSDataSvcRHTrade2`**로 부른다(2026-11-18 교체). 구버전 `RTMSDataSvcRHTrade`는
+    이 키로 호출하면 `returnReasonCode 30`(등록되지 않은 서비스키)이 와서 늘 미연동으로 떴다.
+    신버전은 건물명 `mhouseNm`·전용면적 `excluUseAr`·대지권면적 `landAr`·지번 `jibun`을 그대로 주고,
+    화면에는 건물명(삼지빌라 등)으로 표시한다.
   · **Vercel 배포에 적용하려면** 프로젝트 → Settings → Environment Variables 에 `MOLIT_API_KEY` 를 추가해야 한다.
     키가 없으면 화면은 크래시 없이 "서버에 국토부 API 키가 아직 없습니다" 안내를 보여준다.
 - **구역 경계(적용됨)**: 2-소스 병합 + 공식 명칭 보강 — **서울시 정비구역·역세권·장기전세 전수 2,250곳**
