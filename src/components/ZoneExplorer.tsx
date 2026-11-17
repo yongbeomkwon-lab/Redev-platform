@@ -128,9 +128,13 @@ export default function ZoneExplorer() {
 
   // 지도 레이어·범례 숫자에 실제로 깔리는 구역 — 유형 필터가 켜져 있으면 그 유형만.
   //   검색과 주소 판정은 visibleSeoulZones/seoulZones 전체를 그대로 본다(필터가 검색을 막지 않게).
+  //   · hiddenByDefault 구역(예: 여의대방2역세권에 포함·통합 추진되는 여의대방 가로주택정비사업)은
+  //     지도에서만 빠진다 — 구역이 겹쳐 두 색으로 보이지 않게.
   const mapSeoulZones = useMemo(
     () =>
-      typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter),
+      (typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter)).filter(
+        (z) => !z.hiddenByDefault
+      ),
     [visibleSeoulZones, typeFilter]
   );
 

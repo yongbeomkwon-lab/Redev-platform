@@ -32,6 +32,10 @@ DJM_PATH = os.path.join(HERE, "data", "official-djm.json")
 SY_PATH = os.path.join(HERE, "data", "official-sy.json")
 # 「여의대방2역세권」 — 영등포구 고시 제2026-33호 지형도면에서 옮긴 구역계
 YDP_PATH = os.path.join(HERE, "data", "official-ydp.json")
+# 기존 UQ120 구역의 단계·분류 정정 및 기본 지도 숨김 처리(공식 공고·고시 근거)
+UPDATES_PATH = os.path.join(HERE, "data", "official-updates.json")
+# 「자양동 10번지 일원」 — 추진준비위 검토 범위(가상경계) 지도에서 옮긴 경계
+JAYANG_PATH = os.path.join(HERE, "data", "official-jayang.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -61,6 +65,20 @@ def load_sy(path=SY_PATH):
 
 
 def load_ydp(path=YDP_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_jayang(path=JAYANG_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_updates(path=UPDATES_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -195,6 +213,12 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 6) 여의대방2역세권 (영등포구 고시 제2026-33호 지형도면 → 폴리곤) ──────
     stats_ydp = apply_ydp(fc, seoul_zones)
 
+    # ── 7) 기존 구역의 단계·분류 정정 / 기본 지도 숨김 (공식 공고·고시) ────────
+    stats_upd = apply_updates(fc, seoul_zones)
+
+    # ── 8) 자양동 10번지 일원 (추진준비위 검토 범위 → 가상경계 폴리곤) ────────────
+    stats_jay = apply_jayang(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -237,6 +261,24 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         }
         stats["addedSy"] = stats_sy["_new"]
         stats["aliasedSy"] = stats_sy["_aliased"]
+    if stats_jay:
+        meta["jayang10"] = {
+            "asOf": stats_jay["asOf"],
+            "additions": stats_jay["additions"],
+            "polygons": stats_jay["polygons"],
+            "points": stats_jay["points"],
+            "aliases": stats_jay["aliases"],
+            "note": "광진구 자양동 10번지 일원 — 추진준비위가 공개한 검토 범위(가상경계) 지도에서 옮긴 참고 경계. 옮긴 면적 39,965㎡는 보도의 약 40,070㎡와 0.3% 차이며, 확정 전이라 실제 사업 경계와 다를 수 있음.",
+        }
+        stats["addedJayang"] = stats_jay["_new"]
+    if stats_upd:
+        meta["zoneUpdates"] = {
+            "asOf": stats_upd["asOf"],
+            "updates": stats_upd["updates"],
+            "hidden": stats_upd["hidden"],
+            "note": "UQ120 원천의 단계·분류가 실제와 달라 잘못 보이던 구역을 공식 공고·고시로 바로잡고(신림4구역: 준공 → 신통기획 확정·공람공고), 다른 구역에 포함·통합 추진되는 구역(여의대방 가로주택정비사업)은 기본 지도에서 숨김 처리",
+        }
+        stats["updatedExisting"] = stats_upd["updates"]
     if stats_ydp:
         meta["yeouidaebang2"] = {
             "asOf": stats_ydp["asOf"],
@@ -474,6 +516,142 @@ def apply_ydp(fc, seoul_zones):
             by_id[a["id"]] = zone
 
         stats["_new"] += 1
+
+    return stats
+
+
+def apply_jayang(fc, seoul_zones):
+    """자양동 10번지 일원(성장거점형 민간도심복합개발) 적용(멱등).
+
+    · 법적 구역계가 아직 없다 — 추진준비위원회가 공개한 검토 범위(빨간 테두리) 지도에서
+      옮긴 **가상경계**를 geom="가상경계"로 표시해 넣는다(확정 전임을 화면에서도 알린다).
+    · 민간 서비스(재개발닷컴·재개발뷰 등)의 폴리곤 좌표는 쓰지 않았다 — 공개된 지도 이미지와
+      카카오 지적편집도 대조만 사용.
+    """
+    doc = load_jayang()
+    if not doc:
+        return None
+    srcs = doc.get("sources", {})
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    stats = {"asOf": doc.get("asOf"),
+             "additions": len(doc.get("additions", [])),
+             "polygons": sum(1 for a in doc.get("additions", []) if a.get("polygon")),
+             "points": sum(1 for a in doc.get("additions", []) if not a.get("polygon")),
+             "aliases": len(doc.get("aliases", [])),
+             "_new": 0, "_aliased": 0}
+
+    for a in doc.get("additions", []):
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        rings = a.get("polygon")
+        if rings and isinstance(rings[0][0], (int, float)):
+            rings = [rings]
+        geom_kind = a.get("boundary") or ("가상경계" if rings else "미고시")
+        props = {
+            "id": a["id"],
+            "name": a["name"],
+            "alias": list(a.get("alias") or []),
+            "type": a.get("type", "도공복"),
+            "kind": a.get("kind", "성장거점형 민간도심복합개발"),
+            "stage": a.get("stage", ""),
+            "gu": a["gu"],
+            "area": a.get("area", 0),
+            "featured": False,
+            "sourceId": a.get("sourceId") or doc.get("asOf"),
+            "geom": geom_kind,
+            "center": list(a["center"]),
+        }
+        for key in ("selectedAt", "centerLabel", "locationMap", "note", "areaNote", "boundaryNote"):
+            if a.get(key):
+                props[key] = a[key]
+        if sources:
+            props["sources"] = sources
+
+        geometry = None
+        if rings:
+            out_rings = []
+            for ring in rings:
+                coords = [[lng, lat] for lat, lng in ring]
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                out_rings.append(coords)
+            geometry = ({"type": "Polygon", "coordinates": [out_rings[0]]}
+                        if len(out_rings) == 1 else
+                        {"type": "MultiPolygon", "coordinates": [[r] for r in out_rings]})
+
+        existing = by_feature_id.get(a["id"])
+        if existing is not None:
+            existing["properties"] = props
+            existing["geometry"] = geometry
+            zone = by_id.get(a["id"])
+            if zone is not None:
+                zone.update({k: v for k, v in props.items() if k != "sourceId"})
+                zone["sid"] = props["sourceId"]
+                zone["asOf"] = doc.get("asOf")
+                if rings:
+                    zone["polygon"] = [list(p) for p in rings[0]]
+                    if len(rings) > 1:
+                        zone["parts"] = [list(p) for p in rings[1:]]
+        else:
+            features.append({"type": "Feature", "id": a["id"], "properties": props, "geometry": geometry})
+            by_feature_id[a["id"]] = features[-1]
+            zone = {k: v for k, v in props.items() if k != "sourceId"}
+            zone["sid"] = props["sourceId"]
+            zone["asOf"] = doc.get("asOf")
+            if rings:
+                zone["polygon"] = [list(p) for p in rings[0]]
+                if len(rings) > 1:
+                    zone["parts"] = [list(p) for p in rings[1:]]
+            seoul_zones.append(zone)
+            by_id[a["id"]] = zone
+
+        stats["_new"] += 1
+
+    return stats
+
+
+def apply_updates(fc, seoul_zones):
+    """이미 있는 구역(UQ120)의 속성 정정·기본 숨김 처리(멱등).
+
+    · 경계(도형)는 건드리지 않는다 — 원천 실경계 그대로 두고 속성만 바로잡는다.
+    · `set` 값을 그대로 덮어쓰므로 여러 번 실행해도 결과가 같다.
+    · hiddenByDefault=true 는 지도 기본 표시에서만 빠진다(검색·주소 판정에는 남는다).
+    """
+    doc = load_updates()
+    if not doc:
+        return None
+    srcs = doc.get("sources", {})
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_prop_id = {(f.get("properties") or {}).get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    stats = {"asOf": doc.get("asOf"), "updates": 0, "hidden": 0, "_missing": []}
+
+    for u in doc.get("updates", []):
+        zid = u["id"]
+        f = by_feature_id.get(zid) or by_prop_id.get(zid)
+        z = by_id.get(zid)
+        if f is None and z is None:
+            stats["_missing"].append(zid)
+            continue
+        sources = [srcs[k] for k in (u.get("sources") or []) if k in srcs]
+        targets = []
+        if f is not None:
+            targets.append(f.setdefault("properties", {}))
+        if z is not None:
+            targets.append(z)
+        for target in targets:
+            for key, value in (u.get("set") or {}).items():
+                target[key] = value
+            for key in ("note", "areaNote", "nameNote"):
+                if u.get(key):
+                    target[key] = u[key]
+            if sources:
+                target["sources"] = sources
+        if (u.get("set") or {}).get("hiddenByDefault"):
+            stats["hidden"] += 1
+        stats["updates"] += 1
 
     return stats
 
@@ -728,6 +906,8 @@ def main():
 
     print(f"공식 명칭 적용 {stats['renamed']}건 · 신규 후보지 {stats['added']}건 추가 "
           f"(이미 있음 {stats['skipped']}건) · 총 {len(fc['features'])}개 구역")
+    if stats.get("updatedExisting"):
+        print(f"기존 구역 정정·숨김 {stats['updatedExisting']}건 적용")
     return 0
 
 

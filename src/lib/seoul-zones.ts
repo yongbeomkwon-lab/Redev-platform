@@ -30,7 +30,7 @@ export type SeoulZone = {
   area: number; // 고시 구역면적(㎡)
   featured: boolean; // 대표 구역(상세 데이터 있음)
   sourceId: string; // 서울 열린데이터광장 PRESENT_SN
-  geom: "UQ120" | "UQ181" | "공고도면" | "고시도면" | "미고시"; // 경계 도형 출처 (공고도면 = 구청·서울시 공고 도면, 고시도면 = 구청·서울시 고시 지형도면에서 옮긴 경계, 미고시 = 구역계 미고시 후보지)
+  geom: "UQ120" | "UQ181" | "공고도면" | "고시도면" | "가상경계" | "미고시"; // 경계 도형 출처 (공고도면 = 구청·서울시 공고 도면, 고시도면 = 구청·서울시 고시 지형도면, 가상경계 = 추진준비 단계에서 공개된 검토 범위 지도에서 옮긴 참고 경계, 미고시 = 구역계 미고시 후보지)
   center: [number, number];
   polygon?: [number, number][]; // 미고시 후보지는 없다
   /** MultiPolygon 의 나머지 조각(외곽 링) */
@@ -51,6 +51,11 @@ export type SeoulZone = {
   /** 경계를 어떤 도면에서 옮겼는지(공고도면 구역) */
   boundaryNote?: string;
   sources?: ZoneSource[];
+  /**
+   * 기본 지도에서 숨긴다 — 다른 구역에 포함·통합 추진되어 한 구역으로 보여야 하는 경우
+   * (예: 여의대방 가로주택정비사업 → 여의대방2역세권). 데이터는 남기므로 검색·주소 판정에는 그대로 쓰인다.
+   */
+  hiddenByDefault?: boolean;
 };
 
 /**

@@ -30,6 +30,7 @@ const EXTRA = [
   "nameNote",
   "nameSources",
   "sources",
+  "hiddenByDefault",
 ];
 
 const features = zones.map((z) => {

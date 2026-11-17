@@ -124,6 +124,13 @@ export default function ZoneOfficialPanel({
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
                 </span>
               </>
+            ) : zone.geom === "가상경계" ? (
+              <>
+                검토 중인 가상 경계(확정 전)
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 사업지 선정 전이라 실제 경계와 다를 수 있음
+                </span>
+              </>
             ) : zone.geom === "미고시" ? (
               <>
                 미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다
