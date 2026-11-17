@@ -6,7 +6,9 @@
 //  · 엔드포인트(https://apis.data.go.kr/1613000/)
 //      아파트 매매 상세      RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev
 //      단독·다가구 매매      RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade
-//      연립·다세대 매매      RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade
+//      연립·다세대 매매      RTMSDataSvcRHTrade2/getRTMSDataSvcRHTrade2
+//        · 구버전 RTMSDataSvcRHTrade는 이 키로 호출하면 code 30(등록되지 않은 서비스키)이 온다.
+//          신버전은 건물명(mhouseNm)·대지권면적(landAr)·전용면적(excluUseAr)·지번(jibun)을 그대로 준다.
 //    세 서비스 모두 LAWD_CD(법정동코드 앞 5자리) + DEAL_YMD(YYYYMM)로 조회한다.
 //  · 응답은 XML이라 서버 라우트에서 작은 파서로 JSON으로 옮긴다(molit-server.ts).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,14 +50,14 @@ export type MolitTransactionKind = (typeof MOLIT_KINDS)[number];
 export const MOLIT_SERVICES: Record<MolitTransactionKind, string> = {
   아파트: "RTMSDataSvcAptTradeDev",
   "단독·다가구": "RTMSDataSvcSHTrade",
-  "연립·다세대": "RTMSDataSvcRHTrade",
+  "연립·다세대": "RTMSDataSvcRHTrade2",
 };
 
 /** 개별 실거래 1건 */
 export type MolitTransaction = {
   id: string;
   kind: MolitTransactionKind;
-  /** 아파트 단지명, 연립·다세대는 연립/다세대 구분, 단독·다가구는 단독/다가구 */
+  /** 아파트 단지명, 연립·다세대는 건물명(mhouseNm), 단독·다가구는 단독/다가구 */
   name: string;
   umdNm: string;
   /** 지번 원문 — 단독·다가구는 `1**`처럼 마스킹되어 오는 경우가 많다 */

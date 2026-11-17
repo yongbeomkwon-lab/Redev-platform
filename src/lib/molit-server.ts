@@ -215,9 +215,11 @@ function toTransaction(kind: MolitTransactionKind, it: RawItem): MolitTransactio
     name = (it.houseType ?? "").trim() || "단독·다가구";
     pyeongBasis = "대지";
   } else {
+    // 연립·다세대(RHTrade2) — 전용면적(excluUseAr)으로 평당가를 내고, 건물명(mhouseNm)을 이름으로 쓴다.
+    // 대지권면적(landAr)은 전용면적이 비어 있을 때만 대체 기준으로 쓴다(대지면적과는 다른 값이라 표시명은 그대로 둔다).
     areaSqm = num(it.excluUseAr);
     if (!areaSqm) plottageSqm = num(it.landAr);
-    name = (it.houseType ?? "").trim() || "연립·다세대";
+    name = (it.mhouseNm ?? "").trim() || (it.houseType ?? "").trim() || "연립·다세대";
   }
 
   const baseArea = pyeongBasis === "대지" ? plottageSqm ?? areaSqm : areaSqm;
