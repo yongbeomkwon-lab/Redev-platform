@@ -110,6 +110,13 @@ export default function ZoneOfficialPanel({
                 의제처리구역 실경계(필지선 추종)
                 <span className="text-emerald-700/70"> · {meta.asOfDetail} 기준</span>
               </>
+            ) : zone.geom === "공고도면" ? (
+              <>
+                구청·서울시 공고 도면에서 옮긴 경계
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
+                </span>
+              </>
             ) : zone.geom === "미고시" ? (
               <>
                 미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다
