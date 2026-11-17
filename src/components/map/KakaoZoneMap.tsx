@@ -198,6 +198,8 @@ export default function KakaoZoneMap({
   onFail,
 }: KakaoZoneMapProps) {
   const mapElRef = useRef<HTMLDivElement | null>(null);
+  /** 지도 + 우리 레이어(꼭짓점 핸들·토글)를 감싸는 래퍼 — 더블클릭·우클릭은 여기서 받는다 */
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<KakaoMap | null>(null);
   const sdkRef = useRef<KakaoSDK | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -266,6 +268,11 @@ export default function KakaoZoneMap({
   const adminDragRef = useRef<{ index: number; pointerId: number; raf: number; latest: [number, number] | null } | null>(
     null
   );
+  /**
+   * 그리기 중 마지막으로 점을 찍은 화면 좌표 — 더블클릭의 **두 번째 클릭**이 점을 또 찍지 않게 한다.
+   * (더블클릭 = ‘그 자리에서 완료’. 그냥 두면 꼭짓점 두 개가 겹쳐 찍힌 뒤 완료된다)
+   */
+  const lastAddRef = useRef<{ t: number; x: number; y: number } | null>(null);
   /** 마지막으로 처리한 관리자 구역 화면 맞춤 토큰 */
   const lastAdminFitRef = useRef(0);
 
@@ -1049,6 +1056,15 @@ export default function KakaoZoneMap({
           }
         }
         hideTip();
+        // 더블클릭의 두 번째 클릭 — 같은 자리에서 곧바로 또 찍힌 점은 버린다.
+        //   (첫 클릭이 마지막 꼭짓점이 되고, 이어지는 dblclick 이 완료를 부른다)
+        const px = e.point;
+        const lastAdd = lastAddRef.current;
+        const nowMs = performance.now();
+        if (px && lastAdd && nowMs - lastAdd.t < 400 && Math.hypot(px.x - lastAdd.x, px.y - lastAdd.y) <= 6) {
+          return;
+        }
+        lastAddRef.current = px ? { t: nowMs, x: px.x, y: px.y } : null;
         adm.onAddPoint(lat, lng);
         return;
       }
@@ -1091,6 +1107,55 @@ export default function KakaoZoneMap({
     k.maps.event.addListener(map, "click", onMapClick);
     k.maps.event.addListener(map, "dragstart", hideTip);
 
+    // ── 관리자 그리기: ‘그 자리에서 완료’(더블클릭·우클릭) + 고무줄 선 정리 ─────────
+    //   카카오 SDK 이벤트에는 dblclick·contextmenu 가 없어 지도 컨테이너 DOM 에 직접 건다.
+    //   그리는 중이 아니면(일반 방문자·일반 관람) 아무 동작도 가로채지 않는다.
+    const drawingNow = (): AdminMapConfig | null => {
+      const a = adminRef.current;
+      return a?.adding && a.draft && a.draft.length > 0 ? a : null;
+    };
+    /** 그 자리에서 완료 — 패널·도구 막대의 ‘완료’와 같은 동작(꼭짓점 3개 이상일 때만) */
+    const finishInPlace = () => {
+      const a = drawingNow();
+      if (!a?.draft || a.draft.length < 3) return;
+      adminCursorRef.current = null;
+      a.onFinishByFirstPoint();
+    };
+    /** 다음 틱에 완료 — 방금 클릭이 만든 꼭짓점이 상태에 반영된 뒤에 센다 */
+    const finishInPlaceSoon = () => {
+      window.setTimeout(finishInPlace, 0);
+    };
+    /** 따라다니던 고무줄 선(마지막 점 → 커서)을 지운다 */
+    const dropRubberBand = () => {
+      if (!adminCursorRef.current) return;
+      adminCursorRef.current = null;
+      draw();
+    };
+    const onMapDblClick = (ev: MouseEvent) => {
+      if (!drawingNow()) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      finishInPlaceSoon();
+    };
+    const onMapContextMenu = (ev: MouseEvent) => {
+      if (!drawingNow()) return;
+      // 꼭짓점 핸들 위 우클릭은 ‘점 삭제’가 맡는다(핸들이 직접 처리)
+      const t = ev.target as HTMLElement | null;
+      if (t?.closest?.("[data-vx],[data-mid]")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      finishInPlaceSoon();
+    };
+    // 더블클릭·우클릭은 **래퍼**에서 받는다:
+    //   첫 클릭이 찍은 꼭짓점 핸들(지도 위에 얹힌 다른 DOM)이 두 번째 클릭을 받아도,
+    //   dblclick 은 두 번의 클릭 대상의 공통 조상(래퍼)으로 올라오기 때문이다.
+    const wrap = wrapRef.current ?? el;
+    wrap.addEventListener("dblclick", onMapDblClick);
+    wrap.addEventListener("contextmenu", onMapContextMenu);
+    // 마우스가 지도 밖(도구 막대·왼쪽/오른쪽 패널)으로 나가면 커서 위치를 버려 점선이 남지 않게 한다
+    el.addEventListener("mouseleave", dropRubberBand);
+    el.addEventListener("pointerleave", dropRubberBand);
+
     // 크기 변경 대응 — 관찰 시작 직후에도 한 번 불리므로 실제 크기 변화만 처리한다
     let ro: ResizeObserver | null = null;
     let lastW = el.clientWidth;
@@ -1121,6 +1186,11 @@ export default function KakaoZoneMap({
       pinAtRef.current = { lat: NaN, lng: NaN };
       stationAtRef.current = { lat: NaN, lng: NaN };
       passthroughRef.current = { click: null, move: null };
+      wrap.removeEventListener("dblclick", onMapDblClick);
+      wrap.removeEventListener("contextmenu", onMapContextMenu);
+      el.removeEventListener("mouseleave", dropRubberBand);
+      el.removeEventListener("pointerleave", dropRubberBand);
+      adminCursorRef.current = null;
       anchors.a.poly?.setMap(null);
       anchors.b.poly?.setMap(null);
       mo?.disconnect();
@@ -1131,6 +1201,46 @@ export default function KakaoZoneMap({
       mapRef.current = null;
     };
   }, [draw, onFail]);
+
+  // ── 관리자 그리기 단축키: Enter = 그 자리에서 완료, Escape = 취소 ────────────────
+  //   · 그리는 중일 때만 동작한다(일반 관람·검색 입력 중에는 아무 키도 가로채지 않는다).
+  //   · 초안을 지우는 일은 패널(ZoneExplorer)만 할 수 있어, Escape 는 같은 화면의 ‘취소’ 버튼을
+  //     누른 것과 같게 처리한다(새 상태를 이 컴포넌트가 만들지 않는다).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const a = adminRef.current;
+      if (!a?.adding || !a.draft) return;
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) {
+        return;
+      }
+      if (e.key === "Enter") {
+        if (a.draft.length < 3) return;
+        e.preventDefault();
+        adminCursorRef.current = null;
+        a.onFinishByFirstPoint();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        adminCursorRef.current = null;
+        document.querySelector<HTMLButtonElement>('[data-testid="admin-cancel"]')?.click();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // ── 그리는 동안 카카오 지도 기본 ‘더블클릭 확대’를 끈다 -> 더블클릭은 ‘완료’로 쓴다 ──
+  useEffect(() => {
+    const map = mapRef.current as unknown as { setOptions?: (o: Record<string, unknown>) => void } | null;
+    if (!map?.setOptions) return;
+    const drawing = !!(admin?.adding && admin?.draft && admin.draft.length > 0);
+    try {
+      map.setOptions({ disableDoubleClickZoom: drawing });
+    } catch {
+      // 옵션을 모르는 SDK 버전이면 그냥 둔다(더블클릭 완료는 DOM 리스너가 그대로 처리한다)
+    }
+  }, [admin?.adding, admin?.draft]);
 
   // ── 데이터·선택 변경 → 다시 그리기 ──────────────────────────────────────────
   useEffect(() => {
@@ -1403,7 +1513,7 @@ export default function KakaoZoneMap({
   const adminDraft = admin?.draft ?? null;
 
   return (
-    <div className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl">
+    <div ref={wrapRef} className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl">
       <div ref={mapElRef} className="h-full w-full" />
 
       {/* ── 선택 구역 이름표 — z-index 100 우리 레이어(폴리곤 캔버스 위) ── */}
@@ -1452,6 +1562,16 @@ export default function KakaoZoneMap({
         className="pointer-events-none absolute z-[700] hidden max-w-[300px] rounded-md bg-slate-900/90 px-2 py-1 text-[11px] font-semibold text-white shadow-lg"
         style={{ display: "none" }}
       />
+
+      {/* ── 관리자 그리기 안내 — 도구 막대가 숨는 좁은 화면(xl 미만)에서도 조작법을 보여준다 ── */}
+      {admin?.adding && adminDraft && adminDraft.length > 0 && (
+        <div
+          data-testid="admin-draw-hint"
+          className="pointer-events-none absolute left-1/2 top-2 z-[620] -translate-x-1/2 whitespace-nowrap rounded-full border border-sky-300 bg-white/95 px-3 py-1 text-[11px] font-semibold text-sky-900 shadow-md xl:hidden"
+        >
+          지도 탭: 점 추가 · 더블클릭/우클릭/Enter: 완료 · Esc: 취소
+        </div>
+      )}
 
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
       {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}

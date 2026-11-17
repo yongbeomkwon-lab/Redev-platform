@@ -500,7 +500,9 @@ export default function ZoneExplorer() {
     setAdminMeta(null);
     setDraft({ points: [] });
     setPanelOpen(true);
-    setAdminMsg("지도를 탭해 꼭짓점을 찍으세요. 첫 점을 다시 탭하면 완료됩니다.");
+    setAdminMsg(
+      "지도를 탭해 꼭짓점을 찍으세요. 다 찍었으면 더블클릭·우클릭·Enter — 마우스를 옮기지 않고 그 자리에서 완료됩니다."
+    );
   }
 
   /** 선택한 구역(관리자 구역 또는 공식·대표 구역)의 경계를 고치기 시작한다 */

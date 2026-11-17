@@ -9,6 +9,7 @@
 //   · 일반 방문자에게는 이 컴포넌트가 아예 렌더되지 않는다.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useId } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
   CUSTOM_ZONE_STAGES,
   CUSTOM_ZONE_TYPES,
@@ -66,6 +67,16 @@ const BTN =
   "rounded-lg border px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40";
 const BTN_DARK = `${BTN} border-slate-800 bg-slate-900 text-white hover:bg-slate-800`;
 const BTN_LIGHT = `${BTN} border-slate-300 bg-white text-slate-700 hover:border-slate-500 hover:text-slate-900`;
+
+/**
+ * 지도 위 도구 막대 버튼 — 포인터·마우스·클릭이 지도까지 올라가 꼭짓점이 찍히지 않게 막는다.
+ * (지도는 DOM 리스너로 click/dblclick/contextmenu 를 받으므로 버튼에서 끊어 둔다)
+ */
+const guardProps = {
+  onPointerDown: (e: ReactPointerEvent) => e.stopPropagation(),
+  onMouseDown: (e: ReactMouseEvent) => e.stopPropagation(),
+  onContextMenu: (e: ReactMouseEvent) => e.stopPropagation(),
+} as const;
 
 export function AdminZonePanel(props: AdminPanelProps) {
   const {
@@ -179,6 +190,7 @@ export function AdminZonePanel(props: AdminPanelProps) {
               data-testid="admin-finish"
               onClick={props.onFinish}
               disabled={draftPoints.length < 3 || !!meta}
+              title="그리기 완료 (지도에서 더블클릭·우클릭·Enter 도 같다)"
               className={BTN_DARK}
             >
               ✓ 완료
@@ -189,7 +201,7 @@ export function AdminZonePanel(props: AdminPanelProps) {
           </div>
           <p className="mt-1 text-[10px] leading-snug text-sky-900/80">
             {adding
-              ? "지도를 탭해 꼭짓점을 찍으세요(첫 점을 다시 탭하면 완료)."
+              ? "지도 탭: 점 추가 · 더블클릭/우클릭/Enter: 완료(그 자리에서) · Esc: 취소"
               : "꼭짓점 핸들을 끌어 옮기고, 변 가운데 + 로 점을 추가하세요."}{" "}
             점의 ✕ 배지(또는 우클릭)로 삭제합니다.
           </p>
@@ -405,7 +417,11 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
       </span>
       <button
         type="button"
-        onClick={props.onUndo}
+        {...guardProps}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onUndo();
+        }}
         disabled={draftPoints.length === 0}
         aria-label="실행취소 — 마지막 점 삭제"
         title="실행취소 — 마지막 점 삭제"
@@ -415,24 +431,34 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
       </button>
       <button
         type="button"
+        {...guardProps}
         data-testid="admin-toolbar-finish"
-        onClick={props.onFinish}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onFinish();
+        }}
         disabled={draftPoints.length < 3 || !!props.meta}
-        title="그리기 완료 — 구역 정보 입력으로"
+        title="그리기 완료 — 구역 정보 입력으로 (지도에서 더블클릭·우클릭·Enter 도 같다)"
         className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-slate-800 disabled:opacity-40"
       >
         ✓ 완료
       </button>
       <button
         type="button"
-        onClick={props.onCancel}
+        {...guardProps}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onCancel();
+        }}
         aria-label="취소"
-        title="그리기 취소"
+        title="그리기 취소 (Esc)"
         className="rounded-full border border-slate-300 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-slate-500"
       >
         ✕
       </button>
-      <span className="mr-1 hidden text-[10px] text-slate-400 xl:inline">{adding ? "지도를 탭해 점 찍기" : ""}</span>
+      <span className="mr-1 text-[10px] text-slate-500">
+        {adding ? "지도 탭: 점 추가 · 더블클릭/우클릭/Enter: 완료" : "핸들을 끌어 옮기기 · 변 +: 점 추가"}
+      </span>
     </div>
   );
 }
