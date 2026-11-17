@@ -31,6 +31,48 @@ export type ZoneMapProps = {
    * 주소 핀은 핀 지점을 확대해 보여주므로(골목·건물명), 구역 경계 전체는 이 버튼으로 본다.
    */
   zoneFitRequest?: number;
+  /**
+   * 관리자 모드(?admin=1)에서만 넘긴다 — 지도 위에서 구역 경계를 직접 그리고 고친다.
+   * 없으면(일반 방문자) 지도는 기존과 완전히 같다.
+   */
+  admin?: AdminMapConfig;
+};
+
+/** 관리자 모드가 지도에 넘기는 값 — 저장된 구역(그리기) + 지금 그리는 초안 */
+export type AdminMapConfig = {
+  /** 저장된 관리자 구역 — 관리자 모드에서만 지도에 그린다 */
+  zones: AdminZoneShape[];
+  /** 지금 그리는/고치는 링([위도, 경도]) — 없으면 초안 없음 */
+  draft: [number, number][] | null;
+  /** 지도 탭으로 꼭짓점을 추가하는 중인지(경계 수정 중에는 핸들만 움직인다) */
+  adding: boolean;
+  /** 목록·지도에서 고른 관리자 구역 */
+  selectedId?: string;
+  /** ‘이 구역으로 지도 맞추기’ 요청 토큰 */
+  fit?: { id: string; token: number } | null;
+  /** 지도 탭 → 꼭짓점 추가 */
+  onAddPoint: (lat: number, lng: number) => void;
+  /** 첫 점을 다시 탭했을 때(꼭짓점 3개 이상) — 그리기 완료 */
+  onFinishByFirstPoint: () => void;
+  /** 꼭짓점 드래그 */
+  onMovePoint: (index: number, lat: number, lng: number) => void;
+  /** 변 중간 + 핸들 → 꼭짓점 삽입 */
+  onInsertPoint: (index: number, lat: number, lng: number) => void;
+  /** 꼭짓점 삭제(✕ 배지·우클릭) */
+  onRemovePoint: (index: number) => void;
+  /** 지도에서 관리자 구역 클릭 */
+  onSelectZone: (id: string) => void;
+};
+
+/** 지도에 그리는 관리자 구역(가벼운 형태) */
+export type AdminZoneShape = {
+  id: string;
+  name: string;
+  type: string;
+  color: string;
+  ring: [number, number][];
+  /** 공식 구역 도형을 대체하는 경계 보정인지(점선으로 구분) */
+  replaces?: boolean;
 };
 
 /** 주소 → 구역 판별 결과를 지도에 찍는 핀/말풍선 */

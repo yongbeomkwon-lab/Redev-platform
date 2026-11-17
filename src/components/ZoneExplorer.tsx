@@ -35,9 +35,24 @@ import {
   verdictHeadline,
   type AddressVerdict,
 } from "@/lib/address-verdict";
-import type { AddressPin, StationPin } from "@/components/map/props";
+import type { AddressPin, AdminMapConfig, AdminZoneShape, StationPin } from "@/components/map/props";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
+import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
+import {
+  ADMIN_STORAGE_KEY,
+  CUSTOM_ZONE_TYPES,
+  customZoneColor,
+  customZonesToGeoJSON,
+  exportFileName,
+  formatArea,
+  loadCustomZones,
+  newCustomZoneId,
+  ringAreaSqm,
+  saveCustomZones,
+  type CustomZone,
+  type CustomZoneType,
+} from "@/lib/custom-zones";
 
 const ZONE_TYPES: (MapZoneType | "전체")[] = [
   "전체",
@@ -87,6 +102,58 @@ export default function ZoneExplorer() {
   // ‘구역 전체 보기’ 요청 토큰 — 주소 핀은 핀 지점을 확대해 보여주므로, 구역 경계 전체는 버튼으로 본다.
   // 값이 바뀔 때마다 지도가 선택 구역 경계에 화면을 맞춘다(카카오맵·OSM 공통).
   const [zoneFitRequest, setZoneFitRequest] = useState(0);
+
+  // ── 관리자 모드(?admin=1) ────────────────────────────────────────────────
+  //   일반 방문자는 이 상태가 모두 비어 있어 화면이 기존과 똑같다.
+  const [adminMode, setAdminMode] = useState(false);
+  /** 이 브라우저에 저장된 관리자 구역 */
+  const [customZones, setCustomZones] = useState<CustomZone[]>([]);
+  /** 지금 그리는/고치는 초안 */
+  const [draft, setDraft] = useState<{
+    points: [number, number][];
+    editingId?: string;
+    replacesZoneId?: string;
+    replacesName?: string;
+    replacesArea?: number;
+  } | null>(null);
+  /** 완료 후 입력하는 메타정보 */
+  const [adminMeta, setAdminMeta] = useState<AdminMetaForm | null>(null);
+  const [adminMsg, setAdminMsg] = useState<string | null>(null);
+  const [selectedCustomId, setSelectedCustomId] = useState<string | undefined>(undefined);
+  const [adminFit, setAdminFit] = useState<{ id: string; token: number } | null>(null);
+
+  // 진입: ?admin=1 → localStorage 에 기억. 이후 방문은 주소에 없어도 관리자 모드로 열린다.
+  useEffect(() => {
+    let url: URL | null = null;
+    try {
+      url = new URL(window.location.href);
+    } catch {
+      url = null;
+    }
+    const q = url?.searchParams.get("admin") ?? null;
+    if (q === "1") {
+      try {
+        window.localStorage.setItem(ADMIN_STORAGE_KEY, "1");
+      } catch {
+        /* 저장 불가(사생활 모드)해도 이번 화면은 관리자 모드 */
+      }
+      setAdminMode(true);
+    } else if (q === "0") {
+      try {
+        window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+      } catch {
+        /* 무시 */
+      }
+      setAdminMode(false);
+    } else {
+      try {
+        setAdminMode(window.localStorage.getItem(ADMIN_STORAGE_KEY) === "1");
+      } catch {
+        setAdminMode(false);
+      }
+    }
+    setCustomZones(loadCustomZones());
+  }, []);
 
   // 좁은 화면에서는 상세 패널을 접은 채로 시작해 지도를 가리지 않게 한다
   useEffect(() => {
@@ -415,6 +482,293 @@ export default function ZoneExplorer() {
     setStationPick(null);
   }
 
+  // ─── 관리자 모드: 구역 그리기·경계 수정 ─────────────────────────────────────
+  /** 저장 + localStorage 반영 — 실패해도 화면 목록은 유지 */
+  function commitCustomZones(next: CustomZone[]): boolean {
+    setCustomZones(next);
+    return saveCustomZones(next);
+  }
+
+  const selectedCustom = adminMode ? customZones.find((z) => z.id === selectedCustomId) : undefined;
+  /** 경계 수정 대상 — 관리자 구역 우선, 다음 공식·대표 구역 */
+  const selectedRing: [number, number][] | undefined =
+    selectedCustom?.ring ?? selectedSeoul?.polygon ?? selected?.polygon;
+  const canEditSelectedRing = !!selectedRing && selectedRing.length >= 3;
+
+  function startNewDraw() {
+    setSelectedCustomId(undefined);
+    setAdminMeta(null);
+    setDraft({ points: [] });
+    setPanelOpen(true);
+    setAdminMsg("지도를 탭해 꼭짓점을 찍으세요. 첫 점을 다시 탭하면 완료됩니다.");
+  }
+
+  /** 선택한 구역(관리자 구역 또는 공식·대표 구역)의 경계를 고치기 시작한다 */
+  function startEditSelected() {
+    setAdminMeta(null);
+    setPanelOpen(true);
+    if (selectedCustom) {
+      setDraft({
+        points: selectedCustom.ring.map(([lat, lng]) => [lat, lng] as [number, number]),
+        editingId: selectedCustom.id,
+        ...(selectedCustom.replacesZoneId ? { replacesZoneId: selectedCustom.replacesZoneId } : {}),
+        ...(selectedCustom.replacesName ? { replacesName: selectedCustom.replacesName } : {}),
+        ...(selectedCustom.replacesArea ? { replacesArea: selectedCustom.replacesArea } : {}),
+      });
+      setAdminMsg(`‘${selectedCustom.name}’ 경계를 고칩니다 — 점을 끌고, 변의 +로 추가, ✕로 삭제하세요.`);
+      return;
+    }
+    const ring = selectedSeoul?.polygon ?? selected?.polygon;
+    if (!ring || ring.length < 3) {
+      setAdminMsg("선택한 구역에 경계 도형이 없습니다. ‘새 구역 그리기’로 시작하세요.");
+      return;
+    }
+    const name = selectedSeoul?.name ?? selected?.name ?? "선택 구역";
+    const officialArea = selectedSeoul?.area ?? ringAreaSqm(ring);
+    setDraft({
+      points: ring.map(([lat, lng]) => [lat, lng] as [number, number]),
+      replacesZoneId: selectedSeoul?.id ?? selected?.id,
+      replacesName: name,
+      replacesArea: officialArea,
+    });
+    setAdminMsg(`${name} 경계를 고칩니다 — 점을 끌고, 변의 +로 추가, ✕로 삭제하세요.`);
+  }
+
+  function addDraftPoint(lat: number, lng: number) {
+    setDraft((d) => (d ? { ...d, points: [...d.points, [lat, lng] as [number, number]] } : d));
+  }
+
+  function moveDraftPoint(index: number, lat: number, lng: number) {
+    setDraft((d) => {
+      if (!d || !d.points[index]) return d;
+      const points = d.points.slice();
+      points[index] = [lat, lng];
+      return { ...d, points };
+    });
+  }
+
+  function insertDraftPoint(index: number, lat: number, lng: number) {
+    setDraft((d) => {
+      if (!d) return d;
+      const points = d.points.slice();
+      points.splice(Math.max(0, Math.min(points.length, index)), 0, [lat, lng]);
+      return { ...d, points };
+    });
+  }
+
+  function removeDraftPoint(index: number) {
+    if (!draft) return;
+    if (draft.points.length <= 3) {
+      setAdminMsg("꼭짓점은 3개 이상이어야 합니다.");
+      return;
+    }
+    setDraft({ ...draft, points: draft.points.filter((_, k) => k !== index) });
+  }
+
+  function undoDraftPoint() {
+    setDraft((d) => (d && d.points.length ? { ...d, points: d.points.slice(0, -1) } : d));
+  }
+
+  /** 완료 → 메타 입력 폼 */
+  function finishDraft() {
+    if (!draft) return;
+    if (draft.points.length < 3) {
+      setAdminMsg("꼭짓점을 3개 이상 찍어야 구역이 됩니다.");
+      return;
+    }
+    const base = draft.editingId ? customZones.find((z) => z.id === draft.editingId) : undefined;
+    const official = draft.replacesZoneId ? seoulZones.find((z) => z.id === draft.replacesZoneId) : undefined;
+    const officialType = official?.type as CustomZoneType | undefined;
+    setAdminMeta({
+      name: base?.name ?? draft.replacesName ?? official?.name ?? "",
+      type: base?.type ?? (officialType && (CUSTOM_ZONE_TYPES as readonly string[]).includes(officialType) ? officialType : "일반재개발"),
+      stage: base?.stage ?? official?.stage ?? "추진준비",
+      gu: base?.gu ?? official?.gu ?? "",
+      note: base?.note ?? "",
+    });
+    setAdminMsg("구역 정보를 입력하고 저장하세요.");
+  }
+
+  function cancelDraft() {
+    setDraft(null);
+    setAdminMeta(null);
+    setAdminMsg(null);
+  }
+
+  /** 메타 입력만 닫고 초안은 남긴다 — 점을 더 고칠 수 있게 */
+  function cancelMeta() {
+    setAdminMeta(null);
+    setAdminMsg("구역 정보 입력을 닫았습니다 — 점을 더 고치거나 완료를 다시 누르세요.");
+  }
+
+  /** 메타 입력 → 저장(localStorage) */
+  function saveDraftZone() {
+    if (!draft || !adminMeta) return;
+    const name = adminMeta.name.trim();
+    if (!name) {
+      setAdminMsg("구역명을 입력하세요.");
+      return;
+    }
+    const now = new Date().toISOString();
+    const existing = draft.editingId ? customZones.find((z) => z.id === draft.editingId) : undefined;
+    const zone: CustomZone = {
+      id: existing?.id ?? newCustomZoneId(),
+      name,
+      type: adminMeta.type,
+      stage: adminMeta.stage,
+      gu: adminMeta.gu.trim(),
+      note: adminMeta.note.trim(),
+      ring: draft.points.map(([lat, lng]) => [lat, lng] as [number, number]),
+      areaSqm: ringAreaSqm(draft.points),
+      ...(draft.replacesZoneId ? { replacesZoneId: draft.replacesZoneId } : {}),
+      ...(draft.replacesName ? { replacesName: draft.replacesName } : {}),
+      ...(draft.replacesArea ? { replacesArea: draft.replacesArea } : {}),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    const next = existing ? customZones.map((z) => (z.id === zone.id ? zone : z)) : [...customZones, zone];
+    const ok = commitCustomZones(next);
+    setDraft(null);
+    setAdminMeta(null);
+    setSelectedCustomId(zone.id);
+    setAdminFit({ id: zone.id, token: Date.now() });
+    setAdminMsg(
+      ok
+        ? `‘${zone.name}’ 저장 완료 — 이 브라우저에 보관되어 새로고침해도 남아 있습니다.`
+        : `‘${zone.name}’를 화면에는 반영했지만 브라우저 저장에 실패했습니다(저장 공간 부족 등).`
+    );
+  }
+
+  function selectCustomZone(id: string) {
+    setSelectedCustomId(id);
+    setAdminFit({ id, token: Date.now() });
+  }
+
+  function editCustomGeometry(id: string) {
+    const z = customZones.find((v) => v.id === id);
+    if (!z) return;
+    setSelectedCustomId(id);
+    setAdminMeta(null);
+    setPanelOpen(true);
+    setDraft({
+      points: z.ring.map(([lat, lng]) => [lat, lng] as [number, number]),
+      editingId: z.id,
+      ...(z.replacesZoneId ? { replacesZoneId: z.replacesZoneId } : {}),
+      ...(z.replacesName ? { replacesName: z.replacesName } : {}),
+      ...(z.replacesArea ? { replacesArea: z.replacesArea } : {}),
+    });
+    setAdminMsg(`‘${z.name}’ 경계를 고칩니다 — 점을 끌고, 변의 +로 추가, ✕로 삭제하세요.`);
+  }
+
+  function deleteCustomZone(id: string) {
+    const z = customZones.find((v) => v.id === id);
+    if (!z) return;
+    if (typeof window !== "undefined" && !window.confirm(`‘${z.name}’ 구역을 삭제할까요?\n이 브라우저에 저장된 도형만 지워집니다.`)) {
+      return;
+    }
+    commitCustomZones(customZones.filter((v) => v.id !== id));
+    if (selectedCustomId === id) setSelectedCustomId(undefined);
+    if (draft?.editingId === id) {
+      setDraft(null);
+      setAdminMeta(null);
+    }
+    setAdminMsg(`‘${z.name}’ 삭제했습니다.`);
+  }
+
+  function exportDownload() {
+    if (!customZones.length) return;
+    try {
+      const blob = new Blob([customZonesToGeoJSON(customZones)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exportFileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setAdminMsg(`JSON 파일을 내려받았습니다 (${customZones.length}곳).`);
+    } catch {
+      setAdminMsg("JSON 파일을 만들지 못했습니다.");
+    }
+  }
+
+  async function exportCopy() {
+    if (!customZones.length) return;
+    const json = customZonesToGeoJSON(customZones);
+    try {
+      await navigator.clipboard.writeText(json);
+      setAdminMsg(`클립보드에 복사했습니다 (${customZones.length}곳 · ${json.length.toLocaleString()}자).`);
+      return;
+    } catch {
+      /* 클립보드 권한이 없으면 아래 fallback */
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = json;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      setAdminMsg(ok ? `클립보드에 복사했습니다 (${customZones.length}곳).` : "복사하지 못했습니다 — JSON 다운로드를 쓰세요.");
+    } catch {
+      setAdminMsg("복사하지 못했습니다 — JSON 다운로드를 쓰세요.");
+    }
+  }
+
+  function exitAdminMode() {
+    setAdminMode(false);
+    setDraft(null);
+    setAdminMeta(null);
+    setSelectedCustomId(undefined);
+    setAdminMsg(null);
+    try {
+      window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+    } catch {
+      /* 무시 */
+    }
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("admin")) {
+        url.searchParams.delete("admin");
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch {
+      /* 무시 */
+    }
+  }
+
+  /** 지도에 넘기는 관리자 설정 — 일반 방문자에게는 undefined */
+  const adminShapes: AdminZoneShape[] = useMemo(
+    () =>
+      customZones.map((z) => ({
+        id: z.id,
+        name: z.name,
+        type: z.type,
+        color: customZoneColor(z.type),
+        ring: z.ring,
+        replaces: !!z.replacesZoneId,
+      })),
+    [customZones]
+  );
+  const adminMapConfig: AdminMapConfig | undefined = adminMode
+    ? {
+        zones: adminShapes,
+        draft: draft?.points ?? null,
+        adding: !!draft && !adminMeta,
+        selectedId: selectedCustomId,
+        fit: adminFit,
+        onAddPoint: addDraftPoint,
+        onFinishByFirstPoint: finishDraft,
+        onMovePoint: moveDraftPoint,
+        onInsertPoint: insertDraftPoint,
+        onRemovePoint: removeDraftPoint,
+        onSelectZone: selectCustomZone,
+      }
+    : undefined;
+
   if (loading) {
     return (
       <div className="flex h-[calc(100dvh-52px)] items-center justify-center bg-slate-100 text-sm text-slate-500">
@@ -438,8 +792,44 @@ export default function ZoneExplorer() {
           addressPin={addressPin}
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
+          admin={adminMapConfig}
         />
       </div>
+
+      {/* ── 관리자 모드: 그리는 동안 손 가까이에 뜨는 도구 막대 ─────────────────── */}
+      {adminMode && draft && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-[640] hidden -translate-x-1/2 xl:block">
+          <AdminDrawToolbar
+            zones={customZones}
+            draftPoints={draft.points}
+            adding={!!draft && !adminMeta}
+            editing={
+              draft.editingId || draft.replacesName
+                ? { id: draft.editingId, replacesName: draft.replacesName, officialArea: draft.replacesArea }
+                : null
+            }
+            meta={adminMeta}
+            message={adminMsg}
+            selectedCustomId={selectedCustomId}
+            selectedZoneName={selectedCustom?.name ?? selectedSeoul?.name ?? selected?.name}
+            canEditSelectedRing={canEditSelectedRing}
+            onStartNew={startNewDraw}
+            onStartEditSelected={startEditSelected}
+            onUndo={undoDraftPoint}
+            onFinish={finishDraft}
+            onCancel={cancelDraft}
+            onCancelMeta={cancelMeta}
+            onMetaChange={(patch) => setAdminMeta((m) => (m ? { ...m, ...patch } : m))}
+            onSave={saveDraftZone}
+            onSelectCustom={selectCustomZone}
+            onEditCustomGeometry={editCustomGeometry}
+            onDeleteCustom={deleteCustomZone}
+            onExportDownload={exportDownload}
+            onExportCopy={() => void exportCopy()}
+            onExit={exitAdminMode}
+          />
+        </div>
+      )}
 
       {/* ── 좌상단: 검색 + 필터 ─────────────────────────────────────────────── */}
       <div className="pointer-events-none absolute left-2 top-2 z-[620] flex w-[min(94vw,382px)] flex-col gap-2 sm:left-3 sm:top-3">
@@ -974,6 +1364,39 @@ export default function ZoneExplorer() {
             </div>
           )}
         </div>
+
+        {/* ── 관리자 모드 도구 — 검색·필터 아래에 붙는다(일반 방문자에게는 없음) ── */}
+      {adminMode && (
+        <AdminZonePanel
+          zones={customZones}
+          draftPoints={draft?.points ?? null}
+          adding={!!draft && !adminMeta}
+          editing={
+            draft?.editingId || draft?.replacesName
+              ? { id: draft.editingId, replacesName: draft.replacesName, officialArea: draft.replacesArea }
+              : null
+          }
+          meta={adminMeta}
+          message={adminMsg}
+          selectedCustomId={selectedCustomId}
+          selectedZoneName={selectedCustom?.name ?? selectedSeoul?.name ?? selected?.name}
+          canEditSelectedRing={canEditSelectedRing}
+          onStartNew={startNewDraw}
+          onStartEditSelected={startEditSelected}
+          onUndo={undoDraftPoint}
+          onFinish={finishDraft}
+          onCancel={cancelDraft}
+          onCancelMeta={cancelMeta}
+          onMetaChange={(patch) => setAdminMeta((m) => (m ? { ...m, ...patch } : m))}
+          onSave={saveDraftZone}
+          onSelectCustom={selectCustomZone}
+          onEditCustomGeometry={editCustomGeometry}
+          onDeleteCustom={deleteCustomZone}
+          onExportDownload={exportDownload}
+          onExportCopy={() => void exportCopy()}
+          onExit={exitAdminMode}
+        />
+      )}
       </div>
 
       {/* ── 좌하단: 범례 ───────────────────────────────────────────────────── */}
@@ -1026,7 +1449,7 @@ export default function ZoneExplorer() {
         <aside className="absolute z-[610] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl inset-x-2 bottom-2 top-auto max-h-[62dvh] md:inset-x-auto md:left-auto md:right-3 md:top-3 md:bottom-3 md:max-h-none md:w-[400px]">
           <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
             <b className="text-sm font-bold text-slate-900">
-              {selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "대표 구역"}
+              {selectedCustom ? selectedCustom.name : selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "대표 구역"}
             </b>
             {!selected && !selectedSeoul && (
               <span className="text-[11px] text-slate-500">{filtered.length}곳 · 실거래·매물 상세</span>
@@ -1041,6 +1464,49 @@ export default function ZoneExplorer() {
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {/* 0) 관리자 구역 — 내가 그린 구역의 상세 */}
+            {selectedCustom && (
+              <div data-testid="admin-custom-card" className="mb-3 space-y-2 rounded-xl border-2 border-sky-300 bg-sky-50/60 p-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-md bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">관리자</span>
+                  <b className="text-sm font-bold text-slate-900">{selectedCustom.name}</b>
+                  <span className="text-[11px] text-slate-600">{selectedCustom.type} · {selectedCustom.stage}</span>
+                  {selectedCustom.gu && <span className="text-[11px] text-slate-500">{selectedCustom.gu}</span>}
+                </div>
+                <p className="text-xs font-semibold text-slate-800">{formatArea(selectedCustom.areaSqm)}</p>
+                {selectedCustom.replacesName && (
+                  <p className="text-[11px] text-emerald-800">
+                    {selectedCustom.replacesName}
+                    {selectedCustom.replacesArea
+                      ? ` 고시면적 ${Math.round(selectedCustom.replacesArea).toLocaleString()}㎡ → 그린 면적 ${Math.round(
+                          selectedCustom.areaSqm
+                        ).toLocaleString()}㎡`
+                      : " 경계 보정"}
+                  </p>
+                )}
+                {selectedCustom.note && (
+                  <p className="whitespace-pre-wrap text-[11px] leading-snug text-slate-600">{selectedCustom.note}</p>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => editCustomGeometry(selectedCustom.id)}
+                    className="rounded-full bg-sky-700 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-sky-800"
+                  >
+                    경계 수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteCustomZone(selectedCustom.id)}
+                    className="rounded-full border border-rose-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                  >
+                    삭제
+                  </button>
+                  <span className="ml-auto self-center text-[10px] text-slate-400">이 브라우저에만 저장됨</span>
+                </div>
+              </div>
+            )}
+
             {/* 1) 대표 구역 상세 */}
             {selected && (
               <div className="space-y-4">

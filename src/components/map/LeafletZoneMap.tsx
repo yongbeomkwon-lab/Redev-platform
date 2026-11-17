@@ -276,6 +276,7 @@ export default function LeafletZoneMap({
   addressPin,
   stationPin,
   zoneFitRequest,
+  admin,
   fallbackReason,
 }: LeafletZoneMapProps) {
   // Canvas 렌더러 하나를 지도 전체가 공유한다.
@@ -389,6 +390,14 @@ export default function LeafletZoneMap({
           }
         >
           지도: OpenStreetMap · 카카오맵 대기
+        </div>
+      )}
+
+      {/* 관리자 모드인데 카카오맵이 없어 OSM으로 내려온 경우 — 그리기는 카카오맵에서만 된다는 안내 */}
+      {admin && (
+        <div className="absolute bottom-14 left-1/2 z-[600] max-w-[92vw] -translate-x-1/2 rounded-xl border border-amber-300 bg-amber-50/95 px-3 py-1.5 text-[11px] font-semibold leading-snug text-amber-900 shadow">
+          관리자 모드의 구역 그리기·경계 수정은 <b>카카오맵</b>에서만 동작합니다. 지금은 OSM 대체 지도라 그린 구역이 이
+          지도에 그려지지 않습니다(저장은 됨) — 카카오 JavaScript 키와 Web 도메인 등록을 확인하세요.
         </div>
       )}
 

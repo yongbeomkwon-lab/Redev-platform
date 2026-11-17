@@ -22,11 +22,13 @@
 //    · 선택: 이름표 CustomOverlay + 경계에 맞춰 부드럽게 이동(jump + animate)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";
 import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
-import { SEOUL_BOUNDS, type KakaoZoneMapProps } from "./props";
+import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps } from "./props";
+import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
   KakaoMap,
@@ -159,6 +161,22 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 }
 
+/** 캔버스 둥근 사각형(면적 배지) — roundRect 미지원 브라우저 대비 */
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
 /** 툴팁 한 줄: 신림1구역 · 재정비촉진구역 · 사업시행인가 · 22.3만㎡ (관악구) */
 function labelLine(z: { name: string; kind: string; stage: string; area: number; gu?: string }) {
   const area = z.area >= 10000 ? `${(z.area / 10000).toFixed(1)}만㎡` : `${z.area.toLocaleString()}㎡`;
@@ -176,6 +194,7 @@ export default function KakaoZoneMap({
   addressPin,
   stationPin,
   zoneFitRequest,
+  admin,
   onFail,
 }: KakaoZoneMapProps) {
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -235,6 +254,20 @@ export default function KakaoZoneMap({
   }>({ click: null, move: null });
   const onSelectRef = useRef(onSelectZone);
   onSelectRef.current = onSelectZone;
+  // ── 관리자 모드(그리기·경계 수정) ──────────────────────────────────────────
+  //   일반 방문자에게는 admin 이 없으므로 이 블록은 통째로 건너뛰다(기존 화면 그대로).
+  const adminRef = useRef<AdminMapConfig | undefined>(admin);
+  adminRef.current = admin;
+  /** 꼭짓점 핸들·변 + 핸들을 담는 DOM 레이어(위치는 draw 가 매 프레임 맞춘다) */
+  const adminLayerRef = useRef<HTMLDivElement | null>(null);
+  /** 그리는 중 마우스 커서(또는 마지막 터치) 위치 — 마지막 점에서 고무줄 선을 긋는다 */
+  const adminCursorRef = useRef<[number, number] | null>(null);
+  /** 꼭짓점 드래그 상태 */
+  const adminDragRef = useRef<{ index: number; pointerId: number; raf: number; latest: [number, number] | null } | null>(
+    null
+  );
+  /** 마지막으로 처리한 관리자 구역 화면 맞춤 토큰 */
+  const lastAdminFitRef = useRef(0);
 
   const prep = useMemo<PreparedZones>(() => prepareZones(seoulZones), [seoulZones]);
   const prepRef = useRef<PreparedZones>(prep);
@@ -525,6 +558,163 @@ export default function KakaoZoneMap({
       ctx.fill();
     }
 
+    // 4) 관리자 모드 — 내가 그린 구역과 지금 그리는 초안(꼭짓점·변·면적)
+    const adm = adminRef.current;
+    if (adm) {
+      const projectXY = (lat: number, lng: number): [number, number] => [
+        p0x + (lng - lng0) * pxPerLng,
+        p0y + (mercator(lat) - m0) * pxPerMerc,
+      ];
+
+      // 4-1) 저장된 구역 — 사업유형 색으로 채우고 흰 테두리를 한 번 더 그어 지도 위에서 읽히게
+      for (const z of adm.zones) {
+        if (!z.ring || z.ring.length < 3) continue;
+        const sel = z.id === adm.selectedId;
+        ctx.beginPath();
+        let minX = Infinity;
+        let maxX = -Infinity;
+        for (let i = 0; i < z.ring.length; i++) {
+          const [x, y] = projectXY(z.ring[i][0], z.ring[i][1]);
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = rgba(z.color, sel ? 0.42 : 0.26);
+        ctx.fill();
+        if (z.replaces) ctx.setLineDash([7, 4]);
+        ctx.lineWidth = sel ? 4.5 : 3;
+        ctx.strokeStyle = rgba(z.color, 1);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = "rgba(255,255,255,0.92)";
+        ctx.stroke();
+
+        // 이름표 — 화면에서 글자가 들어갈 만큼 큰 구역만(작은 구역은 목록에서 확인)
+        const c = ringCentroid(z.ring);
+        const [lx, ly] = projectXY(c[0], c[1]);
+        if (lx > -80 && lx < cw + 80 && ly > -40 && ly < ch + 40) {
+          ctx.font = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const tw = ctx.measureText(z.name).width;
+          if (maxX - minX > tw + 14) {
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "rgba(255,255,255,0.95)";
+            ctx.strokeText(z.name, lx, ly);
+            ctx.fillStyle = "rgba(15,23,42,0.95)";
+            ctx.fillText(z.name, lx, ly);
+          }
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
+      }
+
+      // 4-2) 지금 그리는 초안 — 꼭짓점·연결선·닫는 변·면적
+      const draft = adm.draft;
+      if (draft && draft.length > 0) {
+        const pts = draft.map(([la, ln]) => projectXY(la, ln));
+
+        if (pts.length >= 3) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(2,132,199,0.20)";
+          ctx.fill();
+          ctx.setLineDash([6, 4]);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(2,132,199,0.95)";
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // 열린 선(그리는 중 마지막 점 → 커서) — 흰 테두리 위에 파란 선
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        const cur = adminCursorRef.current;
+        if (adm.adding && cur) {
+          const [ex, ey] = projectXY(cur[0], cur[1]);
+          ctx.lineTo(ex, ey);
+        }
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "rgba(255,255,255,0.8)";
+        ctx.stroke();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = "#0369a1";
+        ctx.stroke();
+
+        // 꼭짓점 점(핸들과 같은 자리 — 캔버스에도 그려 두면 핸들 렌더 전에도 점이 보인다)
+        for (const [x, y] of pts) {
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, Math.PI * 2);
+          ctx.fillStyle = "#ffffff";
+          ctx.fill();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#0369a1";
+          ctx.stroke();
+        }
+
+        // 면적 배지 — 다각형 무게중심 위
+        if (pts.length >= 3) {
+          const cc = ringCentroid(draft);
+          const [bx, by] = projectXY(cc[0], cc[1]);
+          const text = formatArea(ringAreaSqm(draft));
+          ctx.font = "700 12px ui-sans-serif, system-ui, -apple-system, sans-serif";
+          const tw = ctx.measureText(text).width;
+          const w = tw + 16;
+          const h = 24;
+          roundRectPath(ctx, bx - w / 2, by - h / 2, w, h, 12);
+          ctx.fillStyle = "rgba(15,23,42,0.9)";
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(text, bx, by + 0.5);
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
+      }
+
+      // 4-3) 꼭짓점·변 + 핸들 위치 맞추기(카카오 지도와 같은 프레임에 붙어 움직이게)
+      const layer = adminLayerRef.current;
+      if (layer) {
+        for (const node of Array.from(layer.children) as HTMLElement[]) {
+          const vx = node.dataset.vx;
+          const mid = node.dataset.mid;
+          let x = NaN;
+          let y = NaN;
+          if (vx !== undefined) {
+            const p = draft?.[Number(vx)];
+            if (p) [x, y] = projectXY(p[0], p[1]);
+          } else if (mid !== undefined && draft && draft.length >= 2) {
+            const i0 = Number(mid) % draft.length;
+            const a = draft[i0];
+            const b = draft[(i0 + 1) % draft.length];
+            const [x1, y1] = projectXY(a[0], a[1]);
+            const [x2, y2] = projectXY(b[0], b[1]);
+            // 변이 화면에서 짧으면 + 핸들을 감춘다 — 공식 경계처럼 점이 수백 개인 구역에서
+            //  '+' 가 서로 겁치며 점을 가리는 것을 막는다(점 추가는 긴 변에서만).
+            if (Math.hypot(x2 - x1, y2 - y1) < 26) {
+              node.style.visibility = "hidden";
+              continue;
+            }
+            x = (x1 + x2) / 2;
+            y = (y1 + y2) / 2;
+          }
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            node.style.visibility = "hidden";
+            continue;
+          }
+          node.style.visibility = "visible";
+          node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0)`;
+        }
+      }
+    }
+
     setReady(true);
   }, []);
 
@@ -790,6 +980,12 @@ export default function KakaoZoneMap({
         moveRafRef.current = 0;
         const view = viewRef.current;
         const data = prepRef.current;
+        // 관리자 그리기 중 — 마지막 꼭짓점에서 커서까지 고무줄 선을 긋는다
+        const admNow = adminRef.current;
+        if (admNow?.adding && admNow.draft && admNow.draft.length > 0) {
+          adminCursorRef.current = [lat, lng];
+          draw();
+        }
         let hit: SeoulZone | undefined = hitTestZones(data, lat, lng);
         // 점으로 표시한 후보지 — 화면 반경 13px 안이면 잡는다
         if (!hit && view && point) {
@@ -812,6 +1008,7 @@ export default function KakaoZoneMap({
             draw();
           }
           hideTip();
+          if (adminRef.current?.adding) el.style.cursor = "crosshair";
           return;
         }
 
@@ -829,13 +1026,44 @@ export default function KakaoZoneMap({
           tip.style.left = `${Math.max(6, Math.min(x + 14, rect.width - tw - 8))}px`;
           tip.style.top = `${Math.max(6, y - 34)}px`;
         }
-        el.style.cursor = "pointer";
+        el.style.cursor = adminRef.current?.adding ? "crosshair" : "pointer";
       });
     };
 
     const onMapClick = (e: KakaoMouseEvent) => {
       const lat = e.latLng.getLat();
       const lng = e.latLng.getLng();
+      const adm = adminRef.current;
+      // ── 관리자 모드: 탭 = 꼭짓점 추가, 첫 점을 다시 탭하면 완료 ──────────────
+      if (adm?.adding && adm.draft) {
+        const view0 = viewRef.current;
+        const pt0 = e.point;
+        const first = adm.draft[0];
+        if (first && adm.draft.length >= 3 && view0 && pt0) {
+          const fx = view0.p0x + (first[1] - view0.cLng) * view0.pxPerLng;
+          const fy = view0.p0y + (mercator(first[0]) - view0.m0) * view0.pxPerMerc;
+          if (Math.hypot(pt0.x - fx, pt0.y - fy) <= 18) {
+            hideTip();
+            adm.onFinishByFirstPoint();
+            return;
+          }
+        }
+        hideTip();
+        adm.onAddPoint(lat, lng);
+        return;
+      }
+      // ── 관리자 모드: 저장된 관리자 구역을 누르면 선택(수정할 구역 고르기) ──────
+      if (adm) {
+        let hitCustom: string | undefined;
+        for (const z of adm.zones) {
+          if (z.ring.length >= 3 && ringContainsLatLng(z.ring, lat, lng)) hitCustom = z.id;
+        }
+        if (hitCustom) {
+          hideTip();
+          adm.onSelectZone(hitCustom);
+          return;
+        }
+      }
       const data = prepRef.current;
       let hit: SeoulZone | undefined = hitTestZones(data, lat, lng);
       const view = viewRef.current;
@@ -927,6 +1155,90 @@ export default function KakaoZoneMap({
       draw();
     }, 430);
   }, [draw]);
+
+  // ── 관리자 모드: 초안·저장 구역·선택이 바뀌면 즉시 다시 그리기 ─────────────
+  useEffect(() => {
+    draw();
+  }, [admin?.draft, admin?.zones, admin?.selectedId, admin?.adding, draw]);
+
+  // ── 관리자 구역으로 화면 맞추기(목록에서 골랐을 때) ────────────────────────
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    const req = admin?.fit;
+    const list = admin?.zones;
+    if (!k || !map || !req || !list) return;
+    if (lastAdminFitRef.current === req.token) return;
+    lastAdminFitRef.current = req.token;
+    const z = list.find((v) => v.id === req.id);
+    if (!z || z.ring.length < 3) return;
+    const [[minLat, minLng], [maxLat, maxLng]] = ringBounds(z.ring);
+    fitLatLngSpan(k, map, minLat, minLng, maxLat, maxLng, mapElRef.current);
+    settleView();
+  }, [admin?.fit, admin?.zones, settleView]);
+
+  /** 화면 좌표 → 위도·경도 — draw 가 쓰는 변환과 같은 식(핸들 드래그용) */
+  const clientToLatLng = useCallback((clientX: number, clientY: number): [number, number] | null => {
+    const view = viewRef.current;
+    const el = mapElRef.current;
+    if (!view || !el) return null;
+    const box = el.getBoundingClientRect();
+    const x = clientX - box.left;
+    const y = clientY - box.top;
+    if (view.pxPerLng > 0 && view.pxPerMerc < 0) {
+      const lng = view.cLng + (x - view.p0x) / view.pxPerLng;
+      const lat = unmercator((y - view.p0y) / view.pxPerMerc + view.m0);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    }
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    if (k && map) {
+      const ll = map.getProjection().coordsFromContainerPoint(new k.maps.Point(x, y));
+      return [ll.getLat(), ll.getLng()];
+    }
+    return null;
+  }, []);
+
+  // ── 꼭짓점 드래그 — iPad 터치에서도 지도가 끌리지 않도록 포인터를 붙잡고 처리한다.
+  //    래퍼(`touch-action:none`) + setPointerCapture 라 손가락이 핸들 밖으로 나가도 계속 따라온다.
+  const onVertexDown = (e: ReactPointerEvent<HTMLButtonElement>, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* 캡처 미지원 시에도 move 이벤트는 온다 */
+    }
+    adminDragRef.current = { index, pointerId: e.pointerId, raf: 0, latest: null };
+  };
+
+  const onVertexMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const d = adminDragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ll = clientToLatLng(e.clientX, e.clientY);
+    if (!ll) return;
+    d.latest = ll;
+    if (d.raf) return;
+    d.raf = window.requestAnimationFrame(() => {
+      const cur = adminDragRef.current;
+      if (!cur) return;
+      cur.raf = 0;
+      if (cur.latest) adminRef.current?.onMovePoint(cur.index, cur.latest[0], cur.latest[1]);
+    });
+  };
+
+  const onVertexUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const d = adminDragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    e.stopPropagation();
+    if (d.raf) window.cancelAnimationFrame(d.raf);
+    const last = d.latest ?? clientToLatLng(e.clientX, e.clientY);
+    adminDragRef.current = null;
+    if (last) adminRef.current?.onMovePoint(d.index, last[0], last[1]);
+    adminCursorRef.current = null;
+  };
 
   // ── 선택 구역 이름표 + 부드러운 이동 ────────────────────────────────────────
   //   이름표도 우리 DOM 레이어(z-index 100)에 둔다 — 카카오 오버레이에 두면 폴리곤 캔버스가
@@ -1087,6 +1399,9 @@ export default function KakaoZoneMap({
     map.setLevel(level, { animate: { duration: 250 } });
   }, []);
 
+  /** 관리자 초안 — JSX 에서 좁힌 타입으로 쓰기 위해 변수로 꺼내 둔다 */
+  const adminDraft = admin?.draft ?? null;
+
   return (
     <div className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl">
       <div ref={mapElRef} className="h-full w-full" />
@@ -1207,6 +1522,117 @@ export default function KakaoZoneMap({
           </button>
         )}
       </div>
+
+      {/* ── 관리자 모드: 꼭짓점 핸들 + 변 가운데 + 핸들(Ipad 터치 44px) ── */}
+      {adminDraft && adminDraft.length > 0 && (
+        <div
+          ref={adminLayerRef}
+          className="pointer-events-none absolute inset-0 z-[500]"
+          style={{ touchAction: "none" }}
+        >
+          {adminDraft.map((_, i) => (
+            <div
+              key={`v${i}`}
+              data-vx={i}
+              className="absolute left-0 top-0"
+              style={{ visibility: "hidden", willChange: "transform" }}
+            >
+              <button
+                type="button"
+                data-testid={`admin-vertex-${i}`}
+                aria-label={`꼭짓점 ${i + 1} — 끌어서 옮기기`}
+                title={`꼭짓점 ${i + 1} — 끌어서 옮기기 · 우클릭으로 삭제`}
+                onPointerDown={(e) => onVertexDown(e, i)}
+                onPointerMove={onVertexMove}
+                onPointerUp={onVertexUp}
+                onPointerCancel={onVertexUp}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  admin?.onRemovePoint(i);
+                }}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 44,
+                  height: 44,
+                  transform: "translate(-50%,-50%)",
+                  touchAction: "none",
+                  cursor: "grab",
+                }}
+                className="pointer-events-auto flex items-center justify-center rounded-full outline-none"
+              >
+                <span className="block h-4 w-4 rounded-full border-2 border-white bg-sky-700 shadow-[0_1px_4px_rgba(0,0,0,0.5)]" />
+              </button>
+              {adminDraft.length > 3 && (
+                <button
+                  type="button"
+                  data-testid={`admin-vertex-del-${i}`}
+                  aria-label={`꼭짓점 ${i + 1} 삭제`}
+                  title="이 꼭짓점 삭제"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    admin?.onRemovePoint(i);
+                  }}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 30,
+                    height: 30,
+                    transform: "translate(4px,-34px)",
+                    touchAction: "none",
+                  }}
+                  className="pointer-events-auto flex items-center justify-center rounded-full border border-rose-300 bg-white text-[12px] font-bold text-rose-600 shadow"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          {adminDraft.map((_, i) => (
+            <div
+              key={`m${i}`}
+              data-mid={i}
+              className="absolute left-0 top-0"
+              style={{ visibility: "hidden", willChange: "transform" }}
+            >
+              <button
+                type="button"
+                data-testid={`admin-mid-${i}`}
+                aria-label={`${i + 1}번째 변 가운데에 점 추가`}
+                title="이 변 가운데에 점을 추가"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const a = adminDraft[i];
+                  const b = adminDraft[(i + 1) % adminDraft.length];
+                  if (!a || !b) return;
+                  admin?.onInsertPoint(i + 1, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+                }}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 34,
+                  height: 34,
+                  transform: "translate(-50%,-50%)",
+                  touchAction: "none",
+                }}
+                className="pointer-events-auto flex items-center justify-center rounded-full border border-sky-400 bg-white/95 pb-0.5 text-[15px] font-bold leading-none text-sky-700 shadow"
+              >
+                +
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!ready && (
         <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-500">
