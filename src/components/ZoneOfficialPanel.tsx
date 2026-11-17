@@ -170,6 +170,7 @@ export default function ZoneOfficialPanel({
         <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
           출처: {meta.source}
           {meta.supplement?.asOf && ` · 구역명·신규 후보지 보강 ${meta.supplement.asOf}`}
+          {meta.official80?.asOf && ` · 누락 비교리스트 ① 80곳 재검증 ${meta.official80.asOf}`}
         </p>
       </div>
     </section>

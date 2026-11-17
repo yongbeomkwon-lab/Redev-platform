@@ -70,6 +70,8 @@ export type SeoulZonesMeta = {
   count: number;
   /** 공식 명칭·신규 후보지 보강(서울시 고시·정보몽땅) 기준일 */
   supplement?: { asOf?: string; renamed?: number; added?: number; note?: string };
+  /** 누락 비교리스트 ① 80곳 재검증 결과(별칭·신규 구역) */
+  official80?: { asOf?: string; aliases?: number; additions?: number; points?: number; polygons?: number; note?: string };
 };
 
 type RawZoneProps = Omit<SeoulZone, "center" | "polygon" | "parts"> & {
