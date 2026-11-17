@@ -137,12 +137,21 @@ function bboxCenter(ring: [number, number][]): [number, number] {
   return [(minLat + maxLat) / 2, (minLng + maxLng) / 2];
 }
 
+// 구역 경계는 배포마다 파일이 통째로 바뀐다 — 브라우저·CDN·아이패드 Safari 가 예전
+// 파일을 물고 있으면 지도에 지난 배포의 경계가 그대로 남는다(2026-11-17 제보: 배포 후에도
+// 자양동 10번지 일원 구버전 폴리곤이 보임). 그래서 요청에 빌드 ID를 붙이고 캐시를 끈다.
+//   · `?v=` — CDN·프록시의 URL 단위 캐시를 배포마다 새 키로 만든다.
+//   · `cache: "no-store"` — 브라우저 HTTP 캐시를 쓰지 않는다.
+//   · 응답 헤더(Cache-Control)는 next.config.ts 의 headers() 에서 함께 막는다.
+const DATA_VERSION = process.env.NEXT_PUBLIC_BUILD_ID || "dev";
+export const ZONES_GEOJSON_URL = `/data/zones.geojson?v=${encodeURIComponent(DATA_VERSION)}`;
+
 let cache: Promise<SeoulZonesData> | null = null;
 
 /** 서울시 정비구역 전수 목록 (실패 시 빈 목록 — 지도는 대표 구역만 그린다) */
 export function loadSeoulZones(): Promise<SeoulZonesData> {
   if (cache) return cache;
-  cache = fetch("/data/zones.geojson")
+  cache = fetch(ZONES_GEOJSON_URL, { cache: "no-store" })
     .then((r) => (r.ok ? (r.json() as Promise<RawCollection>) : Promise.reject(new Error(String(r.status)))))
     .then((fc) => {
       const zones: SeoulZone[] = [];
