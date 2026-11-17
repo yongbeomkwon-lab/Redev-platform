@@ -136,6 +136,13 @@ export default function ZoneOfficialPanel({
                 미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다
                 {zone.centerLabel && <span className="text-emerald-700/70"> · 지도 표시: {zone.centerLabel}</span>}
               </>
+            ) : zone.geom === "UQ120보정" ? (
+              <>
+                서울시 고시 경계(일반화 도형)를 인접 구역에 맞춰 보정
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
+                </span>
+              </>
             ) : (
               <>도시계획사업 고시 경계</>
             )}
