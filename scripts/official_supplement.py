@@ -268,7 +268,7 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
             "polygons": stats_jay["polygons"],
             "points": stats_jay["points"],
             "aliases": stats_jay["aliases"],
-            "note": "광진구 자양동 10번지 일원 — 추진준비위가 공개한 검토 범위(가상경계) 지도에서 옮긴 참고 경계. 옮긴 면적 39,965㎡는 보도의 약 40,070㎡와 0.3% 차이며, 확정 전이라 실제 사업 경계와 다를 수 있음.",
+            "note": "광진구 자양동 10번지 일원 — 추진준비위가 공개한 검토 범위(가상경계) 지도에서 옮긴 참고 경계. 빨간 선의 중심선을 픽셀 단위로 다시 옮기고 꼭짓점을 각 변의 교점으로 계산해 옮긴 면적 39,369㎡(보도 40,070㎡와 1.8% 차). 확정 전이라 실제 사업 경계와 다를 수 있음.",
         }
         stats["addedJayang"] = stats_jay["_new"]
     if stats_upd:

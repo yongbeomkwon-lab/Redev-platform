@@ -32,8 +32,8 @@ import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import SubwayLayer from "./SubwayLayer";
-import { SEOUL_BOUNDS, type AddressPin, type LeafletZoneMapProps } from "./props";
-import { addressPinHtml } from "./address-pin";
+import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps } from "./props";
+import { addressPinHtml, stationPinHtml } from "./address-pin";
 
 export { TYPE_COLORS };
 
@@ -105,6 +105,34 @@ function AddressPinMarker({ pin }: { pin?: AddressPin | null }) {
   if (!pin) return null;
   return (
     <Pane name="redevAddressPin" style={{ zIndex: 900 }}>
+      <Marker position={[pin.lat, pin.lng]} icon={icon} interactive={false} keyboard={false} />
+    </Pane>
+  );
+}
+
+/**
+ * 지하철역 핀 — 주소 핀과 같은 방식(divIcon + 맨 위 pane)이고, 역 중심으로 확대한다.
+ *   · 카카오맵 level 4 와 같은 체감을 주도록 zoom 15 로 맞춘다(주변 구역이 한눈에 보인다).
+ */
+function StationPinMarker({ pin }: { pin?: StationPin | null }) {
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: "redev-station-pin",
+        html: pin ? stationPinHtml(pin) : "",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+    [pin]
+  );
+  const map = useMap();
+  useEffect(() => {
+    if (!pin) return;
+    map.flyTo([pin.lat, pin.lng], Math.min(Math.max(map.getZoom(), 15), 16), { duration: 0.7 });
+  }, [pin?.lat, pin?.lng, map]);
+  if (!pin) return null;
+  return (
+    <Pane name="redevStationPin" style={{ zIndex: 901 }}>
       <Marker position={[pin.lat, pin.lng]} icon={icon} interactive={false} keyboard={false} />
     </Pane>
   );
@@ -246,6 +274,7 @@ export default function LeafletZoneMap({
   onToggleCompleted,
   completedCount = 0,
   addressPin,
+  stationPin,
   zoneFitRequest,
   fallbackReason,
 }: LeafletZoneMapProps) {
@@ -341,6 +370,8 @@ export default function LeafletZoneMap({
       />
       {/* ── 주소 검색 핀 — 맨 위 pane(불투명 카드 + 드롭핀) ── */}
       <AddressPinMarker pin={addressPin} />
+      {/* ── 지하철역 핀 — 역 검색으로 고른 역 ── */}
+      <StationPinMarker pin={stationPin} />
       </MapContainer>
 
       {/* 카카오맵을 쓸 수 없어 OSM으로 표시 중이라는 안내 (작게, 지도 조작은 그대로) */}

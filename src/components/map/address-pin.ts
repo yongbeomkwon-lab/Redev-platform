@@ -8,7 +8,8 @@
 //      → 핀은 카카오 오버레이가 아니라 우리가 직접 만든 최상위 DOM 레이어(z-index 100)에 얹는다.
 //      그래서 배경은 어떤 폴리곤 위에서도 완전 불투명(#fff)이어야 하고, 스타일은 인라인으로 고정한다
 //      (Tailwind 클래스 스캔에 기대지 않는다 — 지도 위에서 깨지면 원인을 찾기 어렵다).
-import type { AddressPin } from "./props";
+import type { AddressPin, StationPin } from "./props";
+import { SUBWAY_LINES } from "@/lib/subway-stations";
 
 type Tone = {
   /** 테두리·핀·꼬리 색 */
@@ -49,6 +50,39 @@ export function addressPinHtml(pin: AddressPin): string {
     <div style="width:0;height:0;margin-top:-1px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid ${tone.color};"></div>
     <svg width="24" height="32" viewBox="0 0 24 32" aria-hidden="true" style="display:block;margin-top:-1px;filter:drop-shadow(0 2px 3px rgba(15,23,42,.45));">
       <path d="M12 31C12 31 1 18.6 1 11.2A11 11 0 0 1 23 11.2C23 18.6 12 31 12 31Z" fill="${tone.color}" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="12" cy="11" r="3.8" fill="#ffffff"/>
+    </svg>
+  </div>`;
+}
+
+/**
+ * 지하철역 핀 한 벌 — [흰 카드: 역명 + 노선 배지][꼬리][파란 드롭핀].
+ *  · 주소 핀과 같은 생김새를 쓰되 색은 지하철 파랑(#1d4ed8) — 두 핀이 겹쳐도 구분된다.
+ *  · 카드는 역명과 노선을 **한 줄**로 유지한다(nowrap) — 좁은 지도에서 글자가 세로로 쪼개지지 않게.
+ */
+export function stationPinHtml(pin: StationPin): string {
+  const badges = pin.lines
+    .map((id) => {
+      const meta = SUBWAY_LINES[id];
+      const color = meta?.color ?? "#1d4ed8";
+      return `<span style="display:inline-block;border-radius:999px;background:${color};color:#fff;font-size:9.5px;font-weight:800;line-height:1;padding:2px 5px;">${esc(
+        meta?.badge ?? id
+      )}</span>`;
+    })
+    .join("");
+  return `
+  <div style="transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;pointer-events:none;">
+    <div style="max-width:250px;border-radius:12px;border:2px solid #1d4ed8;background:#ffffff;padding:5px 10px 6px;text-align:center;box-shadow:0 8px 22px rgba(15,23,42,.38),0 1px 3px rgba(15,23,42,.28);">
+      <div style="display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;max-width:226px;">
+        <span style="font-size:11px;line-height:1;">🚇</span>
+        <span style="font-size:12px;font-weight:800;line-height:1.2;color:#1e293b;">${esc(pin.name)}역</span>
+        <span style="display:inline-flex;gap:2px;align-items:center;">${badges}</span>
+      </div>
+      <div style="margin-top:2px;font-size:10px;font-weight:600;line-height:1.2;color:#1d4ed8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:226px;">주변 정비구역 보기</div>
+    </div>
+    <div style="width:0;height:0;margin-top:-1px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid #1d4ed8;"></div>
+    <svg width="24" height="32" viewBox="0 0 24 32" aria-hidden="true" style="display:block;margin-top:-1px;filter:drop-shadow(0 2px 3px rgba(15,23,42,.45));">
+      <path d="M12 31C12 31 1 18.6 1 11.2A11 11 0 0 1 23 11.2C23 18.6 12 31 12 31Z" fill="#1d4ed8" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
       <circle cx="12" cy="11" r="3.8" fill="#ffffff"/>
     </svg>
   </div>`;

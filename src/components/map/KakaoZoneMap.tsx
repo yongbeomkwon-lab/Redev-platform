@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
-import { addressPinHtml, PIN_LAYER_STYLE } from "./address-pin";
+import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";
 import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type KakaoZoneMapProps } from "./props";
 import type {
@@ -174,6 +174,7 @@ export default function KakaoZoneMap({
   onToggleCompleted,
   completedCount = 0,
   addressPin,
+  stationPin,
   zoneFitRequest,
   onFail,
 }: KakaoZoneMapProps) {
@@ -189,9 +190,13 @@ export default function KakaoZoneMap({
    *    draw() 가 매 프레임 좌표를 계산해 transform 으로 옮긴다(지도와 '같은 프레임'에 따라온다).
    */
   const pinLayerRef = useRef<HTMLDivElement | null>(null);
+  /** 지하철역 핀 레이어 — 주소 핀과 동시에 떠 있을 수 있어 따로 둔다 */
+  const stationLayerRef = useRef<HTMLDivElement | null>(null);
   const labelLayerRef = useRef<HTMLDivElement | null>(null);
   /** 지금 레이어에 놓인 핀·이름표의 좌표 (draw 에서 읽는다) */
   const pinAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
+  /** 지금 역 핀 레이어에 놓인 좌표 */
+  const stationAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
   /** 마지막으로 처리한 ‘구역 전체 보기’ 요청 토큰 */
   const lastFitReqRef = useRef(0);
   /** 이름표·화면 맞춤을 마지막으로 적용한 구역 — 핀만 바뀐 경우(핀 지우기) 화면을 흔들지 않으려고 */
@@ -375,6 +380,7 @@ export default function KakaoZoneMap({
     };
     placeOnMap(labelLayerRef.current, labelAtRef.current.lat, labelAtRef.current.lng);
     placeOnMap(pinLayerRef.current, pinAtRef.current.lat, pinAtRef.current.lng);
+    placeOnMap(stationLayerRef.current, stationAtRef.current.lat, stationAtRef.current.lng);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
@@ -885,6 +891,7 @@ export default function KakaoZoneMap({
       k.maps.event.removeListener(map, "idle", onIdle);
       labelAtRef.current = { lat: NaN, lng: NaN };
       pinAtRef.current = { lat: NaN, lng: NaN };
+      stationAtRef.current = { lat: NaN, lng: NaN };
       passthroughRef.current = { click: null, move: null };
       anchors.a.poly?.setMap(null);
       anchors.b.poly?.setMap(null);
@@ -1026,6 +1033,30 @@ export default function KakaoZoneMap({
     settleView();
   }, [addressPin, draw, settleView]);
 
+  // ── 지하철역 핀 — 역 중심으로 확대(level 3~4) ───────────────────────────────
+  //   역은 '구역 판정'이 아니라 기준점이다. 주변 정비구역을 한눈에 보도록 level 4(약 1km 폭)로
+  //   맞추고, 역 자체는 핀으로 찍는다. 같은 역을 다시 골라도 화면이 흐트러지지 않게
+  //   좌표가 같으면 이동하지 않는다.
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    if (!k || !map) return;
+    if (!stationPin) {
+      stationAtRef.current = { lat: NaN, lng: NaN };
+      if (stationLayerRef.current) stationLayerRef.current.style.visibility = "hidden";
+      draw();
+      return;
+    }
+    const same =
+      stationAtRef.current.lat === stationPin.lat && stationAtRef.current.lng === stationPin.lng;
+    stationAtRef.current = { lat: stationPin.lat, lng: stationPin.lng };
+    if (!same) {
+      map.jump(new k.maps.LatLng(stationPin.lat, stationPin.lng), 4, { animate: { duration: 350 } });
+    }
+    draw();
+    settleView();
+  }, [stationPin, draw, settleView]);
+
   // ── 지도 타입 토글 ──────────────────────────────────────────────────────────
   const toggleSkyview = useCallback(() => {
     const k = sdkRef.current;
@@ -1085,6 +1116,17 @@ export default function KakaoZoneMap({
             data-testid="address-pin"
             style={{ position: "absolute", left: 0, top: 0, width: "max-content" }}
             dangerouslySetInnerHTML={{ __html: addressPinHtml(addressPin) }}
+          />
+        )}
+      </div>
+
+      {/* ── 지하철역 핀 — 역 검색으로 고른 역(지도는 역 중심 level 3~4) ── */}
+      <div ref={stationLayerRef} style={PIN_LAYER_STYLE}>
+        {stationPin && (
+          <div
+            data-testid="station-pin"
+            style={{ position: "absolute", left: 0, top: 0, width: "max-content" }}
+            dangerouslySetInnerHTML={{ __html: stationPinHtml(stationPin) }}
           />
         )}
       </div>

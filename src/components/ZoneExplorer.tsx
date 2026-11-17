@@ -18,6 +18,8 @@ import { TYPE_COLORS, TYPE_ORDER } from "@/components/map/colors";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { looksLikeAddress, searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
+import { loadSubwayStations, lineNames, SUBWAY_LINES, searchStations, type SubwayStation } from "@/lib/subway-stations";
+import { distanceM } from "@/components/map/prepare-zones";
 import {
   judgeAddress,
   meters,
@@ -25,7 +27,7 @@ import {
   verdictHeadline,
   type AddressVerdict,
 } from "@/lib/address-verdict";
-import type { AddressPin } from "@/components/map/props";
+import type { AddressPin, StationPin } from "@/components/map/props";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 
@@ -69,6 +71,11 @@ export default function ZoneExplorer() {
   const [addrBusy, setAddrBusy] = useState(false);
   const [addrNote, setAddrNote] = useState<string | null>(null);
   const [addrVerdict, setAddrVerdict] = useState<AddressVerdict | null>(null);
+  // ── 지하철역 검색 ─────────────────────────────────────────────────────
+  //   역 이름(‘사당역’·‘건대입구’)으로 574개 역을 찾아 지도를 그 역으로 확대하고,
+  //   역 주변 정비구역을 목록으로 보여준다(구역 선택으로 바로 이어진다).
+  const [stations, setStations] = useState<SubwayStation[]>([]);
+  const [stationPick, setStationPick] = useState<SubwayStation | null>(null);
   // ‘구역 전체 보기’ 요청 토큰 — 주소 핀은 핀 지점을 확대해 보여주므로, 구역 경계 전체는 버튼으로 본다.
   // 값이 바뀔 때마다 지도가 선택 구역 경계에 화면을 맞춘다(카카오맵·OSM 공통).
   const [zoneFitRequest, setZoneFitRequest] = useState(0);
@@ -99,6 +106,13 @@ export default function ZoneExplorer() {
       setSeoulZones(d.zones);
       setSeoulMeta(d.meta);
     });
+  }, []);
+
+  // 지하철역 574개 — 검색용(지도 레이어와 별개로 한 번만 받아 둔다)
+  useEffect(() => {
+    loadSubwayStations()
+      .then((list) => setStations(list))
+      .catch(() => setStations([]));
   }, []);
 
   const filtered = useMemo(
@@ -175,6 +189,24 @@ export default function ZoneExplorer() {
       !showCompleted && results.length === 0 ? matches(completedZones).sort(sortFn).slice(0, 3) : [];
     return { results, hidden };
   }, [query, visibleSeoulZones, completedZones, showCompleted]);
+
+  // ── 지하철역 검색 결과 ───────────────────────────────────────────────────
+  //   · ‘사당’·‘사당역’ 둘 다 같은 역을 찾는다(끝의 ‘역’은 떼고 비교)
+  //   · 구역 결과와 별도 섹션으로 보여주되, 입력이 주소 형태면 주소 후보가 우선이다
+  const stationHits = useMemo(
+    () => (stations.length && query.trim() ? searchStations(stations, query, 5) : []),
+    [stations, query]
+  );
+
+  /** 역 주변 정비구역 — 역 중심 700m 안. 가까운 순 4곳 */
+  const stationNearby = useMemo(() => {
+    if (!stationPick) return [] as { zone: SeoulZone; distance: number }[];
+    return visibleSeoulZones
+      .map((z) => ({ zone: z, distance: distanceM(stationPick.lat, stationPick.lng, z.center[0], z.center[1]) }))
+      .filter((r) => r.distance <= 700)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 4);
+  }, [stationPick, visibleSeoulZones]);
 
   // ── 주소 판별용 전체 구역 사전계산 ─────────────────────────────────────────
   //   준공 구역도 "주소가 속한 곳"을 말할 때는 빠지면 안 된다 — 표시 여부(visibleSeoulZones)와
@@ -283,6 +315,11 @@ export default function ZoneExplorer() {
       setShowCompleted(true);
       pickZone(search.hidden[0].id);
       setQuery("");
+      return;
+    }
+    // 구역·주소가 아니면 역 이름으로 한 번 더 본다 — ‘사당역’ 입력 후 엔터
+    if (stationHits.length > 0) {
+      pickStation(stationHits[0]);
     }
   }
 
@@ -302,6 +339,18 @@ export default function ZoneExplorer() {
             : undefined,
     };
   }, [addrVerdict]);
+
+  /** 역 핀 — 역 검색으로 고른 역을 지도에 찍는다(주소 핀과 동시에 뜨지 않는다) */
+  const stationPin: StationPin | null = useMemo(() => {
+    if (!stationPick) return null;
+    return {
+      name: stationPick.name,
+      lat: stationPick.lat,
+      lng: stationPick.lng,
+      lines: stationPick.lines,
+      lineLabel: lineNames(stationPick),
+    };
+  }, [stationPick]);
 
   // 범례 카운터 — 지금 지도에 깔린 구역 수(준공 숨김·유형 필터 반영)
   const typeCounts = useMemo(() => {
@@ -325,6 +374,20 @@ export default function ZoneExplorer() {
     }
   }
 
+  /** 역 검색 결과 선택 — 역으로 지도를 옴기고, 역 주변 구역 목록을 띄운다 */
+  function pickStation(s: SubwayStation) {
+    setStationPick(s);
+    setQuery("");
+    // 주소 핀·판정 카드와는 성격이 다르므로 주소 쪽을 거둔다(핀이 둘 쥐이지 않게).
+    clearAddress();
+    // 구역 상세를 닫아 역 카드가 가려지지 않게 한다(지도는 역 중심 level 4 그대로).
+    setSelectedId(undefined);
+  }
+
+  function clearStation() {
+    setStationPick(null);
+  }
+
   if (loading) {
     return (
       <div className="flex h-[calc(100dvh-52px)] items-center justify-center bg-slate-100 text-sm text-slate-500">
@@ -346,6 +409,7 @@ export default function ZoneExplorer() {
           onToggleCompleted={toggleCompleted}
           completedCount={completedZones.length}
           addressPin={addressPin}
+          stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
         />
       </div>
@@ -399,9 +463,10 @@ export default function ZoneExplorer() {
             )}
           </div>
 
-          {/* 검색 결과 — 구역명·자치구 결과 + 주소(지번·도로명) 후보 */}
+          {/* 검색 결과 — 구역 결과 + 지하철역 + 주소(지번·도로명) 후보 */}
           {(search.results.length > 0 ||
             search.hidden.length > 0 ||
+            stationHits.length > 0 ||
             addrCandidates.length > 0 ||
             addrBusy ||
             (addrNote !== null && looksLikeAddress(query))) && (
@@ -415,24 +480,86 @@ export default function ZoneExplorer() {
                           pickZone(z.id);
                           setQuery("");
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        data-testid="zone-result"
+                        /* 2단 구조 — 위줄(구역명·자치구)은 절대 세로로 쪼개지지 않게 nowrap,
+                           아래줄(사업유형·공식명·추진단계)은 넘치면 말줄임(truncate). */
+                        className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                       >
                         <i
-                          className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                          className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm"
                           style={{ backgroundColor: TYPE_COLORS[z.type] }}
                         />
-                        <span className="font-medium text-slate-800">{z.name}</span>
-                        {z.alias?.[0] && !z.name.includes(z.alias[0]) && (
-                          <span className="text-xs text-slate-400">{z.alias[0]}</span>
-                        )}
-                        <span className="text-xs text-slate-500">{z.gu}</span>
-                        <span className="ml-auto text-xs text-slate-400">
-                          {z.polygon ? z.stage : "경계 미고시"}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline gap-1.5">
+                            <span
+                              className="min-w-0 truncate font-medium text-slate-800"
+                              title={z.name}
+                            >
+                              {z.name}
+                            </span>
+                            <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">
+                              {z.gu}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 flex items-center gap-1.5">
+                            <span className="min-w-0 truncate text-[11px] text-slate-500">
+                              {z.kind}
+                              {z.alias?.[0] && !z.name.includes(z.alias[0]) ? ` · ${z.alias[0]}` : ""}
+                            </span>
+                            <span
+                              className="ml-auto max-w-[58%] shrink-0 truncate whitespace-nowrap rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
+                              title={z.polygon ? z.stage : "경계 미고시"}
+                            >
+                              {z.polygon ? z.stage : "경계 미고시"}
+                            </span>
+                          </span>
                         </span>
                       </button>
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* ── 지하철역 — 역 이름으로도 찾는다(클릭하면 지도가 역으로 확대) ── */}
+              {stationHits.length > 0 && (
+                <div className="border-t border-slate-200">
+                  <p className="flex items-center gap-1.5 px-3 pt-2 text-[10px] font-semibold text-slate-500">
+                    <span aria-hidden>🚇</span> 지하철역
+                    <span className="font-normal text-slate-400">(클릭하면 역 주변 구역을 봅니다)</span>
+                  </p>
+                  <ul className="max-h-[30vh] overflow-y-auto pb-1">
+                    {stationHits.map((s) => (
+                      <li key={s.name}>
+                        <button
+                          type="button"
+                          data-testid="station-result"
+                          onClick={() => pickStation(s)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-sky-50"
+                        >
+                          <span aria-hidden className="shrink-0 text-xs leading-none">
+                            🚇
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap text-sm font-medium text-slate-800">
+                            {s.name}역
+                          </span>
+                          <span className="flex min-w-0 items-center gap-1 truncate text-[11px] text-slate-500">
+                            {s.lines.slice(0, 3).map((id) => (
+                              <i
+                                key={id}
+                                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: SUBWAY_LINES[id]?.color ?? "#64748b" }}
+                              />
+                            ))}
+                            <span className="truncate whitespace-nowrap">{lineNames(s)}</span>
+                          </span>
+                          <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-medium text-sky-700">
+                            역 주변 보기
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               {/* 주소 후보 — 고르면(또는 엔터) 소속 정비구역을 판별한다 */}
@@ -498,6 +625,74 @@ export default function ZoneExplorer() {
             </div>
           )}
         </div>
+
+        {/* ── 역 카드 — 고른 역과 그 주변 정비구역(골라서 바로 이동) ── */}
+        {stationPick && (
+          <div
+            data-testid="station-card"
+            className="pointer-events-auto rounded-2xl border border-slate-200 bg-white/97 p-3 shadow-xl backdrop-blur"
+          >
+            <div className="flex items-start gap-2">
+              <span aria-hidden className="mt-0.5 text-sm">
+                🚇
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-bold text-slate-900" title={`${stationPick.name}역`}>
+                  {stationPick.name}역
+                </p>
+                <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                  {lineNames(stationPick)} · 역 주변 700m
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={clearStation}
+                data-testid="station-pin-clear"
+                title="역 핀과 주변 목록을 지웁니다"
+                className="shrink-0 rounded-lg border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:border-slate-400 hover:text-slate-800"
+              >
+                지우기 ✕
+              </button>
+            </div>
+
+            <p className="mt-2 text-[11px] font-semibold text-slate-600">
+              역 주변 정비구역 {stationNearby.length}곳
+              <span className="ml-1 font-normal text-slate-400">— 골라서 경계 보기</span>
+            </p>
+            {stationNearby.length > 0 ? (
+              <div className="mt-1 flex flex-col gap-1">
+                {stationNearby.map(({ zone, distance }) => (
+                  <button
+                    key={zone.id}
+                    type="button"
+                    data-testid="station-nearby-zone"
+                    onClick={() => {
+                      pickZone(zone.id);
+                      setZoneFitRequest((n) => n + 1);
+                    }}
+                    className="flex w-full items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-left hover:border-slate-400 hover:bg-slate-50"
+                  >
+                    <i
+                      className="h-2 w-2 shrink-0 rounded-sm"
+                      style={{ backgroundColor: TYPE_COLORS[zone.type] }}
+                    />
+                    <span className="min-w-0 truncate text-[11px] font-medium text-slate-800" title={zone.name}>
+                      {zone.name}
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap text-[10px] text-slate-500">{zone.gu}</span>
+                    <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] text-slate-400">
+                      {meters(distance)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-[11px] leading-snug text-slate-400">
+                반경 700m 안에 등록된 정비구역이 없습니다. 검색창에서 구역명·지번으로 찾아보세요.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── 주소 판정 카드 — 핀을 찍은 주소의 결론과 다음 행동 ── */}
         {addrVerdict && (

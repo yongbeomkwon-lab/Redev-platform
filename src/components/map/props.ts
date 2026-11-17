@@ -24,6 +24,8 @@ export type ZoneMapProps = {
   completedCount?: number;
   /** 주소 검색으로 찾은 위치 핀 — null 이면 지운다 */
   addressPin?: AddressPin | null;
+  /** 지하철역 검색으로 고른 역 — null 이면 지운다(지도를 그 역으로 확대한다) */
+  stationPin?: StationPin | null;
   /**
    * ‘구역 전체 보기’ 요청 토큰 — 값이 바뀔 때마다 선택 구역 경계에 화면을 맞춘다.
    * 주소 핀은 핀 지점을 확대해 보여주므로(골목·건물명), 구역 경계 전체는 이 버튼으로 본다.
@@ -43,6 +45,18 @@ export type AddressPin = {
   message: string;
   /** 이 주소가 속한 구역 — 있으면 선택 구역과 핀이 같은 곳이다(핀 화면을 유지한다) */
   zoneId?: string;
+};
+
+/** 지하철역 검색 결과를 지도에 찍는 역 핀 — 주소 핀과 달리 '기준점'이라 판정 색이 없다 */
+export type StationPin = {
+  /** 역 이름(데이터에는 '역'이 없다) */
+  name: string;
+  lat: number;
+  lng: number;
+  /** 노선 id 목록 — 배지 색을 그린다 */
+  lines: string[];
+  /** 카드에 쓰는 노선 이름 "2호선·7호선" */
+  lineLabel: string;
 };
 
 /** 카카오맵이 뜨지 않을 때(키 종류·도메인 문제 등) 폴백으로 넘기기 위한 신호 */
