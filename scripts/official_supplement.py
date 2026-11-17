@@ -36,6 +36,8 @@ YDP_PATH = os.path.join(HERE, "data", "official-ydp.json")
 UPDATES_PATH = os.path.join(HERE, "data", "official-updates.json")
 # 「자양동 10번지 일원」 — 추진준비위 검토 범위(가상경계) 지도에서 옮긴 경계
 JAYANG_PATH = os.path.join(HERE, "data", "official-jayang.json")
+# 「상도23구역」 — 동작구 공고 제2026-1857호 정비구역 결정도에서 옮긴 구역계
+SANGDO23_PATH = os.path.join(HERE, "data", "official-sangdo23.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -79,6 +81,13 @@ def load_jayang(path=JAYANG_PATH):
 
 
 def load_updates(path=UPDATES_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_sangdo23(path=SANGDO23_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -219,6 +228,9 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 8) 자양동 10번지 일원 (추진준비위 검토 범위 → 가상경계 폴리곤) ────────────
     stats_jay = apply_jayang(fc, seoul_zones)
 
+    # ── 9) 상도23구역 — 동작구 공고 제2026-1857호 정비구역 결정도 구역계로 교체 ─────
+    stats_sd23 = apply_sangdo23(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -271,6 +283,11 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
             "note": "광진구 자양동 10번지 일원 — 추진준비위가 공개한 구역계(안)(가상경계)을 카카오 지도·지적편집도 위 도로선에 맞춰 다시 그린 참고 경계. 서쪽은 동일로, 북쪽은 아차산로(커먼그라운드 블록은 ㄴ자로 제외), 남·동쪽은 건대로데오거리·CGV 서측 경계를 따르며, 표기 면적 55,483㎡(16,784평)에 맞춰 도형 면적도 55,483㎡. 확정 전이라 실제 사업 경계와 다를 수 있음.",
         }
         stats["addedJayang"] = stats_jay["_new"]
+    if stats_sd23:
+        meta["sangdo23"] = {
+            "asOf": stats_sd23["asOf"],
+            "note": stats_sd23["note"],
+        }
     if stats_upd:
         meta["zoneUpdates"] = {
             "asOf": stats_upd["asOf"],
@@ -609,6 +626,58 @@ def apply_jayang(fc, seoul_zones):
         stats["_new"] += 1
 
     return stats
+
+
+def apply_sangdo23(fc, seoul_zones):
+    """상도23구역 구역계를 동작구 공고 제2026-1857호 「정비구역 결정도」로 교체(멱등).
+
+    · 서울시 UQ120 도형은 일반화된 경계라 필지선과 어긋난다 — 공고 결정도의 붉은 점선
+      구역계를 픽셀 단위로 떠서 경위도로 옮긴 도형으로 바꾼다.
+    · 도면 축척 표기(1:1,600)는 A1 원본 기준이라 인쇄 배율을 알 수 없다 —
+      공고 면적 84,714.7㎡에 맞춰 축척을 역산하고, 카카오 지적편집도와 대조해 위치를 잡았다.
+    · 민간 서비스(재개발닷컴 등)의 폴리곤 좌표는 쓰지 않았다.
+    """
+    doc = load_sangdo23()
+    if not doc:
+        return None
+    zid = doc.get("zoneId")
+    rings = doc.get("polygon")
+    features = fc.setdefault("features", [])
+    target_feature = None
+    for f in features:
+        props = f.get("properties") or {}
+        if f.get("id") == zid or props.get("id") == zid or props.get("name") == doc.get("zoneName"):
+            target_feature = f
+            break
+    target_zone = next((z for z in seoul_zones if z.get("id") == zid or z.get("name") == doc.get("zoneName")), None)
+    if target_feature is None and target_zone is None:
+        return None
+    geometry = None
+    if rings:
+        coords = [[lng, lat] for lat, lng in rings]
+        if coords[0] != coords[-1]:
+            coords.append(coords[0])
+        geometry = {"type": "Polygon", "coordinates": [coords]}
+    sources = doc.get("sources") or []
+    for target in ((target_feature.get("properties") if target_feature is not None else None), target_zone):
+        if target is None:
+            continue
+        target["polygon"] = [list(p) for p in rings]
+        target["geom"] = doc.get("boundary", "공고도면")
+        target["area"] = doc.get("area")
+        target["stage"] = doc.get("stage")
+        for key in ("note", "areaNote", "boundaryNote"):
+            if doc.get(key):
+                target[key] = doc[key]
+        if sources:
+            target["sources"] = sources
+        target["asOf"] = doc.get("asOf")
+        lat0 = sum(p[0] for p in rings) / len(rings)
+        lng0 = sum(p[1] for p in rings) / len(rings)
+        target["center"] = [round(lat0, 6), round(lng0, 6)]
+    if target_feature is not None:
+        target_feature["geometry"] = geometry
+    return {"asOf": doc.get("asOf"), "note": doc.get("note")}
 
 
 def apply_updates(fc, seoul_zones):
