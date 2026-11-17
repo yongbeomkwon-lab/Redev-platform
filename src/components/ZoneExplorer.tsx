@@ -10,7 +10,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Listing, MapZoneType, Transaction, Zone, ZoneStage } from "@/lib/types";
 import { STAGE_ORDER, calcMultiple } from "@/lib/types";
-import { loadSeoulZones, isCompletedZone, type SeoulZone, type SeoulZonesMeta } from "@/lib/seoul-zones";
+import {
+  loadSeoulZones,
+  refreshSeoulZones,
+  zonesDataChanged,
+  isCompletedZone,
+  type SeoulZone,
+  type SeoulZonesMeta,
+} from "@/lib/seoul-zones";
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
@@ -106,6 +113,25 @@ export default function ZoneExplorer() {
       setSeoulZones(d.zones);
       setSeoulMeta(d.meta);
     });
+  }, []);
+
+  // 앱을 켜 둔 채 새 배포가 올라간 경우 — 화면이 다시 보일 때 데이터가 바뀌었는지 확인하고,
+  // 바뀌었으면 새로고침 없이 다시 받아 지도를 갱신한다(아이패드 Safari 가 그려 둔 화면을
+  // 그대로 되살려 예전 경계가 남는 것을 막는다).
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== "visible") return;
+      zonesDataChanged()
+        .then((changed) => (changed ? refreshSeoulZones() : null))
+        .then((d) => {
+          if (!d) return;
+          setSeoulZones(d.zones);
+          setSeoulMeta(d.meta);
+        })
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", check);
+    return () => document.removeEventListener("visibilitychange", check);
   }, []);
 
   // 지하철역 574개 — 검색용(지도 레이어와 별개로 한 번만 받아 둔다)

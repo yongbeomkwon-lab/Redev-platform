@@ -147,12 +147,42 @@ const DATA_VERSION = process.env.NEXT_PUBLIC_BUILD_ID || "dev";
 export const ZONES_GEOJSON_URL = `/data/zones.geojson?v=${encodeURIComponent(DATA_VERSION)}`;
 
 let cache: Promise<SeoulZonesData> | null = null;
+/** 마지막으로 받은 데이터의 ETag — 배포가 바뀌었는지 확인하는 데 쓴다 */
+let loadedEtag: string | null = null;
+
+/**
+ * 배포가 바뀌어 정비구역 데이터가 갱신됐는지 확인한다.
+ *   · 앱을 켜 둔 채 새 배포가 올라가면, 아이패드 Safari 는 이미 그려 둔 화면을 그대로
+ *     되살린다(뒤로가기 캐시·앱 전환). 그래서 화면이 다시 보일 때 이 함수로 확인하고,
+ *     바뀌었으면 데이터를 다시 받아 지도를 다시 그린다(새로고침 없이).
+ */
+export async function zonesDataChanged(): Promise<boolean> {
+  try {
+    const r = await fetch(ZONES_GEOJSON_URL, { method: "HEAD", cache: "no-store" });
+    if (!r.ok) return false;
+    const etag = r.headers.get("etag");
+    if (!etag) return false;
+    return loadedEtag !== null && etag !== loadedEtag;
+  } catch {
+    return false;
+  }
+}
+
+/** 받아 둔 데이터를 버리고 새 배포본에서 다시 받는다 */
+export function refreshSeoulZones(): Promise<SeoulZonesData> {
+  cache = null;
+  return loadSeoulZones();
+}
 
 /** 서울시 정비구역 전수 목록 (실패 시 빈 목록 — 지도는 대표 구역만 그린다) */
 export function loadSeoulZones(): Promise<SeoulZonesData> {
   if (cache) return cache;
   cache = fetch(ZONES_GEOJSON_URL, { cache: "no-store" })
-    .then((r) => (r.ok ? (r.json() as Promise<RawCollection>) : Promise.reject(new Error(String(r.status)))))
+    .then((r) => {
+      if (!r.ok) return Promise.reject(new Error(String(r.status)));
+      loadedEtag = r.headers.get("etag") || loadedEtag;
+      return r.json() as Promise<RawCollection>;
+    })
     .then((fc) => {
       const zones: SeoulZone[] = [];
       for (const f of fc.features) {
