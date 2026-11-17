@@ -8,7 +8,7 @@
 //  · 재개발뷰 스타일: 실거주 의무/토허제 뱃지, 예상 입주 구간
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from "react";
-import type { Listing, MapZoneType, Transaction, Zone, ZoneStage, ZoneType } from "@/lib/types";
+import type { Listing, MapZoneType, Transaction, Zone, ZoneStage } from "@/lib/types";
 import { STAGE_ORDER, calcMultiple } from "@/lib/types";
 import { loadSeoulZones, isCompletedZone, type SeoulZone, type SeoulZonesMeta } from "@/lib/seoul-zones";
 import { getProvider } from "@/lib/data-provider";
@@ -29,7 +29,17 @@ import type { AddressPin } from "@/components/map/props";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 
-const ZONE_TYPES: (ZoneType | "전체")[] = ["전체", "신통기획", "모아타운", "도공복", "일반재개발"];
+const ZONE_TYPES: (MapZoneType | "전체")[] = [
+  "전체",
+  "일반재개발",
+  "신통기획",
+  "모아타운",
+  "도공복",
+  "가로주택",
+  "소규모",
+  "역세권",
+  "장기전세",
+];
 const STAGES: (ZoneStage | "전체")[] = ["전체", "추진위원회", "사업계획승인", "관리처분", "이주·철거", "착공", "준공"];
 
 export default function ZoneExplorer() {
@@ -40,7 +50,7 @@ export default function ZoneExplorer() {
   const [seoulZones, setSeoulZones] = useState<SeoulZone[]>([]);
   const [seoulMeta, setSeoulMeta] = useState<SeoulZonesMeta | null>(null);
   const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<ZoneType | "전체">("전체");
+  const [typeFilter, setTypeFilter] = useState<MapZoneType | "전체">("전체");
   const [stageFilter, setStageFilter] = useState<ZoneStage | "전체">("전체");
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
@@ -107,13 +117,21 @@ export default function ZoneExplorer() {
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   const selectedListings = listings.filter((l) => l.zoneId === selectedId);
 
-  // ── 준공 완료 구역(준공·준공(일부) 260곳) 숨김 ──────────────────────────────
+  // ── 준공 완료 구역(준공·준공(일부)·입주·사용승인 357곳) 숨김 ─────────────────
   //   이미 입주까지 끝나 아파트가 된 구역이라 상담 대상이 아니다. 기본 지도·검색·
   //   범례 숫자에서 모두 빼고, ‘준공 완료 포함’ 토글을 켠 때만 다시 보여준다(점선 표시).
   const completedZones = useMemo(() => seoulZones.filter(isCompletedZone), [seoulZones]);
   const visibleSeoulZones = useMemo(
     () => (showCompleted ? seoulZones : seoulZones.filter((z) => !isCompletedZone(z))),
     [seoulZones, showCompleted]
+  );
+
+  // 지도 레이어·범례 숫자에 실제로 깔리는 구역 — 유형 필터가 켜져 있으면 그 유형만.
+  //   검색과 주소 판정은 visibleSeoulZones/seoulZones 전체를 그대로 본다(필터가 검색을 막지 않게).
+  const mapSeoulZones = useMemo(
+    () =>
+      typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter),
+    [visibleSeoulZones, typeFilter]
   );
 
   function toggleCompleted() {
@@ -126,7 +144,7 @@ export default function ZoneExplorer() {
     }
   }
 
-  // 구역명·별칭·자치구 검색 (1,800여 구역 중 원하는 곳으로 바로 이동)
+  // 구역명·별칭·자치구 검색 (2,100여 구역 중 원하는 곳으로 바로 이동)
   //   · 공식 별칭까지 훑는다 — '사당동 419-1'로도 '사당15'로도 같은 구역이 뜬다
   //   · 띄어쓰기를 무시해 '사당동419-1', '사당 15' 같은 입력도 걸린다
   //   · 기본(준공 숨김)에서는 준공 구역이 결과에 안 뜨고, 그 구역만 맞았을 때
@@ -153,7 +171,7 @@ export default function ZoneExplorer() {
 
   // ── 주소 판별용 전체 구역 사전계산 ─────────────────────────────────────────
   //   준공 구역도 "주소가 속한 곳"을 말할 때는 빠지면 안 된다 — 표시 여부(visibleSeoulZones)와
-  //   무관하게 전체(진행 중 1,564 + 준공 260)에 대고 판정하고, 숨겨졌으면 안내문으로 알린다.
+  //   무관하게 전체(진행 중 1,822 + 준공 357)에 대고 판정하고, 숨겨졌으면 안내문으로 알린다.
   const allPrep = useMemo(() => prepareAllZones(seoulZones), [seoulZones]);
 
   // 입력이 주소 형태면 350ms 뒤 카카오 주소 검색 — 구역명 검색 결과와 나란히 보여준다
@@ -278,12 +296,12 @@ export default function ZoneExplorer() {
     };
   }, [addrVerdict]);
 
-  // 범례 카운터 — 지금 지도에 깔린 구역 수(준공 숨김 상태면 진행 중 구역만)
+  // 범례 카운터 — 지금 지도에 깔린 구역 수(준공 숨김·유형 필터 반영)
   const typeCounts = useMemo(() => {
     const m: Partial<Record<MapZoneType, number>> = {};
-    for (const z of visibleSeoulZones) m[z.type] = (m[z.type] ?? 0) + 1;
+    for (const z of mapSeoulZones) m[z.type] = (m[z.type] ?? 0) + 1;
     return m;
-  }, [visibleSeoulZones]);
+  }, [mapSeoulZones]);
 
   function unlock(id: string) {
     setUnlocked((prev) => new Set(prev).add(id));
@@ -292,6 +310,12 @@ export default function ZoneExplorer() {
   function pickZone(id: string) {
     setSelectedId(id);
     setPanelOpen(true);
+    // 유형 필터가 켜져 있어 고른 구역이 지도 레이어에서 빠져 있으면 지도에서 사라진 것처럼 보인다
+    // → 필터를 풀어 경계를 다시 그린다(검색·주소 판정은 필터와 무관하게 전체를 본다).
+    if (typeFilter !== "전체") {
+      const z = seoulZones.find((s) => s.id === id);
+      if (z && z.type !== typeFilter) setTypeFilter("전체");
+    }
   }
 
   if (loading) {
@@ -308,7 +332,7 @@ export default function ZoneExplorer() {
       <div className="absolute inset-0">
         <MapPanel
           zones={filtered}
-          seoulZones={visibleSeoulZones}
+          seoulZones={mapSeoulZones}
           selectedZoneId={selectedId}
           onSelectZone={pickZone}
           showCompleted={showCompleted}
@@ -734,7 +758,8 @@ export default function ZoneExplorer() {
           <span className="text-xs font-bold text-slate-800">범례</span>
           <span className="truncate text-[11px] text-slate-500">
             서울시 {showCompleted ? "정비구역 전체" : "진행 중 정비구역"}{" "}
-            {visibleSeoulZones.length.toLocaleString()}곳
+            {mapSeoulZones.length.toLocaleString()}곳
+            {typeFilter === "전체" ? "" : ` · ${typeFilter}만`}
             {seoulMeta?.asOf ? ` · ${seoulMeta.asOf} 기준` : ""}
           </span>
           <span className="ml-auto shrink-0 text-[11px] font-semibold text-slate-400">
@@ -755,6 +780,10 @@ export default function ZoneExplorer() {
             <p className="text-[10px] leading-snug text-slate-500">
               경계·면적·단계: 서울시 도시계획사업(서울플랜+)·의제처리구역(UQ181) 실데이터 ·{" "}
               <b>점</b>은 구역계 미고시 후보지(예: 사당21구역) · <b>점선</b>은 준공·입주 완료 구역
+            </p>
+            <p className="text-[10px] leading-snug text-slate-500">
+              <b style={{ color: TYPE_COLORS["역세권"] }}>역세권</b> = 역세권활성화·청년안심주택 ·{" "}
+              <b style={{ color: TYPE_COLORS["장기전세"] }}>장기전세</b> = 장기전세주택·미리내집 (서울시 사업유형)
             </p>
             <p className="text-[10px] leading-snug text-slate-400">
               구역을 클릭하면 서울시 고시 데이터가 열립니다 · 지도를 움직여 둘러보세요

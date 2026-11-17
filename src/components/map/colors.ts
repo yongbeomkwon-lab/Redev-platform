@@ -2,9 +2,12 @@
 // leaflet을 임포트하지 않는 순수 모듈이므로 서버 컴포넌트/SSR에서 안전하게 사용 가능.
 import type { MapZoneType } from "@/lib/types";
 
-// 서울시 정비구역 전수 지도용 6분류.
+// 서울시 정비구역 전수 지도용 8분류.
 //  · 신통기획 purple / 일반재개발·재건축·재정비촉진 emerald / 모아타운 sky
 //  · 도공복 amber / 가로주택 teal / 소규모(자율주택·소규모재건축·재개발) slate
+//  · 역세권(역세권활성화·청년안심주택) orange / 장기전세(장기전세주택·미리내집) magenta
+//    — 정비구역이 아닌 서울시 주택공급 사업이라 기존 6색(녹·보라·하늘·주황·청록·회)과
+//      겹치지 않는 두 색으로 따로 묶는다(상세 패널의 ‘사업유형’에 소분류가 그대로 나온다).
 export const TYPE_COLORS: Record<MapZoneType, string> = {
   신통기획: "#7c3aed",
   모아타운: "#0ea5e9",
@@ -12,6 +15,8 @@ export const TYPE_COLORS: Record<MapZoneType, string> = {
   일반재개발: "#10b981",
   가로주택: "#0d9488",
   소규모: "#64748b",
+  역세권: "#f97316",
+  장기전세: "#ec4899",
 };
 
 /** 범례 노출 순서 (면적·중요도 순) */
@@ -22,6 +27,8 @@ export const TYPE_ORDER: MapZoneType[] = [
   "도공복",
   "가로주택",
   "소규모",
+  "역세권",
+  "장기전세",
 ];
 
 /**
