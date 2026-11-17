@@ -117,6 +117,13 @@ export default function ZoneOfficialPanel({
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
                 </span>
               </>
+            ) : zone.geom === "고시도면" ? (
+              <>
+                구청·서울시 고시 지형도면에서 옮긴 경계
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
+                </span>
+              </>
             ) : zone.geom === "미고시" ? (
               <>
                 미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다
@@ -180,6 +187,7 @@ export default function ZoneOfficialPanel({
           {meta.official80?.asOf && ` · 누락 비교리스트 ① 80곳 재검증 ${meta.official80.asOf}`}
           {meta.dongjakMapo?.asOf && ` · 동작·마포 추진준비 구역 ${meta.dongjakMapo.asOf}`}
           {meta.seongdongYongsan?.asOf && ` · 성동·용산 추진준비 구역 ${meta.seongdongYongsan.asOf}`}
+          {meta.yeouidaebang2?.asOf && ` · 여의대방2역세권 지형도면 ${meta.yeouidaebang2.asOf}`}
         </p>
       </div>
     </section>

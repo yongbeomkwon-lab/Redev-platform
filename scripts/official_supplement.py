@@ -12,6 +12,7 @@
   · 공식 GIS 도형(경계)이 확인되지 않은 후보지는 **도형을 만들지 않는다**. 대표 지점만 두고
     `geom: "미고시"`로 표시해 지도에 점으로 그린다(가짜 폴리곤 금지).
   · 이미 적용된 항목은 건너뛰므로 여러 번 실행해도 결과가 같다(멱등).
+  · 고시 지형도면에서 경계를 옮긴 구역(예: 여의대방2역세권)은 geom="고시도면"으로 표시한다.
 
 사용:
   python3 scripts/apply-official-supplement.py     # 현재 산출물에 적용
@@ -29,6 +30,8 @@ OFFICIAL80_PATH = os.path.join(HERE, "data", "official-80.json")
 DJM_PATH = os.path.join(HERE, "data", "official-djm.json")
 # 「성동·용산 추진준비 구역 37곳」 — 구청·서울시 공고·고시로 확인한 구역·경계
 SY_PATH = os.path.join(HERE, "data", "official-sy.json")
+# 「여의대방2역세권」 — 영등포구 고시 제2026-33호 지형도면에서 옮긴 구역계
+YDP_PATH = os.path.join(HERE, "data", "official-ydp.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -51,6 +54,13 @@ def load_djm(path=DJM_PATH):
 
 
 def load_sy(path=SY_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_ydp(path=YDP_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -182,6 +192,9 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 5) 성동·용산 추진준비 구역 37곳 (공식 경계 1곳 폴리곤 + 19곳 점 + 별칭 1곳) ──
     stats_sy = apply_sy(fc, seoul_zones)
 
+    # ── 6) 여의대방2역세권 (영등포구 고시 제2026-33호 지형도면 → 폴리곤) ──────
+    stats_ydp = apply_ydp(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -224,6 +237,17 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         }
         stats["addedSy"] = stats_sy["_new"]
         stats["aliasedSy"] = stats_sy["_aliased"]
+    if stats_ydp:
+        meta["yeouidaebang2"] = {
+            "asOf": stats_ydp["asOf"],
+            "additions": stats_ydp["additions"],
+            "polygons": stats_ydp["polygons"],
+            "points": stats_ydp["points"],
+            "aliases": stats_ydp["aliases"],
+            "note": "여의대방2역세권(신길동 4-5번지 일대) — 영등포구 고시 제2026-33호(2026-03-05) 지형도면의 구역계를 옮긴 폴리곤. 고시 면적 21,866.8㎡ 대비 도형 면적 21,956㎡(0.4% 차).",
+        }
+        stats["addedYdp"] = stats_ydp["_new"]
+        stats["aliasedYdp"] = stats_ydp["_aliased"]
     return stats
 
 
@@ -280,6 +304,120 @@ def apply_sy(fc, seoul_zones):
             "alias": list(a.get("alias") or []),
             "type": a.get("type", "신통기획"),
             "kind": a.get("kind", "재개발"),
+            "stage": a.get("stage", ""),
+            "gu": a["gu"],
+            "area": a.get("area", 0),
+            "featured": False,
+            "sourceId": a.get("sourceId") or doc.get("asOf"),
+            "geom": geom_kind,
+            "center": list(a["center"]),
+        }
+        for key in ("selectedAt", "centerLabel", "locationMap", "note", "areaNote", "boundaryNote"):
+            if a.get(key):
+                props[key] = a[key]
+        if sources:
+            props["sources"] = sources
+
+        geometry = None
+        rings = a.get("polygon")
+        if rings:
+            if rings and isinstance(rings[0][0], (int, float)):
+                rings = [rings]
+            out_rings = []
+            for ring in rings:
+                coords = [[lng, lat] for lat, lng in ring]
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                out_rings.append(coords)
+            geometry = ({"type": "Polygon", "coordinates": [out_rings[0]]}
+                        if len(out_rings) == 1 else
+                        {"type": "MultiPolygon", "coordinates": [[r] for r in out_rings]})
+
+        existing = by_feature_id.get(a["id"])
+        if existing is not None:
+            existing["properties"] = props
+            existing["geometry"] = geometry
+            zone = by_id.get(a["id"])
+            if zone is not None:
+                zone.update({k: v for k, v in props.items() if k != "sourceId"})
+                zone["sid"] = props["sourceId"]
+                zone["asOf"] = doc.get("asOf")
+                if rings:
+                    zone["polygon"] = [list(p) for p in rings[0]]
+                    if len(rings) > 1:
+                        zone["parts"] = [list(p) for p in rings[1:]]
+        else:
+            features.append({"type": "Feature", "id": a["id"], "properties": props, "geometry": geometry})
+            by_feature_id[a["id"]] = features[-1]
+            zone = {k: v for k, v in props.items() if k != "sourceId"}
+            zone["sid"] = props["sourceId"]
+            zone["asOf"] = doc.get("asOf")
+            if rings:
+                zone["polygon"] = [list(p) for p in rings[0]]
+                if len(rings) > 1:
+                    zone["parts"] = [list(p) for p in rings[1:]]
+            seoul_zones.append(zone)
+            by_id[a["id"]] = zone
+
+        stats["_new"] += 1
+
+    return stats
+
+
+def apply_ydp(fc, seoul_zones):
+    """여의대방2역세권 적용(멱등).
+
+    · 영등포구 고시 제2026-33호(2026-03-05) 「개발행위허가의 제한지역 지형도면 고시」의
+      지형도면에서 구역계(붉은 점선)를 픽셀 단위로 떠서 경위도로 옮긴 폴리곤을 넣는다.
+      → geom="고시도면" (구청·서울시 고시 도면을 대조해 옮긴 경계).
+    · 옮긴 도형 면적 21,956㎡ 는 고시문·영등포구 재개발사업현황의 21,866.8㎡ 와 0.4% 차.
+    · 민간 서비스(재개발닷컴·재개발뷰)의 폴리곤은 쓰지 않는다.
+    """
+    doc = load_ydp()
+    if not doc:
+        return None
+    srcs = doc.get("sources", {})
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    stats = {"asOf": doc.get("asOf"),
+             "additions": len(doc.get("additions", [])),
+             "polygons": sum(1 for a in doc.get("additions", []) if a.get("polygon")),
+             "points": sum(1 for a in doc.get("additions", []) if not a.get("polygon")),
+             "aliases": len(doc.get("aliases", [])),
+             "_new": 0, "_aliased": 0}
+
+    for a in doc.get("aliases", []):
+        f = by_feature_id.get(a["id"])
+        z = by_id.get(a["id"])
+        if f is None and z is None:
+            continue
+        extra = list(a.get("alias") or [])
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        for target in (f.get("properties", {}) if f else None, z):
+            if target is None:
+                continue
+            cur = list(target.get("alias") or [])
+            for name in extra:
+                if name not in cur:
+                    cur.append(name)
+            if cur:
+                target["alias"] = cur
+            if a.get("note"):
+                target["nameNote"] = a["note"]
+            if sources:
+                target["nameSources"] = sources
+        stats["_aliased"] += 1
+
+    for a in doc.get("additions", []):
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        geom_kind = a.get("boundary") or ("고시도면" if a.get("polygon") else "미고시")
+        props = {
+            "id": a["id"],
+            "name": a["name"],
+            "alias": list(a.get("alias") or []),
+            "type": a.get("type", "장기전세"),
+            "kind": a.get("kind", ""),
             "stage": a.get("stage", ""),
             "gu": a["gu"],
             "area": a.get("area", 0),
@@ -577,6 +715,9 @@ def main():
             meta = json.load(fp)
 
     stats = apply_supplement(fc, seoul_zones, meta)
+    # meta 를 zones-meta.json 에서 새로 읽었으면 fc["metadata"] 는 예전 객체다 — 같이 맞춰 준다.
+    # (앱은 public/data/zones.geojson 의 metadata 를 읽는다)
+    fc["metadata"] = meta
 
     with open(geojson_path, "w", encoding="utf-8") as fp:
         json.dump(fc, fp, ensure_ascii=False, separators=(",", ":"))

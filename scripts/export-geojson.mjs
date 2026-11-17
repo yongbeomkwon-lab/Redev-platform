@@ -26,6 +26,7 @@ const EXTRA = [
   "locationMap",
   "note",
   "areaNote",
+  "boundaryNote",
   "nameNote",
   "nameSources",
   "sources",
