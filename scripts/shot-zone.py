@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""배포본 캡처 — 상도25 / 자양동 10 (지적편집도 켠 화면 + 일반 화면).
+"""배포본 캡처 — 지정한 좌표의 구역 (지적편집도 켠 화면 + 일반 화면).
 
   BASE=https://... LAT=.. LNG=.. LEVEL=.. OUT=/workspace/downloads/x.png JIJEOK=1 python3 scripts/shot-zone.py
 """

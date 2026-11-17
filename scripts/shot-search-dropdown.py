@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""검색 드롭다운(줄바꿈·역 검색) + 자양동 10번지 경계 캡처.
+"""검색 드롭다운(줄바꿈·역 검색) 캡처.
 
   python3 scripts/shot-search-dropdown.py                       # 로컬(3100)
   BASE=https://redev-platform-iota.vercel.app/ python3 scripts/shot-search-dropdown.py
@@ -49,25 +49,6 @@ with sync_playwright() as p:
     time.sleep(3.5)
     shot(page, f"redev-station-picked-{TAG}.png")
 
-    # ── 자양동 10번지 일원 ─────────────────────────────────────────────────
-    page.fill('input[placeholder^="구역명"]', "자양동 10")
-    time.sleep(1.2)
-    page.click('[data-testid="zone-result"]')
-    time.sleep(3.5)
-    shot(page, f"redev-jayang10-{TAG}.png")
-
-    if page.query_selector('button[title^="지적편집도"]'):
-        page.click('button[title^="지적편집도"]')
-        time.sleep(2.5)
-        shot(page, f"redev-jayang10-jijeok-{TAG}.png")
-
-    # 확대해서 경계와 필지선을 함께 본다 (지도 위 확대 버튼 2번)
-    for _ in range(2):
-        page.click('button[title="확대"]')
-        time.sleep(1.6)
-    time.sleep(1.5)
-    mbox = page.query_selector(".kakao-map-wrap").bounding_box()
-    shot(page, f"redev-jayang10-zoom-{TAG}.png", clip=mbox)
     print("engine:", page.evaluate("() => (document.querySelector('.kakao-zone-canvas') ? 'kakao' : 'leaflet')"))
     print("errors:", errs[:3] if errs else "none")
     ctx.close()
