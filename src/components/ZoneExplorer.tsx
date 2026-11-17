@@ -23,6 +23,7 @@ import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
 import { TYPE_COLORS, TYPE_ORDER } from "@/components/map/colors";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
+import ZoneTransactions from "@/components/ZoneTransactions";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { looksLikeAddress, searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
 import { loadSubwayStations, lineNames, SUBWAY_LINES, searchStations, type SubwayStation } from "@/lib/subway-stations";
@@ -1102,6 +1103,13 @@ export default function ZoneExplorer() {
                 )}
                 <p className="text-[11px] leading-relaxed text-slate-500">{selected.summary}</p>
 
+                {/* 국토부 실거래가 — 샘플 거래와 별개로 실제 신고 거래를 함께 보여준다 */}
+                <ZoneTransactions
+                  gu={selected.district}
+                  names={[selected.name]}
+                  center={selected.center}
+                />
+
                 <div>
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">추진경과</h3>
                   <ol className="ml-1.5 space-y-2 border-l-2 border-slate-200 pl-3 text-xs">
@@ -1125,7 +1133,9 @@ export default function ZoneExplorer() {
                 </div>
 
                 <div>
-                  <h3 className="mb-1.5 text-xs font-bold text-slate-700">실거래가 분석</h3>
+                  <h3 className="mb-1.5 text-xs font-bold text-slate-700">
+                    실거래가 분석 <span className="font-normal text-slate-400">(샘플)</span>
+                  </h3>
                   <TransactionTrend transactions={selectedTx} />
                   <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-slate-200">
                     <table className="w-full min-w-[520px] text-[11px]">

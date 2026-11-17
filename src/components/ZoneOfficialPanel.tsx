@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { SeoulZonesMeta, SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS } from "./map/colors";
+import ZoneTransactions from "./ZoneTransactions";
 
 const PYEONG = 3.305785;
 
@@ -167,6 +168,13 @@ export default function ZoneOfficialPanel({
         )}
       </div>
 
+      {/* 국토부 실거래가 — 서울시 고시 데이터 바로 아래에 붙여 경계·면적과 시세를 함께 본다 */}
+      <ZoneTransactions
+        gu={zone.gu}
+        names={[zone.name, ...(zone.alias ?? [])]}
+        center={zone.center}
+      />
+
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-slate-600">
         <h3 className="mb-1.5 text-xs font-bold text-slate-700">{boundaryMissing ? "경계·사업 정보" : "상세 데이터"}</h3>
         {zone.note && <p className="text-[11px] leading-relaxed">{zone.note}</p>}
@@ -174,12 +182,12 @@ export default function ZoneOfficialPanel({
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">이름 근거: {zone.nameNote}</p>
         )}
         <p className="mt-2 text-[11px] leading-relaxed">
-          세대수·비례율·시공사·실거래가·중개사 매물은 앱의 <b>대표 구역 6곳</b>(신림1·반포주공1단지 3주구·
+          세대수·비례율·시공사·중개사 매물은 앱의 <b>대표 구역 6곳</b>(신림1·반포주공1단지 3주구·
           노량진1·한남뉴타운·성수전략2·북아현1-1)에 샘플로 붙어 있습니다.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed">
-          이 구역은 서울시 고시 데이터(경계·사업유형·추진단계·면적)만 표시합니다. 매물·실거래 연동은
-          중개사 등록과 실거래 API 연결 후 채워집니다.
+          이 구역은 서울시 고시 데이터(경계·사업유형·추진단계·면적)와 위의 국토부 실거래가를 함께
+          보여줍니다. 매물·비례율은 중개사 등록 후 채워집니다.
         </p>
         {sources.length > 0 && (
           <div className="mt-3 border-t border-slate-200 pt-2 text-[10px] text-slate-500">

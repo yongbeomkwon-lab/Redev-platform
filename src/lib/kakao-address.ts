@@ -13,6 +13,7 @@ import {
   loadKakaoServices,
   type KakaoAddressDoc,
   type KakaoKeywordDoc,
+  type KakaoRegionDoc,
   type KakaoSDK,
 } from "@/components/map/kakao-loader";
 import { SEOUL_BOUNDS } from "@/components/map/props";
@@ -131,6 +132,38 @@ function keywordSearchOnce(sdk: KakaoSDK, query: string): Promise<KakaoKeywordDo
       resolve([]);
     }
   });
+}
+
+/**
+ * 좌표 → **법정동 이름** (예: 상도동).
+ *   · 국토부 실거래가는 법정동(umdNm)으로만 조회할 수 있어, 구역 이름에 동이 없을 때
+ *     구역 중심 좌표로 법정동을 알아낸다.
+ *   · 카카오 services SDK 가 없거나(키·도메인 문제) 결과가 구와 다르면 null.
+ */
+export async function legalDongAt(lat: number, lng: number, gu?: string): Promise<string | null> {
+  const loaded = await loadKakaoServices();
+  if (!loaded.ok || !loaded.sdk.maps.services) return null;
+  const sdk = loaded.sdk;
+  const doc = await new Promise<KakaoRegionDoc | null>((resolve) => {
+    try {
+      const geocoder = new sdk.maps.services!.Geocoder();
+      geocoder.coord2RegionCode(
+        lng,
+        lat,
+        (data, status) => {
+          if (status !== "OK" || !Array.isArray(data)) return resolve(null);
+          // 법정동(B) 우선 — 행정동(H)은 '상도제1동'처럼 법정동과 이름이 다르다
+          resolve(data.find((d) => d.region_type === "B") ?? data[0] ?? null);
+        }
+      );
+    } catch {
+      resolve(null);
+    }
+  });
+  if (!doc) return null;
+  if (gu && doc.region_2depth_name && doc.region_2depth_name !== gu) return null;
+  const dong = doc.region_3depth_name?.trim();
+  return dong && dong.endsWith("동") ? dong : null;
 }
 
 /**

@@ -111,11 +111,29 @@ export type KakaoKeywordDoc = {
   distance?: string;
 };
 
+export type KakaoRegionDoc = {
+  region_type: "B" | "H" | string; // B=법정동, H=행정동
+  code?: string;
+  address_name?: string;
+  region_1depth_name?: string;
+  region_2depth_name?: string;
+  region_3depth_name?: string;
+  region_4depth_name?: string;
+  x?: number;
+  y?: number;
+};
+
 export type KakaoGeocoder = {
   addressSearch(
     address: string,
     callback: (data: KakaoAddressDoc[], status: string) => void,
     options?: Record<string, unknown>
+  ): void;
+  /** 좌표 → 법정동·행정동 (x=경도, y=위도) — 구역 중심에서 법정동을 알아낼 때 쓴다 */
+  coord2RegionCode(
+    x: number,
+    y: number,
+    callback: (data: KakaoRegionDoc[], status: string) => void
   ): void;
 };
 
