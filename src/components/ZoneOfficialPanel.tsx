@@ -178,6 +178,8 @@ export default function ZoneOfficialPanel({
           출처: {meta.source}
           {meta.supplement?.asOf && ` · 구역명·신규 후보지 보강 ${meta.supplement.asOf}`}
           {meta.official80?.asOf && ` · 누락 비교리스트 ① 80곳 재검증 ${meta.official80.asOf}`}
+          {meta.dongjakMapo?.asOf && ` · 동작·마포 추진준비 구역 ${meta.dongjakMapo.asOf}`}
+          {meta.seongdongYongsan?.asOf && ` · 성동·용산 추진준비 구역 ${meta.seongdongYongsan.asOf}`}
         </p>
       </div>
     </section>

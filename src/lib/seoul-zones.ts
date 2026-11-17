@@ -76,6 +76,8 @@ export type SeoulZonesMeta = {
   official80?: { asOf?: string; aliases?: number; additions?: number; points?: number; polygons?: number; note?: string };
   /** 동작·마포 추진준비 구역 20곳 반영 결과 */
   dongjakMapo?: { asOf?: string; additions?: number; polygons?: number; points?: number; aliases?: number; note?: string };
+  /** 성동·용산 추진준비 구역 37곳 반영 결과 */
+  seongdongYongsan?: { asOf?: string; additions?: number; polygons?: number; points?: number; aliases?: number; note?: string };
 };
 
 type RawZoneProps = Omit<SeoulZone, "center" | "polygon" | "parts"> & {

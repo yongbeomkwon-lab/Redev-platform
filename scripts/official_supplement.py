@@ -27,6 +27,8 @@ SUPPLEMENT_PATH = os.path.join(HERE, "data", "official-supplement.json")
 OFFICIAL80_PATH = os.path.join(HERE, "data", "official-80.json")
 # 「동작·마포 추진준비 구역 20곳」 — 구청 공고·서울시 고시 도면으로 확인한 구역·경계
 DJM_PATH = os.path.join(HERE, "data", "official-djm.json")
+# 「성동·용산 추진준비 구역 37곳」 — 구청·서울시 공고·고시로 확인한 구역·경계
+SY_PATH = os.path.join(HERE, "data", "official-sy.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -42,6 +44,13 @@ def load_official80(path=OFFICIAL80_PATH):
 
 
 def load_djm(path=DJM_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_sy(path=SY_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -170,6 +179,9 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 4) 동작·마포 추진준비 구역 20곳 (공고 도면 7곳 폴리곤 + 10곳 점 + 별칭 3곳) ──
     stats_djm = apply_djm(fc, seoul_zones)
 
+    # ── 5) 성동·용산 추진준비 구역 37곳 (공식 경계 1곳 폴리곤 + 19곳 점 + 별칭 1곳) ──
+    stats_sy = apply_sy(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -201,6 +213,130 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         }
         stats["addedDjm"] = stats_djm["_new"]
         stats["aliasedDjm"] = stats_djm["_aliased"]
+    if stats_sy:
+        meta["seongdongYongsan"] = {
+            "asOf": stats_sy["asOf"],
+            "additions": stats_sy["additions"],
+            "polygons": stats_sy["polygons"],
+            "points": stats_sy["points"],
+            "aliases": stats_sy["aliases"],
+            "note": "성동·용산 추진준비(가칭) 구역 20곳 — 서울시 의제처리구역(UQ181) 실경계로 면적 검증(고시 대비 0.74%)을 통과한 숙대입구역세권 1곳만 폴리곤, 나머지 19곳은 구역계가 확정되지 않아 대표 지점(경계 미고시)으로 반영하고 기존 구역과 같은 1곳은 별칭으로 보강",
+        }
+        stats["addedSy"] = stats_sy["_new"]
+        stats["aliasedSy"] = stats_sy["_aliased"]
+    return stats
+
+
+def apply_sy(fc, seoul_zones):
+    """성동·용산 추진준비 구역 37곳 적용(멱등).
+
+    · 구역계가 공표된 곳은 **폴리곤**으로 넣고 geom="UQ181"(서울시 의제처리구역 실경계).
+      (민간 서비스 폴리곤은 쓰지 않는다 — 구청·서울시 공고·고시·서울 열린데이터광장만 근거로 한다)
+    · 구역계가 확정되지 않은 곳은 대표 지점만 두고 geom="미고시" — 지도에 점선원으로 그린다.
+    · 이미 있는 구역(용답동 122-8 = (가칭)용답동 122-2)은 새로 그리지 않고 별칭만 붙인다.
+    """
+    doc = load_sy()
+    if not doc:
+        return None
+    srcs = doc.get("sources", {})
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    stats = {"asOf": doc.get("asOf"),
+             "additions": len(doc.get("additions", [])),
+             "polygons": sum(1 for a in doc.get("additions", []) if a.get("polygon")),
+             "points": sum(1 for a in doc.get("additions", []) if not a.get("polygon")),
+             "aliases": len(doc.get("aliases", [])),
+             "_new": 0, "_aliased": 0}
+
+    for a in doc.get("aliases", []):
+        f = by_feature_id.get(a["id"])
+        z = by_id.get(a["id"])
+        if f is None and z is None:
+            continue
+        extra = list(a.get("alias") or [])
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        for target in (f.get("properties", {}) if f else None, z):
+            if target is None:
+                continue
+            cur = list(target.get("alias") or [])
+            for name in extra:
+                if name not in cur:
+                    cur.append(name)
+            if cur:
+                target["alias"] = cur
+            if a.get("note"):
+                target["nameNote"] = a["note"]
+            if sources:
+                target["nameSources"] = sources
+        stats["_aliased"] += 1
+
+    for a in doc.get("additions", []):
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        geom_kind = a.get("boundary") or ("UQ181" if a.get("polygon") else "미고시")
+        props = {
+            "id": a["id"],
+            "name": a["name"],
+            "alias": list(a.get("alias") or []),
+            "type": a.get("type", "신통기획"),
+            "kind": a.get("kind", "재개발"),
+            "stage": a.get("stage", ""),
+            "gu": a["gu"],
+            "area": a.get("area", 0),
+            "featured": False,
+            "sourceId": a.get("sourceId") or doc.get("asOf"),
+            "geom": geom_kind,
+            "center": list(a["center"]),
+        }
+        for key in ("selectedAt", "centerLabel", "locationMap", "note", "areaNote", "boundaryNote"):
+            if a.get(key):
+                props[key] = a[key]
+        if sources:
+            props["sources"] = sources
+
+        geometry = None
+        rings = a.get("polygon")
+        if rings:
+            if rings and isinstance(rings[0][0], (int, float)):
+                rings = [rings]
+            out_rings = []
+            for ring in rings:
+                coords = [[lng, lat] for lat, lng in ring]
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                out_rings.append(coords)
+            geometry = ({"type": "Polygon", "coordinates": [out_rings[0]]}
+                        if len(out_rings) == 1 else
+                        {"type": "MultiPolygon", "coordinates": [[r] for r in out_rings]})
+
+        existing = by_feature_id.get(a["id"])
+        if existing is not None:
+            existing["properties"] = props
+            existing["geometry"] = geometry
+            zone = by_id.get(a["id"])
+            if zone is not None:
+                zone.update({k: v for k, v in props.items() if k != "sourceId"})
+                zone["sid"] = props["sourceId"]
+                zone["asOf"] = doc.get("asOf")
+                if rings:
+                    zone["polygon"] = [list(p) for p in rings[0]]
+                    if len(rings) > 1:
+                        zone["parts"] = [list(p) for p in rings[1:]]
+        else:
+            features.append({"type": "Feature", "id": a["id"], "properties": props, "geometry": geometry})
+            by_feature_id[a["id"]] = features[-1]
+            zone = {k: v for k, v in props.items() if k != "sourceId"}
+            zone["sid"] = props["sourceId"]
+            zone["asOf"] = doc.get("asOf")
+            if rings:
+                zone["polygon"] = [list(p) for p in rings[0]]
+                if len(rings) > 1:
+                    zone["parts"] = [list(p) for p in rings[1:]]
+            seoul_zones.append(zone)
+            by_id[a["id"]] = zone
+
+        stats["_new"] += 1
+
     return stats
 
 
