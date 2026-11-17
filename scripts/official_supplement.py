@@ -38,6 +38,8 @@ UPDATES_PATH = os.path.join(HERE, "data", "official-updates.json")
 JAYANG_PATH = os.path.join(HERE, "data", "official-jayang.json")
 # 「상도23구역」 — 동작구 공고 제2026-1857호 정비구역 결정도에서 옮긴 구역계
 SANGDO23_PATH = os.path.join(HERE, "data", "official-sangdo23.json")
+# 「상도동 182-13」(동작센트럴자이) — UQ120 일반화 도형 남측 경계를 상도23구역에 맞닿도록 보정한 구역계
+SANGDO182_PATH = os.path.join(HERE, "data", "official-sangdo182.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -88,6 +90,13 @@ def load_updates(path=UPDATES_PATH):
 
 
 def load_sangdo23(path=SANGDO23_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_sangdo182(path=SANGDO182_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -231,6 +240,9 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 9) 상도23구역 — 동작구 공고 제2026-1857호 정비구역 결정도 구역계로 교체 ─────
     stats_sd23 = apply_sangdo23(fc, seoul_zones)
 
+    # ── 10) 상도동 182-13(동작센트럴자이) — 남측 경계를 상도23구역 북측 경계에 맞닿도록 보정 ─
+    stats_sd182 = apply_sangdo182(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -287,6 +299,11 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         meta["sangdo23"] = {
             "asOf": stats_sd23["asOf"],
             "note": stats_sd23["note"],
+        }
+    if stats_sd182:
+        meta["sangdo182"] = {
+            "asOf": stats_sd182["asOf"],
+            "note": stats_sd182["note"],
         }
     if stats_upd:
         meta["zoneUpdates"] = {
@@ -667,6 +684,58 @@ def apply_sangdo23(fc, seoul_zones):
         target["area"] = doc.get("area")
         target["stage"] = doc.get("stage")
         for key in ("note", "areaNote", "boundaryNote"):
+            if doc.get(key):
+                target[key] = doc[key]
+        if sources:
+            target["sources"] = sources
+        target["asOf"] = doc.get("asOf")
+        lat0 = sum(p[0] for p in rings) / len(rings)
+        lng0 = sum(p[1] for p in rings) / len(rings)
+        target["center"] = [round(lat0, 6), round(lng0, 6)]
+    if target_feature is not None:
+        target_feature["geometry"] = geometry
+    return {"asOf": doc.get("asOf"), "note": doc.get("note")}
+
+
+def apply_sangdo182(fc, seoul_zones):
+    """상도동 182-13(동작센트럴자이) 남쪽 경계를 상도23구역에 맞닿게 보정(멱등).
+
+    · 서울시 UQ120 일반화 도형의 남쪽 경계가 실제 사업구역보다 북쪽에 잡혀 있어
+      인접 상도23구역과 10~40m 틈이 버려져 있었다(재개발닷컴 화면과 대조).
+    · 남쪽 경계만 상도23구역 북쪽 경계에서 0.45m 떨어진 선까지 내려 붙이고,
+      동신교회(장승배기로 45) 일대는 교회 부지가 구역 사이에 남도록 도려낸다.
+    · 나머지 변과 `area`(UQ120 고시 67,974㎡)는 건드리지 않는다.
+    """
+    doc = load_sangdo182()
+    if not doc:
+        return None
+    zid = doc.get("zoneId")
+    rings = doc.get("polygon")
+    features = fc.setdefault("features", [])
+    target_feature = None
+    for f in features:
+        props = f.get("properties") or {}
+        if f.get("id") == zid or props.get("id") == zid or props.get("name") == doc.get("zoneName"):
+            target_feature = f
+            break
+    target_zone = next((z for z in seoul_zones if z.get("id") == zid or z.get("name") == doc.get("zoneName")), None)
+    if target_feature is None and target_zone is None:
+        return None
+    geometry = None
+    if rings:
+        coords = [[lng, lat] for lat, lng in rings]
+        if coords[0] != coords[-1]:
+            coords.append(coords[0])
+        geometry = {"type": "Polygon", "coordinates": [coords]}
+    sources = doc.get("sources") or []
+    for target in ((target_feature.get("properties") if target_feature is not None else None), target_zone):
+        if target is None:
+            continue
+        target["polygon"] = [list(p) for p in rings]
+        target["geom"] = doc.get("boundary", "UQ120보정")
+        if doc.get("areaShape"):
+            target["areaShape"] = doc["areaShape"]
+        for key in ("note", "boundaryNote"):
             if doc.get(key):
                 target[key] = doc[key]
         if sources:
