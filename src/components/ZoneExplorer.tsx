@@ -1574,6 +1574,8 @@ export default function ZoneExplorer() {
                   gu={selected.district}
                   names={[selected.name]}
                   center={selected.center}
+                  polygon={selected.polygon}
+                  parts={selected.parts}
                 />
 
                 <div>

@@ -1,17 +1,21 @@
 "use client";
 // ─────────────────────────────────────────────────────────────────────────────
-// ZoneTransactions — 구역 상세의 「최근 실거래가 (국토부)」 섹션
+// ZoneTransactions — 구역 상세의 「최근 실거래가 (국토부)」
 //
-//  · 구역의 자치구 + 이름·별칭에서 **법정동을 찾아** `/api/transactions` 를 부른다.
-//      이름에 법정동이 적혀 있으면(예: "상도동 182-13") 그 동
-//      → 없으면 같은 구 법정동 접두어("상도23구역" → 상도동)
-//      → 그래도 없으면 카카오 역지오코딩(구역 중심 좌표)
-//  · 국토부 API 는 좌표를 주지 않는다. 그래서 '구역 경계 안'을 계산하지 않고,
-//    구역 대표 지번과 같은 필지 거래만 '구역 내'로 표시하고 나머지는 '동일 법정동'으로 둔다.
-//  · 유형별 연동 상태를 그대로 보여준다 — 연립·다세대가 아직 미신청(코드 30)이어도
-//    아파트·단독다가구는 정상 표시되고, 미연동 배지가 붙는다.
+//  · 국토부 실거래가는 좌표를 주지 않는다. 그래서 구역 경계 안 거래를 가려내려면
+//      ① 구역이 걸치는 **법정동 목록**을 구해 그 동들만 조회하고(`/api/transactions?dongs=…`),
+//      ② 각 거래의 지번 주소를 카카오로 **지오코딩**해 좌표를 얻은 뒤,
+//      ③ 그 점이 구역 폴리곤 안인지(pointInRing) 판정한다.
+//    → 한남3·4·5구역을 각각 눌렀을 때 같은 '한남동 전체'가 아니라 **그 구역 안 거래만** 뜬다.
+//
+//  · 법정동 목록은 구역 안쪽 표본점(경계 격자 + 안쪽으로 당긴 꼭짓점)의 역지오코딩으로 모은다.
+//    여러 법정동에 걸친 구역(한남동·보광동 등)도 놓치지 않는다.
+//  · 지오코딩 결과는 지번 단위로 메모리 + sessionStorage 에 캐시하고, 6건씩 묶어 최근 거래부터
+//    처리하며 진행률을 보여준다(카카오 쿼터·속도 부담을 줄인다).
+//  · 단독·다가구는 국토부가 지번을 `1**`처럼 가려 와서 좌표를 얻을 수 없다 → '법정동 전체'에서만 보인다.
+//  · 화면은 **구역 내**(기본) / **법정동 전체** 두 갈래다. 구역 내 0건이면 바로 전환하는 버튼을 준다.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MOLIT_KINDS,
   eokShort,
@@ -23,7 +27,8 @@ import {
   type MolitTransaction,
   type MolitTransactionKind,
 } from "@/lib/molit";
-import { legalDongAt } from "@/lib/kakao-address";
+import { geocodeJibun, legalDongAtPoint, type GeoPoint } from "@/lib/kakao-address";
+import { hasShape, pointInZone, sampleZonePoints, type ZoneShape } from "@/lib/zone-geo";
 
 const KIND_COLORS: Record<MolitTransactionKind, string> = {
   아파트: "#2563eb",
@@ -31,39 +36,85 @@ const KIND_COLORS: Record<MolitTransactionKind, string> = {
   "연립·다세대": "#7c3aed",
 };
 
+/** 지오코딩은 6건씩 묶어 보낸다 — 카카오 주소검색 부담과 화면 멈춤을 함께 줄인다 */
+const GEO_BATCH = 6;
+/**
+ * 판정 상한 — 신림동처럼 거래가 수백 건인 큰 법정동도 끝까지 판정한다(최근 거래부터).
+ *   · 카카오 주소검색 1건당 ~20-30ms라 800건이면 30초 안팎. 진행률을 보여주며 채우고,
+ *     결과는 지번 단위로 캐시해 다시 열 때는 즉시 끝난다.
+ *   · 이 값은 쿼터·과부하를 막는 안전선이다.
+ */
+const GEO_CAP = 1200;
+/** 법정동 표본점 역지오코딩 동시 호출 수 */
+const DONG_CONCURRENCY = 4;
+
 function shortDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${y}.${m}.${d}`;
+}
+
+/** 지번이 좌표 조회에 쓸 수 있는 형태인가 — 단독·다가구의 `*`·`1**` 마스킹은 제외 */
+function cleanJibun(jibun: string): boolean {
+  return /^\d{1,4}(-\d{1,4})?$/.test(jibun.trim());
+}
+
+function txKey(t: { umdNm: string; jibun: string }): string {
+  return `${t.umdNm}|${t.jibun}`;
 }
 
 export default function ZoneTransactions({
   gu,
   names,
   center,
+  polygon,
+  parts,
+  holes,
 }: {
   gu: string;
   /** 구역 이름·별칭 — 법정동·지번을 찾는 근거 */
   names: string[];
   /** 구역 중심 좌표(있으면 역지오코딩 대비책으로 쓴다) */
   center?: [number, number];
+  /** 구역 경계 폴리곤([위도, 경도]) — 있으면 '구역 내' 판정을 직접 계산한다 */
+  polygon?: [number, number][] | null;
+  /** MultiPolygon 의 나머지 조각 */
+  parts?: [number, number][][] | null;
+  /** 구역 안에 뚫린 구멍 */
+  holes?: [number, number][][] | null;
 }) {
   const [dongs, setDongs] = useState<string[] | null>(null);
   const [dongNote, setDongNote] = useState<string | null>(null);
   const [months, setMonths] = useState(6);
   const [kind, setKind] = useState<MolitTransactionKind | "전체">("전체");
+  const [mode, setMode] = useState<"zone" | "dong">("zone");
   const [data, setData] = useState<MolitResponse | null>(null);
   const [state, setState] = useState<"resolving" | "loading" | "ready" | "error">("resolving");
   const [visible, setVisible] = useState(20);
   const [reloadKey, setReloadKey] = useState(0);
+  const [geo, setGeo] = useState<Record<string, GeoPoint | null>>({});
+  const [progress, setProgress] = useState<{ done: number; total: number; found: number }>({
+    done: 0,
+    total: 0,
+    found: 0,
+  });
+  const geoGen = useRef(0);
 
   const namesKey = names.join("|");
   const jibun = useMemo(() => zoneJibunInText(names), [namesKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const lat = center?.[0];
   const lng = center?.[1];
+  const shape = useMemo<ZoneShape>(() => ({ polygon, parts, holes }), [polygon, parts, holes]);
+  const shaped = hasShape(shape);
+  const dongsKey = dongs?.join(",") ?? "";
+
+  // 경계 도형이 없으면(경계 미고시 후보지) '구역 내'를 계산할 수 없다 → 법정동 전체만
+  useEffect(() => {
+    setMode(shaped ? "zone" : "dong");
+  }, [shaped, namesKey]);
 
   // ── 1) 법정동 찾기 ────────────────────────────────────────────────────────
-  //   이름에 동이 그대로 있으면 즉시, 접두어 후보가 1개면 즉시,
-  //   후보가 2~4개(성수동1가·성수동2가)면 카카오 역지오코딩으로 좁혀 본다.
+  //   이름에 동이 그대로 있으면 그 동을 기본으로 두고, 구역 안쪽 여러 지점을 역지오코딩해
+  //   걸치는 동을 모두 더한다(한남3구역 → 한남동·보광동 …).
   useEffect(() => {
     let alive = true;
     setDongs(null);
@@ -72,31 +123,43 @@ export default function ZoneTransactions({
 
     const list = namesKey ? namesKey.split("|") : [];
     const exact = legalDongInText(gu, list);
-    if (exact) {
-      setDongs([exact]);
-      return;
-    }
     const stems = guessLegalDongsByStem(gu, list);
-    if (stems.length === 1) {
-      setDongs(stems);
+    const base = exact ? [exact] : stems;
+
+    const points = shaped
+      ? sampleZonePoints(shape, 12, lat !== undefined && lng !== undefined ? [lat, lng] : undefined)
+      : lat !== undefined && lng !== undefined
+        ? ([[lat, lng]] as [number, number][])
+        : [];
+
+    if (!points.length && base.length) {
+      setDongs(base);
       return;
     }
 
     (async () => {
-      let found: string[] | null = null;
-      if (lat !== undefined && lng !== undefined) {
-        // SDK 가 응답하지 않는 경우에 패널이 멈추지 않도록 2.5초 상한을 둔다
-        const guess = await Promise.race([
-          legalDongAt(lat, lng, gu),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-        ]);
-        if (!alive) return;
-        if (guess) found = [guess];
-      }
-      if (!found && stems.length) found = stems;
-      if (found) setDongs(found);
-      else {
-        setDongNote("구역 이름·위치에서 법정동을 확인하지 못했습니다.");
+      const sampled: string[] = [];
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < points.length) {
+          const p = points[cursor++];
+          const d = await legalDongAtPoint(p[0], p[1], gu);
+          if (!alive) return;
+          if (d && !sampled.includes(d)) sampled.push(d);
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(DONG_CONCURRENCY, points.length) }, () => worker())
+      );
+      if (!alive) return;
+      const out = [...base, ...sampled.filter((d) => !base.includes(d))].slice(0, 6);
+      if (out.length) {
+        setDongs(out);
+        if (out.length >= 2) {
+          setDongNote(`${out.join("·")}에 걸친 구역입니다.`);
+        }
+      } else {
+        setDongNote("구역 이름·경계에서 법정동을 확인하지 못했습니다.");
         setState("error");
       }
     })();
@@ -104,19 +167,16 @@ export default function ZoneTransactions({
     return () => {
       alive = false;
     };
-  }, [gu, namesKey, lat, lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gu, namesKey, lat, lng, shaped, shape]);
 
   // ── 2) 실거래 조회 ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!dongs?.length) return;
     let alive = true;
     setState("loading");
-    const qs = new URLSearchParams({
-      gu,
-      dong: dongs.join(","),
-      months: String(months),
-    });
-    if (jibun && dongs.includes(jibun.dong)) qs.set("jibun", String(jibun.bonbun));
+    const qs = new URLSearchParams({ gu, dongs: dongs.join(","), months: String(months) });
+    // 경계 도형이 없을 때만 대표 지번 일치로 '구역 내'를 흉내 낸다
+    if (!shaped && jibun && dongs.includes(jibun.dong)) qs.set("jibun", String(jibun.bonbun));
     fetch(`/api/transactions?${qs.toString()}`, { cache: "no-store" })
       .then((r) => r.json() as Promise<MolitResponse>)
       .then((json) => {
@@ -132,18 +192,88 @@ export default function ZoneTransactions({
     return () => {
       alive = false;
     };
-  }, [gu, dongs, months, jibun, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gu, dongsKey, months, jibun, shaped, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rows = data?.transactions ?? [];
+  const rows = useMemo(() => data?.transactions ?? [], [data]);
+
+  // ── 3) 지번 → 좌표 → 구역 안/밖 판정 ─────────────────────────────────────
+  useEffect(() => {
+    const gen = ++geoGen.current;
+    if (!shaped || !data?.ok) {
+      setProgress({ done: 0, total: 0, found: 0 });
+      return;
+    }
+    const done = new Set<string>();
+    const jobs = rows
+      .filter((r) => r.kind !== "단독·다가구" && cleanJibun(r.jibun))
+      .slice(0, GEO_CAP)
+      .filter((r) => {
+        if (done.has(txKey(r))) return false;
+        done.add(txKey(r));
+        return true;
+      });
+    if (!jobs.length) {
+      setProgress({ done: 0, total: 0, found: 0 });
+      return;
+    }
+
+    let cancelled = false;
+    let found = 0;
+    setProgress({ done: 0, total: jobs.length, found: 0 });
+
+    (async () => {
+      for (let i = 0; i < jobs.length; i += GEO_BATCH) {
+        if (cancelled || geoGen.current !== gen) return;
+        const chunk = jobs.slice(i, i + GEO_BATCH);
+        const points = await Promise.all(chunk.map((r) => geocodeJibun(gu, r.umdNm, r.jibun)));
+        if (cancelled || geoGen.current !== gen) return;
+        const add: Record<string, GeoPoint | null> = {};
+        chunk.forEach((r, k) => {
+          const p = points[k];
+          if (p) found += 1;
+          add[txKey(r)] = p;
+        });
+        setGeo((prev) => ({ ...prev, ...add }));
+        setProgress((prev) => ({
+          done: Math.min(jobs.length, prev.done + chunk.length),
+          total: jobs.length,
+          found,
+        }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shaped, data, rows, gu]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 좌표가 구역 폴리곤 안에 드는 거래의 키 집합
+  const insideKeys = useMemo(() => {
+    const set = new Set<string>();
+    if (!shaped) return set;
+    for (const [k, p] of Object.entries(geo)) {
+      if (p && pointInZone(shape, p.lat, p.lng)) set.add(k);
+    }
+    return set;
+  }, [geo, shape, shaped]);
+
+  const isInside = (t: MolitTransaction): boolean =>
+    shaped ? insideKeys.has(txKey(t)) : t.scope === "zone";
+
+  const zoneRows = useMemo(() => rows.filter(isInside), [rows, insideKeys, shaped]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scopedRows = mode === "zone" ? zoneRows : rows;
+
   const filtered = useMemo(
-    () => (kind === "전체" ? rows : rows.filter((r) => r.kind === kind)),
-    [rows, kind]
+    () => (kind === "전체" ? scopedRows : scopedRows.filter((r) => r.kind === kind)),
+    [scopedRows, kind]
   );
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const r of rows) if (!r.canceled) m[r.kind] = (m[r.kind] ?? 0) + 1;
+    for (const r of scopedRows) if (!r.canceled) m[r.kind] = (m[r.kind] ?? 0) + 1;
     return m;
-  }, [rows]);
+  }, [scopedRows]);
+  const zoneCount = useMemo(() => zoneRows.filter((r) => !r.canceled).length, [zoneRows]);
+  const totalCount = data?.summary?.count ?? 0;
 
   // 지금 고른 유형·기간의 평균 평당가 — 전용(아파트·연립)과 대지(단독·다가구)를 섞지 않는다
   const avg = useMemo(() => {
@@ -157,10 +287,16 @@ export default function ZoneTransactions({
 
   const missKinds = (data?.coverage ?? []).filter((c) => !c.ok);
   const dongLabel = dongs?.join("·") ?? "";
-  const period = data?.query ? `${data.query.from.slice(0, 4)}.${data.query.from.slice(4)}~${data.query.to.slice(0, 4)}.${data.query.to.slice(4)}` : "";
+  const period = data?.query
+    ? `${data.query.from.slice(0, 4)}.${data.query.from.slice(4)}~${data.query.to.slice(0, 4)}.${data.query.to.slice(4)}`
+    : "";
+  const geoRunning = shaped && progress.total > 0 && progress.done < progress.total;
+  const geoCapped = shaped && rows.filter((r) => r.kind !== "단독·다가구" && cleanJibun(r.jibun)).length > GEO_CAP;
+  const geoFailedAll = shaped && progress.total > 0 && progress.done === progress.total && progress.found === 0;
+  const shown = filtered.slice(0, visible);
 
   return (
-    <section className="rounded-xl border border-blue-200 bg-blue-50/40 p-3">
+    <section data-testid="zone-tx" className="rounded-xl border border-blue-200 bg-blue-50/40 p-3">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
         <span className="whitespace-nowrap text-[11px] font-bold text-blue-900">
           최근 실거래가 <span className="font-normal text-blue-700/80">(국토부)</span>
@@ -170,6 +306,42 @@ export default function ZoneTransactions({
           {period ? ` · ${period}` : ""}
         </span>
       </div>
+
+      {/* 구역 내 / 법정동 전체 — 경계 도형이 있을 때만 고를 수 있다 */}
+      {shaped && state === "ready" && (
+        <div className="mb-2 inline-flex overflow-hidden rounded-full border border-blue-300 bg-white text-[11px]">
+          <button
+            type="button"
+            data-testid="tx-mode-zone"
+            onClick={() => {
+              setMode("zone");
+              setVisible(20);
+            }}
+            className={
+              mode === "zone"
+                ? "bg-blue-900 px-2.5 py-1 text-[11px] font-bold text-white"
+                : "px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-50"
+            }
+          >
+            구역 내 <span className="font-normal">{zoneCount}</span>
+          </button>
+          <button
+            type="button"
+            data-testid="tx-mode-dong"
+            onClick={() => {
+              setMode("dong");
+              setVisible(20);
+            }}
+            className={
+              mode === "dong"
+                ? "bg-blue-900 px-2.5 py-1 text-[11px] font-bold text-white"
+                : "px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-50"
+            }
+          >
+            {dongs && dongs.length > 1 ? "법정동 전체" : "동일 법정동"} <span className="font-normal">{totalCount}</span>
+          </button>
+        </div>
+      )}
 
       {/* 유형 필터 + 기간 */}
       <div className="mb-2 flex flex-wrap items-center gap-1">
@@ -183,7 +355,7 @@ export default function ZoneTransactions({
               : "border-blue-200 bg-white text-blue-800 hover:border-blue-400")
           }
         >
-          전체 <span className="font-normal">{data?.summary?.count ?? ""}</span>
+          전체 <span className="font-normal">{mode === "zone" ? zoneCount : totalCount}</span>
         </button>
         {MOLIT_KINDS.map((k) => {
           const off = missKinds.some((c) => c.kind === k);
@@ -252,23 +424,57 @@ export default function ZoneTransactions({
           {/* 요약 */}
           <div className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-blue-900/80">
             <span>
-              <b className="text-blue-900">{data?.summary?.count ?? 0}건</b>
+              <b className="text-blue-900">{mode === "zone" ? zoneCount : totalCount}건</b>
               {data?.summary?.canceled ? ` (해제 ${data.summary.canceled}건 별도)` : ""}
             </span>
             {avg.jeon ? <span>평균 평당 <b className="text-blue-900">{avg.jeon.toLocaleString()}만</b></span> : null}
             {avg.land ? <span>대지 평당 <b className="text-blue-900">{avg.land.toLocaleString()}만</b></span> : null}
-            {data?.summary?.inZone ? <span className="font-semibold text-blue-900">구역 내 {data.summary.inZone}건</span> : null}
+            {mode === "zone" && shaped && progress.total > 0 && (
+              <span className="text-blue-800/70">
+                경계 판정 {progress.done}/{progress.total}지번{geoCapped ? ` (최근 ${GEO_CAP}건까지)` : ""}
+              </span>
+            )}
           </div>
+
+          {/* 구역 경계 판정 진행 — 목록은 판정되는 대로 채워진다 */}
+          {mode === "zone" && geoRunning && (
+            <div className="mb-1.5 rounded-lg border border-blue-200 bg-white px-2 py-1" data-testid="tx-geo-progress">
+              <div className="flex items-center gap-1.5 text-[10px] text-blue-800">
+                <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-blue-300 border-t-blue-700" />
+                지번 좌표로 구역 경계를 확인하는 중… {progress.done}/{progress.total}
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-1 rounded-full bg-blue-600 transition-all"
+                  style={{ width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* 거래 목록 */}
           {filtered.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-blue-200 bg-white py-5 text-center text-[11px] text-slate-500">
-              {kind === "전체" ? `최근 ${months}개월 ${dongLabel} 국토부 신고 거래가 없습니다.` : `${kind} 거래가 없습니다.`}
-            </p>
+            <EmptyState
+              mode={mode}
+              kind={kind}
+              months={months}
+              dongLabel={dongLabel}
+              shaped={shaped}
+              geoRunning={geoRunning}
+              geoFailedAll={geoFailedAll}
+              zoneCount={zoneCount}
+              onShowAll={() => {
+                setMode("dong");
+                setVisible(20);
+              }}
+            />
           ) : (
-            <ul className="divide-y divide-blue-100 overflow-hidden rounded-lg border border-blue-100 bg-white">
-              {filtered.slice(0, visible).map((t) => (
-                <TxRow key={t.id} t={t} />
+            <ul
+              data-testid="tx-rows"
+              className="divide-y divide-blue-100 overflow-hidden rounded-lg border border-blue-100 bg-white"
+            >
+              {shown.map((t) => (
+                <TxRow key={t.id} t={t} inside={isInside(t)} showBadge={mode === "dong"} />
               ))}
             </ul>
           )}
@@ -285,6 +491,13 @@ export default function ZoneTransactions({
 
           {/* 안내 */}
           <ul className="mt-2 space-y-0.5 text-[10px] leading-relaxed text-slate-500">
+            {mode === "zone" && shaped && (
+              <li>
+                · 구역 경계 폴리곤 안에 좌표가 드는 아파트·연립다세대 거래만 보여줍니다(지번 주소를 카카오로
+                좌표 변환). 단독·다가구는 국토부가 지번을 가려 판정할 수 없어 ‘법정동 전체’에서만 보입니다.
+              </li>
+            )}
+            {!shaped && <li>· 이 구역은 경계 도형이 없어(경계 미고시) 법정동 전체 거래만 보여줍니다.</li>}
             {(data?.notices ?? []).map((n) => (
               <li key={n}>· {n}</li>
             ))}
@@ -314,7 +527,99 @@ export default function ZoneTransactions({
   );
 }
 
-function TxRow({ t }: { t: MolitTransaction }) {
+function EmptyState({
+  mode,
+  kind,
+  months,
+  dongLabel,
+  shaped,
+  geoRunning,
+  geoFailedAll,
+  zoneCount,
+  onShowAll,
+}: {
+  mode: "zone" | "dong";
+  kind: MolitTransactionKind | "전체";
+  months: number;
+  dongLabel: string;
+  shaped: boolean;
+  geoRunning: boolean;
+  geoFailedAll: boolean;
+  zoneCount: number;
+  onShowAll: () => void;
+}) {
+  if (mode === "zone" && shaped) {
+    if (kind === "단독·다가구") {
+      return (
+        <div className="rounded-lg border border-dashed border-blue-200 bg-white px-2 py-4 text-center text-[11px] leading-relaxed text-slate-500">
+          단독·다가구는 국토부가 지번을 `1**`처럼 가려서 구역 안팎을 판정할 수 없습니다.
+          <br />
+          <button
+            type="button"
+            onClick={onShowAll}
+            className="mt-1.5 rounded-full border border-blue-300 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800 hover:border-blue-500"
+          >
+            {dongLabel || "법정동"} 전체 보기
+          </button>
+        </div>
+      );
+    }
+    if (geoFailedAll) {
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-4 text-center text-[11px] leading-relaxed text-amber-900">
+          지번 주소를 좌표로 바꾸지 못해 구역 경계 안팎을 판정할 수 없습니다(카카오 주소 서비스 응답 없음).
+          <br />
+          <button
+            type="button"
+            onClick={onShowAll}
+            className="mt-1.5 rounded-full border border-amber-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 hover:border-amber-500"
+          >
+            {dongLabel || "법정동"} 전체 보기
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div
+        data-testid="tx-zone-empty"
+        className="rounded-lg border border-dashed border-blue-200 bg-white px-2 py-4 text-center text-[11px] leading-relaxed text-slate-500"
+      >
+        {geoRunning ? (
+          <>구역 경계 안 거래를 찾는 중…</>
+        ) : (
+          <>
+            구역 경계 안에서 최근 {months}개월 {kind === "전체" ? "아파트·연립다세대" : kind} 거래가 없습니다.
+            {zoneCount === 0 ? "" : " (유형을 바꿔 보세요)"}
+            <br />
+            <button
+              type="button"
+              data-testid="tx-show-all"
+              onClick={onShowAll}
+              className="mt-1.5 rounded-full border border-blue-300 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800 hover:border-blue-500"
+            >
+              {dongLabel || "법정동"} 전체 보기
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+  return (
+    <p className="rounded-lg border border-dashed border-blue-200 bg-white py-5 text-center text-[11px] text-slate-500">
+      {kind === "전체" ? `최근 ${months}개월 ${dongLabel} 국토부 신고 거래가 없습니다.` : `${kind} 거래가 없습니다.`}
+    </p>
+  );
+}
+
+function TxRow({
+  t,
+  inside,
+  showBadge,
+}: {
+  t: MolitTransaction;
+  inside: boolean;
+  showBadge: boolean;
+}) {
   const area = t.areaSqm ? `${t.areaSqm.toFixed(t.areaSqm >= 100 ? 0 : 1)}㎡` : null;
   const pyeong = t.areaSqm ? toPyeong(t.areaSqm) : null;
   const land = t.plottageSqm ? `${t.plottageSqm.toFixed(0)}㎡` : null;
@@ -328,7 +633,7 @@ function TxRow({ t }: { t: MolitTransaction }) {
             aria-hidden
           />
           <span className="truncate text-[12px] font-semibold text-slate-900">{t.name}</span>
-          {t.scope === "zone" && (
+          {showBadge && inside && (
             <span className="shrink-0 rounded bg-emerald-600 px-1 py-px text-[9px] font-bold text-white">구역 내</span>
           )}
           {t.canceled && (

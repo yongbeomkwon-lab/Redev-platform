@@ -17,6 +17,7 @@ import {
   type KakaoSDK,
 } from "@/components/map/kakao-loader";
 import { SEOUL_BOUNDS } from "@/components/map/props";
+import { SEOUL_LEGAL_DONGS } from "@/lib/seoul-legal-dongs";
 
 export type AddressCandidate = {
   key: string;
@@ -139,9 +140,26 @@ function keywordSearchOnce(sdk: KakaoSDK, query: string): Promise<KakaoKeywordDo
  *   · 국토부 실거래가는 법정동(umdNm)으로만 조회할 수 있어, 구역 이름에 동이 없을 때
  *     구역 중심 좌표로 법정동을 알아낸다.
  *   · 카카오 services SDK 가 없거나(키·도메인 문제) 결과가 구와 다르면 null.
+ *   · 좌표별 결과는 메모리 캐시에 둔다(같은 구역을 다시 열어도 재호출하지 않는다).
  */
 export async function legalDongAt(lat: number, lng: number, gu?: string): Promise<string | null> {
+  return legalDongAtPoint(lat, lng, gu);
+}
+
+/** 역지오코딩 결과 캐시 — 좌표를 소수 5자리(≈1m)로 반올림해 키로 쓴다 */
+const dongAtCache = new Map<string, string | null>();
+
+/**
+ * 좌표 → 법정동 이름 ("성수동1가"처럼 '가'로 끝나는 동도 그대로 돌려준다).
+ *   · 구역이 걸치는 법정동을 찾을 때 표본점마다 부른다.
+ *   · 같은 구의 법정동 목록(SEOUL_LEGAL_DONGS)에 있는 이름만 받는다 — 행정동(상도제1동)이나
+ *     다른 구 결과를 걸러내기 위해서다.
+ */
+export async function legalDongAtPoint(lat: number, lng: number, gu?: string): Promise<string | null> {
+  const ck = `${gu ?? ""}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+  if (dongAtCache.has(ck)) return dongAtCache.get(ck) ?? null;
   const loaded = await loadKakaoServices();
+  // SDK 가 아직(또는 영영) 안 뜨는 경우는 캐시하지 않는다 — 나중에 키·도메인이 풀리면 다시 시도해야 한다
   if (!loaded.ok || !loaded.sdk.maps.services) return null;
   const sdk = loaded.sdk;
   const doc = await new Promise<KakaoRegionDoc | null>((resolve) => {
@@ -160,10 +178,110 @@ export async function legalDongAt(lat: number, lng: number, gu?: string): Promis
       resolve(null);
     }
   });
-  if (!doc) return null;
+  const found = doc ? nameFromRegionDoc(doc, gu) : null;
+  dongAtCache.set(ck, found);
+  return found;
+}
+
+function nameFromRegionDoc(doc: KakaoRegionDoc, gu?: string): string | null {
   if (gu && doc.region_2depth_name && doc.region_2depth_name !== gu) return null;
-  const dong = doc.region_3depth_name?.trim();
-  return dong && dong.endsWith("동") ? dong : null;
+  const name = (doc.region_3depth_name ?? "").trim();
+  if (!name) return null;
+  const known = gu ? SEOUL_LEGAL_DONGS[gu] : undefined;
+  if (known) return known.includes(name) ? name : null;
+  return name.endsWith("동") || name.endsWith("가") ? name : null;
+}
+
+// ── 지번 → 좌표 (실거래 구역 내 판정용) ─────────────────────────────────────
+
+export type GeoPoint = { lat: number; lng: number };
+
+const SESSION_KEY = "redev:jibun-geo:v1";
+const jibunCache = new Map<string, GeoPoint | null>();
+const jibunInflight = new Map<string, Promise<GeoPoint | null>>();
+let sessionLoaded = false;
+
+function loadSessionCache() {
+  if (sessionLoaded || typeof window === "undefined") return;
+  sessionLoaded = true;
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    const obj = JSON.parse(raw) as Record<string, [number, number] | null>;
+    for (const [k, v] of Object.entries(obj)) {
+      jibunCache.set(k, Array.isArray(v) ? { lat: v[0], lng: v[1] } : null);
+    }
+  } catch {
+    /* 저장소를 못 쓰면 메모리 캐시만 쓴다 */
+  }
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * sessionStorage 쓰기는 1.5초에 한 번으로 묶는다 — 수백 지번을 연달아 판정할 때
+ * 매 건마다 전체 맵을 직렬화하면 느려진다.
+ */
+function saveSessionCacheSoon() {
+  if (typeof window === "undefined" || saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try {
+      const obj: Record<string, [number, number] | null> = {};
+      for (const [k, v] of jibunCache) obj[k] = v ? [v.lat, v.lng] : null;
+      window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(obj));
+    } catch {
+      /* 용량·차단 문제는 무시 — 다음 열람에서 다시 지오코딩하면 된다 */
+    }
+  }, 1500);
+}
+
+/**
+ * `서울특별시 {구} {동} {지번}` → 좌표.
+ *   · 국토부 실거래가에는 좌표가 없어 구역 경계 안팎을 계산하려면 지번 주소로 되짚어야 한다.
+ *   · 결과(없음 포함)는 메모리 + sessionStorage 에 남겨 같은 지번을 다시 부르지 않는다.
+ *   · 주소 검색이 ZERO_RESULT 면 `서울 {구} {동} {지번}`으로 한 번 더 시도한다.
+ */
+export async function geocodeJibun(gu: string, dong: string, jibun: string): Promise<GeoPoint | null> {
+  const key = `${gu}|${dong}|${jibun}`;
+  loadSessionCache();
+  if (jibunCache.has(key)) return jibunCache.get(key) ?? null;
+  const running = jibunInflight.get(key);
+  if (running) return running;
+
+  const job = (async (): Promise<GeoPoint | null> => {
+    const loaded = await loadKakaoServices();
+    if (!loaded.ok || !loaded.sdk.maps.services) return null;
+    const sdk = loaded.sdk;
+    for (const q of [`서울특별시 ${gu} ${dong} ${jibun}`, `서울 ${gu} ${dong} ${jibun}`]) {
+      const { status, docs } = await addressSearchOnce(sdk, q);
+      if (status !== "OK" || !docs.length) continue;
+      for (const d of docs) {
+        const lat = Number(d.y);
+        const lng = Number(d.x);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        // 다른 구로 떨어지는 결과는 버린다(동 이름만 같고 구가 다른 경우)
+        const rGu = d.address?.region_2depth_name;
+        if (rGu && rGu !== gu) continue;
+        if (!inSeoul(lat, lng)) continue;
+        return { lat, lng };
+      }
+    }
+    return null;
+  })();
+
+  jibunInflight.set(key, job);
+  const point = await job;
+  jibunInflight.delete(key);
+  jibunCache.set(key, point);
+  saveSessionCacheSoon();
+  return point;
+}
+
+/** 이미 지오코딩해 둔 지번인가 — 진행률 표시에서 다시 세지 않으려고 */
+export function hasCachedJibun(gu: string, dong: string, jibun: string): boolean {
+  loadSessionCache();
+  return jibunCache.has(`${gu}|${dong}|${jibun}`);
 }
 
 /**

@@ -173,6 +173,9 @@ export default function ZoneOfficialPanel({
         gu={zone.gu}
         names={[zone.name, ...(zone.alias ?? [])]}
         center={zone.center}
+        polygon={zone.polygon}
+        parts={zone.parts}
+        holes={zone.holes}
       />
 
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-slate-600">

@@ -1,13 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/transactions — 국토교통부 실거래가 (최근 3~6개월)
+// GET /api/transactions — 국토교통부 실거래가 (최근 3~12개월)
 //
-//   ?gu=동작구&dong=상도동&months=6&jibun=209
+//   ?gu=동작구&dongs=상도동&months=6&jibun=209
 //     · gu      서울 자치구 (필수) — 25개 구 → LAWD_CD 매핑
-//     · dong    법정동 이름 (필수, 쉼표로 여러 개 가능: 성수동1가,성수동2가)
+//     · dongs   법정동 이름 (필수, 쉼표·가운뎃점으로 여러 개: 한남동,보광동)
+//                · 예전 이름 `dong` 도 그대로 받는다(단일 동 호환)
 //     · months  3~12 (기본 6, 이번 달 포함)
-//     · jibun   구역 대표 지번 본번 — 같은 지번 거래를 '구역 내'로 표시(선택)
+//     · jibun   구역 대표 지번 본번 — 같은 지번 거래를 '구역 내'로 표시(선택, 경계 도형이 없을 때만 씀)
 //
 //   응답에는 비밀 키가 절대 들어가지 않는다 — 키는 이 파일에서만 읽는다.
+//   구역 경계 안팎 판정은 클라이언트(지번 지오코딩 + 폴리곤)에서 한다. 이 라우트는
+//   **어느 법정동을 조회할지**만 정하고, 그 동들의 거래를 그대로 넘긴다.
 // ─────────────────────────────────────────────────────────────────────────────
 import { NextResponse } from "next/server";
 import {
@@ -18,6 +21,9 @@ import {
 import { loadGuTransactions, recentMonths } from "@/lib/molit-server";
 
 export const dynamic = "force-dynamic";
+
+/** 구역이 걸치는 법정동은 보통 1~3개, 많아도 5개 안팎 — 그 이상은 받지 않는다 */
+const MAX_DONGS = 8;
 
 function fail(reason: NonNullable<MolitResponse["reason"]>, message: string, status = 200) {
   const body: MolitResponse = { ok: false, reason, message };
@@ -37,7 +43,7 @@ function parseJibun(raw: string | null): { bonbun: number; bubun: number | null 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const gu = (url.searchParams.get("gu") ?? "").trim();
-  const dongRaw = (url.searchParams.get("dong") ?? "").trim();
+  const dongRaw = (url.searchParams.get("dongs") ?? url.searchParams.get("dong") ?? "").trim();
   const monthsParam = Number(url.searchParams.get("months") ?? "6");
   const months = Number.isFinite(monthsParam) ? Math.min(12, Math.max(3, Math.round(monthsParam))) : 6;
   const zoneJibun = parseJibun(url.searchParams.get("jibun"));
@@ -45,11 +51,15 @@ export async function GET(req: Request) {
   const lawdCd = SEOUL_LAWD_CODES[gu];
   if (!lawdCd) return fail("gu_not_found", `서울 자치구 이름을 확인해 주세요 (받은 값: ${gu || "없음"})`, 400);
 
-  const dongs = dongRaw
-    .split(/[,·]/)
-    .map((d) => d.trim())
-    .filter(Boolean);
-  if (!dongs.length) return fail("bad_request", "법정동(dong)을 지정해 주세요", 400);
+  const dongs = Array.from(
+    new Set(
+      dongRaw
+        .split(/[,·]/)
+        .map((d) => d.trim())
+        .filter(Boolean)
+    )
+  ).slice(0, MAX_DONGS);
+  if (!dongs.length) return fail("bad_request", "법정동(dongs)을 지정해 주세요", 400);
 
   const key = (process.env.MOLIT_API_KEY ?? "").trim();
   if (!key) {
@@ -119,12 +129,7 @@ export async function GET(req: Request) {
     notices.push(`${otherFail.map((c) => c.kind).join("·")} 매매는 국토부 응답 오류로 이번 조회에서 빠졌습니다.`);
   }
   if (data.coverage.some((c) => c.kind === "단독·다가구" && c.ok)) {
-    notices.push("단독·다가구는 지번이 `1**`처럼 가려져 와서 필지를 특정할 수 없습니다 — 같은 법정동 최근 거래로만 봐 주세요.");
-  }
-  if (zoneJibun) {
-    notices.push(
-      "국토부 API는 좌표를 주지 않아 구역 경계 안팎을 계산할 수 없습니다. 구역 대표 지번과 같은 필지 거래만 '구역 내'로 표시했습니다."
-    );
+    notices.push("단독·다가구는 국토부가 지번을 가려서(`1**`) 필지를 특정할 수 없습니다 — 같은 법정동 최근 거래로만 봐 주세요.");
   }
   if (rows.length === 0) {
     notices.push(`${dongs.join("·")}에는 최근 ${months}개월 국토부 신고 거래가 없습니다.`);
