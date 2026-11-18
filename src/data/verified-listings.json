@@ -28,7 +28,7 @@
       "deposit": 27700,
       "exclusiveAreaSqm": 29.175,
       "leaseOperatorOnly": true,
-      "landPermitRequired": false,
+      "landPermitRequired": true,
       "verified": true,
       "note": "임대사업자 승계 필수 물건 · 초기투자금 약 5.03억 · 2018.08 사용승인",
       "createdAt": "2026-11-18"
