@@ -73,6 +73,10 @@ function FitSelected({
     lastReq.current = fitRequest;
     if (skip && !forced) return;
     if (ring && ring.length >= 3) {
+      // 이미 구역 전체가 화면에 들어와 있으면(지도에서 직접 누른 경우 등) 화면을 흔들지 않는다 —
+      //   카카오맵과 같은 규칙. ‘구역 전체 보기’(forced)일 때만 다시 맞춘다.
+      const bounds = L.latLngBounds(ring as [number, number][]);
+      if (!forced && map.getBounds().contains(bounds)) return;
       map.flyToBounds(ring as [number, number][], { padding: [40, 40], maxZoom: 17, duration: 0.7 });
       return;
     }

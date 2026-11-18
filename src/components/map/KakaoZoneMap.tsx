@@ -303,6 +303,12 @@ export default function KakaoZoneMap({
   const stationAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
   /** 마지막으로 처리한 ‘구역 전체 보기’ 요청 토큰 */
   const lastFitReqRef = useRef(0);
+  /**
+   * 지도 위에서 구역을 **직접 눌러** 고른 순간 — 이때는 화면(줌·위치)을 그대로 둔다.
+   *   (검색·목록·딥링크로 이동할 때만 화면을 맞춘다. 예전에는 클릭만 해도 fitBounds 가 돌아
+   *    지도가 한두 단계씩 축소됐다 — “구역을 클릭하면 지도가 작아진다”의 원인)
+   */
+  const mapClickZoneRef = useRef<{ id: string; t: number } | null>(null);
   /** 이름표·화면 맞춤을 마지막으로 적용한 구역 — 핀만 바뀐 경우(핀 지우기) 화면을 흔들지 않으려고 */
   const lastLabelZoneRef = useRef<string | undefined>(undefined);
   const labelAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
@@ -1319,6 +1325,8 @@ export default function KakaoZoneMap({
       }
       if (hit) {
         hideTip();
+        // 지도에서 직접 누른 선택 — 선택 효과에서 줌·이동을 하지 않도록 표시해 둔다.
+        mapClickZoneRef.current = { id: hit.id, t: Date.now() };
         onSelectRef.current(hit.id);
       }
     };
@@ -1695,6 +1703,15 @@ export default function KakaoZoneMap({
     // 여기서는 이름표 위치만 잡고 그린다(이중으로 화면이 튀지 않게).
     if (!selectedZoneId && custom) {
       draw();
+      return;
+    }
+
+    // 지도에서 직접 눌러 고른 구역 — 보고 있던 줌·위치를 그대로 유지한다(그리기만).
+    const clickedOnMap = mapClickZoneRef.current;
+    if (clickedOnMap && clickedOnMap.id === selectedZoneId && Date.now() - clickedOnMap.t < 3000) {
+      mapClickZoneRef.current = null;
+      draw();
+      settleView();
       return;
     }
 
@@ -2554,7 +2571,10 @@ function fitLatLngSpan(
   const hPx = Math.max(Math.abs(ne.y - sw.y), 0.5);
   const fit = Math.min((cw - pad * 2) / wPx, (ch - pad * 2) / hPx);
   // 기본은 2배 단위(floor) — 구역 경계가 잘리지 않게. fill 이면 반올림해 화면을 꽉 채운다.
-  const step = fill ? Math.round(Math.log2(Math.max(fit, 0.01))) : Math.floor(Math.log2(Math.max(fit, 0.01)));
+  //   · 축소는 한 번에 **1단계까지만**. 예전에는 큰 구역을 고르면 한 번에 2~3단계씩 멀어져
+  //     “화면이 갑자기 작아진다”는 느낌을 줬다. 이미 화면에 들어와 있으면(0.8~1.6배) 그대로 둔다.
+  const rawStep = fill ? Math.round(Math.log2(Math.max(fit, 0.01))) : Math.floor(Math.log2(Math.max(fit, 0.01)));
+  const step = fill ? rawStep : Math.min(rawStep, 1);
   const level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, map.getLevel() - step));
   map.jump(new k.maps.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2), level, {
     animate: { duration: 350 },
