@@ -38,6 +38,8 @@ UPDATES_PATH = os.path.join(HERE, "data", "official-updates.json")
 SANGDO23_PATH = os.path.join(HERE, "data", "official-sangdo23.json")
 # 「상도동 182-13」(동작센트럴자이) — UQ120 일반화 도형 남측 경계를 상도23구역에 맞닿도록 보정한 구역계
 SANGDO182_PATH = os.path.join(HERE, "data", "official-sangdo182.json")
+# 「강남·서초·송파·영등포 추진준비 24곳」 — 구청 공고·서울시 고시로 확인한 구역·경계 + 기존 구역 정정 3건
+G4_PATH = os.path.join(HERE, "data", "official-gangnam4gu.json")
 # 「자양동 10번지 일원」 — 대표님이 관리자 그리기 도구로 직접 그린 경계(민간도심복합·성장거점형, 추진준비)
 JAYANG10_PATH = os.path.join(HERE, "data", "official-jayang10.json")
 
@@ -90,6 +92,13 @@ def load_sangdo23(path=SANGDO23_PATH):
 
 
 def load_sangdo182(path=SANGDO182_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_g4(path=G4_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -243,6 +252,9 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 10) 상도동 182-13(동작센트럴자이) — 남측 경계를 상도23구역 북측 경계에 맞닿도록 보정 ─
     stats_sd182 = apply_sangdo182(fc, seoul_zones)
 
+    # ── 11) 강남·서초·송파·영등포 추진준비 24곳 + 기존 구역 정정(사당21·도림1·가락현대5차) ─
+    stats_g4 = apply_g4(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -304,6 +316,17 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
             "asOf": stats_sd182["asOf"],
             "note": stats_sd182["note"],
         }
+    if stats_g4:
+        meta["gangnamSeochoSongpaYdp"] = {
+            "asOf": stats_g4["asOf"],
+            "additions": stats_g4["additions"],
+            "polygons": stats_g4["polygons"],
+            "points": stats_g4["points"],
+            "updates": stats_g4["updates"],
+            "note": "강남·서초·송파·영등포 추진준비(가칭) 구역 24곳 — 구청 공고 도면에서 구역계를 옮긴 3곳(오금동 70-1·신길6·대림동 642)은 폴리곤(geom=공고도면), 도면이 없거나 스캔 판독·정합이 불가한 21곳은 공식 대표지번 지점(경계 미고시)으로 반영. 같은 자료에서 확인된 사당21구역 후보지 취소·도림1구역 공공재개발·가락현대5차 준공도 함께 반영",
+        }
+        stats["addedG4"] = stats_g4["_new"]
+        stats["updatedG4"] = stats_g4["updates"]["applied"]
     if stats_upd:
         meta["zoneUpdates"] = {
             "asOf": stats_upd["asOf"],
@@ -904,6 +927,148 @@ def apply_djm(fc, seoul_zones):
             by_id[a["id"]] = zone
 
         stats["_new"] += 1
+
+    return stats
+
+
+def apply_g4(fc, seoul_zones):
+    """강남·서초·송파·영등포 추진준비 24곳 + 기존 구역 정정 3건 적용(멱등).
+
+    · 구청 공고 도면의 구역계를 옮긴 3곳(오금동 70-1·신길6·대림동 642)은 폴리곤(geom="공고도면").
+    · 도면이 없거나(서울시 보도자료·구청 현황만) 스캔 판독·정합이 불가한 21곳은 공식 대표지번
+      지점만 두고 geom="미고시" — 지도에 점선원으로 그린다(없는 경계를 만들지 않는다).
+    · updates: 사당21구역 후보지 취소(기본 지도 숨김), 도림1구역 공공재개발, 가락현대5차 준공.
+    """
+    doc = load_g4()
+    if not doc:
+        return None
+    srcs = doc.get("sources", {})
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_prop_id = {(f.get("properties") or {}).get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    stats = {"asOf": doc.get("asOf"),
+             "additions": len(doc.get("additions", [])),
+             "polygons": sum(1 for a in doc.get("additions", []) if a.get("polygon")),
+             "points": sum(1 for a in doc.get("additions", []) if not a.get("polygon")),
+             "updates": {"applied": 0, "hidden": 0, "missing": []},
+             "aliases": len(doc.get("aliases", [])),
+             "_new": 0}
+
+    # 기존 구역에 공식 별칭을 붙인다(같은 구역을 두 번 그리지 않기 위해)
+    for a in doc.get("aliases", []):
+        f = by_feature_id.get(a["id"])
+        z = by_id.get(a["id"])
+        if f is None and z is None:
+            continue
+        extra = list(a.get("alias") or [])
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        for target in (f.get("properties", {}) if f else None, z):
+            if target is None:
+                continue
+            cur = list(target.get("alias") or [])
+            for name in extra:
+                if name not in cur:
+                    cur.append(name)
+            if cur:
+                target["alias"] = cur
+            if a.get("note"):
+                target["nameNote"] = a["note"]
+            if sources:
+                target["nameSources"] = sources
+
+
+    for a in doc.get("additions", []):
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        geom_kind = a.get("boundary") or ("공고도면" if a.get("polygon") else "미고시")
+        props = {
+            "id": a["id"],
+            "name": a["name"],
+            "alias": list(a.get("alias") or []),
+            "type": a.get("type", "신통기획"),
+            "kind": a.get("kind", "재개발"),
+            "stage": a.get("stage", ""),
+            "gu": a["gu"],
+            "area": a.get("area", 0),
+            "featured": False,
+            "sourceId": a.get("sourceId") or doc.get("asOf"),
+            "geom": geom_kind,
+            "center": list(a["center"]),
+        }
+        for key in ("selectedAt", "centerLabel", "locationMap", "note", "areaNote", "boundaryNote"):
+            if a.get(key):
+                props[key] = a[key]
+        if sources:
+            props["sources"] = sources
+
+        geometry = None
+        rings = a.get("polygon")
+        if rings:
+            if rings and isinstance(rings[0][0], (int, float)):
+                rings = [rings]
+            out_rings = []
+            for ring in rings:
+                coords = [[lng, lat] for lat, lng in ring]
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                out_rings.append(coords)
+            geometry = ({"type": "Polygon", "coordinates": [out_rings[0]]}
+                        if len(out_rings) == 1 else
+                        {"type": "MultiPolygon", "coordinates": [[r] for r in out_rings]})
+
+        existing = by_feature_id.get(a["id"])
+        if existing is not None:
+            existing["properties"] = props
+            existing["geometry"] = geometry
+            zone = by_id.get(a["id"])
+            if zone is not None:
+                zone.update({k: v for k, v in props.items() if k != "sourceId"})
+                zone["sid"] = props["sourceId"]
+                zone["asOf"] = doc.get("asOf")
+                if rings:
+                    zone["polygon"] = [list(p) for p in rings[0]]
+                    if len(rings) > 1:
+                        zone["parts"] = [list(p) for p in rings[1:]]
+        else:
+            features.append({"type": "Feature", "id": a["id"], "properties": props, "geometry": geometry})
+            by_feature_id[a["id"]] = features[-1]
+            zone = {k: v for k, v in props.items() if k != "sourceId"}
+            zone["sid"] = props["sourceId"]
+            zone["asOf"] = doc.get("asOf")
+            if rings:
+                zone["polygon"] = [list(p) for p in rings[0]]
+                if len(rings) > 1:
+                    zone["parts"] = [list(p) for p in rings[1:]]
+            seoul_zones.append(zone)
+            by_id[a["id"]] = zone
+
+        stats["_new"] += 1
+
+    # 기존 구역 정정 — 경계(도형)는 그대로 두고 속성만 덮어쓴다
+    for u in doc.get("updates", []):
+        zid = u["id"]
+        f = by_feature_id.get(zid) or by_prop_id.get(zid)
+        z = by_id.get(zid)
+        if f is None and z is None:
+            stats["updates"]["missing"].append(zid)
+            continue
+        sources = [srcs[k] for k in (u.get("sources") or []) if k in srcs]
+        targets = []
+        if f is not None:
+            targets.append(f.setdefault("properties", {}))
+        if z is not None:
+            targets.append(z)
+        for target in targets:
+            for key, value in (u.get("set") or {}).items():
+                target[key] = value
+            for key in ("note", "areaNote", "nameNote"):
+                if u.get(key):
+                    target[key] = u[key]
+            if sources:
+                target["sources"] = sources
+        if (u.get("set") or {}).get("hiddenByDefault"):
+            stats["updates"]["hidden"] += 1
+        stats["updates"]["applied"] += 1
 
     return stats
 
