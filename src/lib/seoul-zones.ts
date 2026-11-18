@@ -59,6 +59,21 @@ export type SeoulZone = {
 };
 
 /**
+ * 사업유형 정규화 — 레코드의 소분류(kind)가 민간도심복합개발이면 지도 분류를 유형별로 가른다.
+ *   · 서울플랜+ 레코드는 type 이 옛 분류(예: '일반재개발')로 들어오거나 비어 있을 수 있다.
+ *   · 성장거점형·주거중심형은 사용자가 따로 보고 싶어 하는 구분이라 kind 이름에서 읽어 정한다.
+ *     (kind 에 유형이 없으면 레코드의 type 을 그대로 둔다 — 없는 유형을 지어내지 않는다)
+ */
+export function resolveZoneType(type: string | undefined, kind: string | undefined): MapZoneType {
+  const k = kind ?? "";
+  if (k.includes("민간도심복합")) {
+    if (k.includes("성장거점")) return "민간도심복합(성장거점형)";
+    if (k.includes("주거중심")) return "민간도심복합(주거중심형)";
+  }
+  return (type as MapZoneType) || "일반재개발";
+}
+
+/**
  * 사업이 끝난 구역(준공·입주 완료)인지 — 지도에서는 기본으로 숨긴다.
  *   · 서울플랜+ 추진단계 '준공'(263곳) / '준공(일부)'(8곳) + 청년안심주택 '입주'(73)·'사용승인'(13) = 357곳
  *   · 사용승인·입주·입주중·사업완료는 다른 사업유형(역세권·청년안심·도시재생 등)의 종료 단계라
@@ -191,13 +206,14 @@ export function loadSeoulZones(): Promise<SeoulZonesData> {
         // 경계 미고시 후보지 — 폴리곤 없이 대표 지점만
         if (!f.geometry) {
           if (!props.center) continue;
-          zones.push({ ...props, id: zoneId, center: props.center });
+          zones.push({ ...props, type: resolveZoneType(props.type, props.kind), id: zoneId, center: props.center });
           continue;
         }
         const { outer, holes } = ringsOf(f.geometry);
         if (!outer.length) continue;
         zones.push({
           ...props,
+          type: resolveZoneType(props.type, props.kind),
           id: zoneId,
           center: bboxCenter(outer[0]),
           polygon: outer[0],

@@ -15,18 +15,30 @@
 import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS } from "@/components/map/colors";
 
-/** 사업유형 — 기존 8분류 + 기타(직접 입력 구역) */
+/** 사업유형 — 기존 8분류 + 민간도심복합 2유형 + 기타(직접 입력 구역) */
 export const CUSTOM_ZONE_TYPES = [
   "신통기획",
   "모아타운",
   "일반재개발",
   "도공복",
+  "민간도심복합(성장거점형)",
+  "민간도심복합(주거중심형)",
   "가로주택",
   "역세권",
   "장기전세",
   "기타",
 ] as const;
 export type CustomZoneType = MapZoneType | "기타";
+
+/**
+ * 사업유형 → 서울시 사업유형 소분류(kind).
+ *   내보낸 GeoJSON 의 kind 가 '관리자 직접 입력'으로 뭉개져 유형이 사라지는 걸 막는다
+ *   (민간도심복합처럼 유형 이름에 소분류가 들어 있는 사업만 지정).
+ */
+export const CUSTOM_TYPE_KIND: Partial<Record<CustomZoneType, string>> = {
+  "민간도심복합(성장거점형)": "민간도심복합개발(성장거점형)",
+  "민간도심복합(주거중심형)": "민간도심복합개발(주거중심형)",
+};
 
 /** 추진단계 — 서울시 데이터(서울플랜+)의 단계 이름 + 추진준비(구역지정 전) */
 export const CUSTOM_ZONE_STAGES = [
@@ -294,7 +306,7 @@ export function customZonesToGeoJSON(list: CustomZone[]): string {
       id: z.id,
       name: z.name,
       type: z.type,
-      kind: z.replacesZoneId ? "관리자 경계 보정" : "관리자 직접 입력",
+      kind: z.replacesZoneId ? "관리자 경계 보정" : (CUSTOM_TYPE_KIND[z.type] ?? "관리자 직접 입력"),
       stage: z.stage,
       gu: z.gu,
       area: Math.round(z.areaSqm),

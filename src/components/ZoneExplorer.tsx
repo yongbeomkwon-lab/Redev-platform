@@ -60,6 +60,8 @@ const ZONE_TYPES: (MapZoneType | "전체")[] = [
   "신통기획",
   "모아타운",
   "도공복",
+  "민간도심복합(성장거점형)",
+  "민간도심복합(주거중심형)",
   "가로주택",
   "소규모",
   "역세권",
@@ -1438,6 +1440,10 @@ export default function ZoneExplorer() {
             <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["역세권"] }}>역세권</b> = 역세권활성화·청년안심주택 ·{" "}
               <b style={{ color: TYPE_COLORS["장기전세"] }}>장기전세</b> = 장기전세주택·미리내집 (서울시 사업유형)
+            </p>
+            <p className="text-[10px] leading-snug text-slate-500">
+              <b style={{ color: TYPE_COLORS["민간도심복합(성장거점형)"] }}>민간도심복합</b> = 민간이 하는
+              도심복합개발(도공복의 민간판) · 성장거점형·주거중심형을 진한/연한 빨강으로 나눔
             </p>
             <p className="text-[10px] leading-snug text-slate-400">
               구역을 클릭하면 서울시 고시 데이터가 열립니다 · 지도를 움직여 둘러보세요
