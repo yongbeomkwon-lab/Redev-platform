@@ -158,16 +158,27 @@ export function ringAreaSqm(ring: [number, number][]): number {
   return Math.abs((sum * R * R) / 2);
 }
 
-/** DB 행 → 관리자 구역. id·name·링(3점 이상)이 없으면 버린다 */
+/** 필드 하나를 snake_case(DB 행) 또는 camelCase(API 응답) 어느 쪽에서도 읽는다 */
+const pickOf = (row: Record<string, unknown>, snake: string, camel: string): unknown =>
+  row[snake] !== undefined && row[snake] !== null ? row[snake] : row[camel];
+
+/**
+ * DB 행(**또는 `/api/custom-zones` 응답 항목**) → 관리자 구역.
+ *   · 서버 라우트는 이미 화면 모양(camelCase·ring)으로 바꿔 내려주므로, 두 모양을 모두 받는다.
+ *   · id·name·링(3점 이상)이 없으면 버린다.
+ */
 export function zoneFromRow(row: Record<string, unknown>): ZoneRecord | null {
   const id = strOf(row.id);
   const name = strOf(row.name);
-  if (!id || !name || !Array.isArray(row.ring_lat_lng)) return null;
-  const ring = (row.ring_lat_lng as unknown[]).filter(isFinitePair);
+  const ringRaw = Array.isArray(row.ring_lat_lng) ? row.ring_lat_lng : Array.isArray(row.ring) ? row.ring : null;
+  if (!id || !name || !ringRaw) return null;
+  const ring = ringRaw.filter(isFinitePair);
   if (ring.length < 3) return null;
-  const area = numOf(row.area);
-  const createdAt = strOf(row.created_at) ?? new Date().toISOString();
-  const updatedAt = strOf(row.updated_at) ?? createdAt;
+  const area = numOf(row.area) ?? numOf(row.areaSqm);
+  const createdAt = strOf(row.created_at) ?? strOf(row.createdAt) ?? new Date().toISOString();
+  const updatedAt = strOf(row.updated_at) ?? strOf(row.updatedAt) ?? createdAt;
+  const replacesZoneId = strOf(pickOf(row, "replaces_zone_id", "replacesZoneId"));
+  const replacesName = strOf(pickOf(row, "replaces_name", "replacesName"));
   return {
     id,
     name,
@@ -177,8 +188,8 @@ export function zoneFromRow(row: Record<string, unknown>): ZoneRecord | null {
     note: strOf(row.note) ?? "",
     ring,
     areaSqm: area && area > 0 ? area : Math.round(ringAreaSqm(ring)),
-    ...(strOf(row.replaces_zone_id) ? { replacesZoneId: strOf(row.replaces_zone_id) } : {}),
-    ...(strOf(row.replaces_name) ? { replacesName: strOf(row.replaces_name) } : {}),
+    ...(replacesZoneId ? { replacesZoneId } : {}),
+    ...(replacesName ? { replacesName } : {}),
     createdAt,
     updatedAt,
   };
