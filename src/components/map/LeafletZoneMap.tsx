@@ -353,7 +353,7 @@ function SeoulZoneLayer({
         .map((z) => ({
           type: "Feature" as const,
           id: z.id,
-          properties: { id: z.id, name: z.name, alias: z.alias, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area },
+          properties: { id: z.id, name: z.name, alias: z.alias, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area, boundaryApprox: z.boundaryApprox },
           geometry: {
             type: "Polygon" as const,
             coordinates: [[...z.polygon, z.polygon[0]].map(([lat, lng]) => [lng, lat])],
@@ -371,7 +371,8 @@ function SeoulZoneLayer({
           f?.properties?.id === selectedRef.current,
           false,
           zoomRef.current,
-          isCompletedZone({ stage: (f?.properties?.stage as string) ?? "" })
+          isCompletedZone({ stage: (f?.properties?.stage as string) ?? "" }),
+          !!f?.properties?.boundaryApprox
         ),
       onEachFeature: (feature, lyr) => {
         const p = feature.properties as { id: string; name: string; type: string; kind: string; stage: string; gu: string; area: number };
@@ -398,7 +399,14 @@ function SeoulZoneLayer({
       const p = (l as L.Path & { feature?: GeoJSON.Feature }).feature?.properties;
       if (!p) return;
       (l as L.Path).setStyle(
-        zoneStyle(p.type as SeoulZone["type"], p.id === selectedId, false, zoom, isCompletedZone({ stage: p.stage ?? "" }))
+        zoneStyle(
+          p.type as SeoulZone["type"],
+          p.id === selectedId,
+          false,
+          zoom,
+          isCompletedZone({ stage: p.stage ?? "" }),
+          !!p.boundaryApprox
+        )
       );
     });
   }, [selectedId, zoom]);

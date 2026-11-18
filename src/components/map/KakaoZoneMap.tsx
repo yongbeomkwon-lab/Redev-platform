@@ -667,7 +667,7 @@ export default function KakaoZoneMap({
     const hoverId = hoverRef.current;
 
     const batches = new Map<string, Batch>();
-    const activePaths: { path: Path2D; color: string; weight: number; fillOpacity: number }[] = [];
+    const activePaths: { path: Path2D; color: string; weight: number; fillOpacity: number; dash: number[] | null }[] = [];
 
     let buf = bufRef.current;
 
@@ -677,10 +677,10 @@ export default function KakaoZoneMap({
       const z = pz.zone;
       const isSel = z.id === selId;
       const isHover = !isSel && z.id === hoverId;
-      const st = zoneStyle(z.type, isSel || isHover, z.featured, zoomProxy, pz.completed);
+      const st = zoneStyle(z.type, isSel || isHover, z.featured, zoomProxy, pz.completed, pz.approx);
       // 스카이뷰에서는 항공사진이 보이도록 채움을 옅게 (테두리는 그대로)
       if (skyviewRef.current) st.fillOpacity = Math.min(st.fillOpacity, isSel || isHover ? 0.3 : 0.16);
-      const dash = pz.completed ? [4, 3] : null;
+      const dash = pz.completed ? [4, 3] : pz.approx ? [7, 5] : null;
 
       let target: Path2D;
       let activePath: Path2D | null = null;
@@ -734,7 +734,7 @@ export default function KakaoZoneMap({
       }
 
       if (activePath) {
-        activePaths.push({ path: activePath, color: st.color, weight: st.weight, fillOpacity: st.fillOpacity });
+        activePaths.push({ path: activePath, color: st.color, weight: st.weight, fillOpacity: st.fillOpacity, dash });
       }
     }
 
@@ -751,6 +751,7 @@ export default function KakaoZoneMap({
 
     // 2) 호버·선택 구역은 위에 한 번 더 — 눈에 띄게
     for (const a of activePaths) {
+      ctx.setLineDash(a.dash ?? []);
       ctx.fillStyle = rgba(a.color, a.fillOpacity);
       ctx.fill(a.path);
       ctx.strokeStyle = rgba(a.color, 1);
@@ -760,6 +761,7 @@ export default function KakaoZoneMap({
       ctx.lineWidth = Math.max(1, a.weight - 2);
       ctx.stroke(a.path);
     }
+    ctx.setLineDash([]);
 
     // 3) 구역계 미고시 후보지(예: 사당21구역) — 점선 원 + 흰 점
     for (const z of data.points) {

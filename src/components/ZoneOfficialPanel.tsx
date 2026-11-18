@@ -145,6 +145,13 @@ export default function ZoneOfficialPanel({
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 사업지 선정 전이라 실제 경계와 다를 수 있음
                 </span>
               </>
+            ) : zone.geom === "근사원" ? (
+              <>
+                근사 경계 — 실제 구역계 아님(경계 미고시)
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
+                </span>
+              </>
             ) : zone.geom === "미고시" ? (
               <>
                 미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다

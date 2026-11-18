@@ -47,7 +47,14 @@ export const TYPE_ORDER: MapZoneType[] = [
  *  · 확대할수록 선을 굵게(zoom 13~14 ×1.5, 15+ ×2) — 구역 경계가 또렷하게 읽히도록
  *  · completed(준공 완료) = 점선 + 옅은 채움 — ‘끝난 구역’임을 한눈에 구분한다
  */
-export function zoneStyle(type: MapZoneType, active = false, featured = false, zoom = 11, completed = false) {  const color = TYPE_COLORS[type] ?? "#64748b";
+export function zoneStyle(
+  type: MapZoneType,
+  active = false,
+  featured = false,
+  zoom = 11,
+  completed = false,
+  approx = false
+) {  const color = TYPE_COLORS[type] ?? "#64748b";
   const grow = zoom >= 15 ? 2 : zoom >= 13 ? 1.5 : 1;
 
   if (completed) {
@@ -58,6 +65,18 @@ export function zoneStyle(type: MapZoneType, active = false, featured = false, z
       dashArray: "4 3",
       fillColor: color,
       fillOpacity: active ? 0.3 : 0.1,
+    };
+  }
+
+  if (approx) {
+    // 위치 참고용 근사원(대표 지번 중심·면적 환산) — 실제 구역계가 아니므로 점선으로 옅게
+    return {
+      color,
+      weight: Math.min((active ? 2.6 : 1.5) * grow, active ? 4.5 : 3.5),
+      opacity: active ? 1 : 0.85,
+      dashArray: "7 5",
+      fillColor: color,
+      fillOpacity: active ? 0.32 : 0.16,
     };
   }
 

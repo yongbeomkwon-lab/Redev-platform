@@ -32,6 +32,8 @@ export type PreparedZone = {
   maxLng: number;
   /** 준공·입주 완료 — 점선으로 그린다 */
   completed: boolean;
+  /** 위치 참고용 근사원(실제 구역계 아님) — 점선으로 옅게 그린다 */
+  approx: boolean;
 };
 
 export type PreparedZones = {
@@ -103,7 +105,17 @@ export function prepareZones(list: SeoulZone[]): PreparedZones {
       }
       holes.push({ pts, minLat: rMinLat, minLng: rMinLng, maxLat: rMaxLat, maxLng: rMaxLng });
     }
-    zones.push({ zone: z, rings, holes, minLat, minLng, maxLat, maxLng, completed: isCompletedZone(z) });
+    zones.push({
+      zone: z,
+      rings,
+      holes,
+      minLat,
+      minLng,
+      maxLat,
+      maxLng,
+      completed: isCompletedZone(z),
+      approx: !!z.boundaryApprox,
+    });
   }
 
   return { zones, points };

@@ -1683,7 +1683,8 @@ export default function ZoneExplorer() {
             </div>
             <p className="text-[10px] leading-snug text-slate-500">
               경계·면적·단계: 서울시 도시계획사업(서울플랜+)·의제처리구역(UQ181) 실데이터 ·{" "}
-              <b>점</b>은 구역계 미고시 후보지(예: 신길16-1·방배16구역) · <b>점선</b>은 준공·입주 완료 구역
+              <b>점</b>은 구역계 미고시 후보지(예: 신길16-1·방배16구역) · <b>점선</b>은 준공·입주 완료 구역 ·
+              <b>옅은 점선 원</b>은 위치만 알려 주는 근사 경계(실제 구역계 아님)
             </p>
             <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["역세권"] }}>역세권</b> = 역세권활성화·청년안심주택 ·{" "}
