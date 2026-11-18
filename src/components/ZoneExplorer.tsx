@@ -68,6 +68,7 @@ import {
 const ZONE_TYPES: (MapZoneType | "전체")[] = [
   "전체",
   "일반재개발",
+  "공공재개발",
   "신통기획",
   "모아타운",
   "도공복",

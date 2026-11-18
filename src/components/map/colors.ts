@@ -16,6 +16,8 @@ export const TYPE_COLORS: Record<MapZoneType, string> = {
   모아타운: "#0ea5e9",
   도공복: "#f59e0b",
   일반재개발: "#10b981",
+  // 공공재개발 = 공공이 사업시행자로 참여하는 재개발(도림1구역 등) — 일반재개발과 구분되는 진한 초록
+  공공재개발: "#047857",
   가로주택: "#0d9488",
   소규모: "#64748b",
   역세권: "#f97316",
@@ -27,6 +29,7 @@ export const TYPE_COLORS: Record<MapZoneType, string> = {
 /** 범례 노출 순서 (면적·중요도 순) */
 export const TYPE_ORDER: MapZoneType[] = [
   "일반재개발",
+  "공공재개발",
   "신통기획",
   "모아타운",
   "도공복",
