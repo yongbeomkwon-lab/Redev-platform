@@ -27,12 +27,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { CircleMarker, MapContainer, Marker, Pane, Polygon, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Pane, Polygon, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
-import { TYPE_COLORS, zoneStyle } from "./colors";
+import type { MapZoneType } from "@/lib/types";
+import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import SubwayLayer from "./SubwayLayer";
-import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps, type TxMapPin } from "./props";
+import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import { addressPinHtml, stationPinHtml } from "./address-pin";
 
 export { TYPE_COLORS };
@@ -219,8 +220,98 @@ function TxPricePins({ pins }: { pins: TxMapPin[] }) {
   );
 }
 
-/** 확대 수준을 상위로 알린다 — 줌이 바뀌면 선 굵기를 다시 계산한다 */
-function ZoomWatcher({ onChange }: { onChange: (zoom: number) => void }) {
+/**
+ * 내 매물 핀 — 카카오맵(z-index 96)과 같은 생김새(`매 7.3억 / 다세대 · 전 52.88㎡`).
+ *   · Leaflet 에서는 divIcon 마커로 폴리곤 캔버스(400)·매물 배지(700) 사이 pane(695)에 얹는다.
+ *   · 클릭하면 매물 카드(주소·가격·면적·특징·부동산포스 매물번호·연락처)가 팝업으로 열리고,
+ *     소속 정비구역이 있으면 그 구역 열기 버튼이 붙는다.
+ */
+function MyListingPins({ pins, onSelectZone }: { pins: MyListingPin[]; onSelectZone: (id: string) => void }) {
+  if (pins.length === 0) return null;
+  return (
+    <Pane name="redevMyPins" style={{ zIndex: 695 }}>
+      {pins.map((p) => {
+        const accent = p.dealType === "매매" ? "#b45309" : p.dealType === "전세" ? "#0369a1" : "#7c3aed";
+        const areaShort = (p.areaLabel || "").split("·")[0];
+        const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return (
+          <Marker
+            key={p.id}
+            position={[p.lat, p.lng]}
+            keyboard={false}
+            icon={L.divIcon({
+              className: "redev-my-pin",
+              html: `<div style="transform:translate(-50%,-100%);display:block;text-align:center;border:1.5px solid ${accent};border-left:4px solid ${accent};background:#fff;border-radius:6px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 8px rgba(15,23,42,.32);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:#0f172a;">${esc(p.priceLabel)}</span><span style="display:block;font-size:9px;font-weight:600;color:#475569;">${esc(p.propertyType)}${areaShort ? ` · ${esc(areaShort)}` : ""}</span></div>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            })}
+          >
+            <Popup maxWidth={280} autoPan>
+              <div style={{ fontSize: 11, lineHeight: 1.4, color: "#334155" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ background: accent, color: "#fff", borderRadius: 3, padding: "1px 4px", fontSize: 9, fontWeight: 800 }}>
+                    내 매물
+                  </span>
+                  <b style={{ fontSize: 11, color: "#0f172a" }}>
+                    {p.propertyType} · {p.dealType}
+                  </b>
+                  <span style={{ marginLeft: "auto", fontSize: 9, color: "#94a3b8" }}>포스 {p.rfineNo}</span>
+                </div>
+                <div style={{ marginTop: 3, fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{p.priceText}</div>
+                <div style={{ marginTop: 2, fontSize: 10 }}>{p.address || p.jibunAddress}</div>
+                <div style={{ fontSize: 10 }}>
+                  {p.areaLabel}
+                  {p.floor ? ` · ${p.floor}층` : ""}
+                  {p.zoneName ? ` · ${p.zoneName}` : ""}
+                </div>
+                {p.feature && <div style={{ marginTop: 3, fontSize: 10 }}>{p.feature}</div>}
+                <div style={{ marginTop: 3, fontSize: 9.5, color: "#64748b" }}>
+                  부동산포스 {p.rfineNo} · 010-2758-5292
+                </div>
+                <div style={{ marginTop: 5, display: "flex", gap: 4 }}>
+                  {p.zoneId && p.zoneName && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectZone(p.zoneId as string)}
+                      style={{ flex: 1, border: `1px solid ${accent}`, background: "#fffbeb", color: accent, borderRadius: 6, padding: "3px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}
+                    >
+                      {p.zoneName} 열기
+                    </button>
+                  )}
+                  {p.detailUrl && (
+                    <a
+                      href={p.detailUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ flex: 1, textAlign: "center", border: "1px solid #cbd5e1", background: "#f8fafc", color: "#334155", borderRadius: 6, padding: "3px 4px", fontSize: 10, fontWeight: 700, textDecoration: "none" }}
+                    >
+                      부동산포스 상세 ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+    </Pane>
+  );
+}
+
+/** `/?my=<id>` 로 들어왔을 때 그 매물 핀으로 화면을 옮긴다 */
+function FocusMyPin({ pins, focusId }: { pins: MyListingPin[]; focusId?: string | null }) {
+  const map = useMap();
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusId || last.current === focusId) return;
+    last.current = focusId;
+    const p = pins.find((v) => v.id === focusId);
+    if (p) map.flyTo([p.lat, p.lng], Math.max(map.getZoom(), 15), { duration: 0.7 });
+  }, [focusId, pins, map]);
+  return null;
+}
+
+/** 확대 수준을 상위로 알린다 — 줌이 바뀌면 선 굵기를 다시 계산한다 */function ZoomWatcher({ onChange }: { onChange: (zoom: number) => void }) {
   const map = useMap();
   useEffect(() => {
     const handler = () => onChange(map.getZoom());
@@ -326,15 +417,24 @@ function SeoulZoneLayer({
         | undefined;
       if (!p) return;
       if (p.id === selectedId) {
-        // 선택 구역 이름표 — 지번 별칭(예: 사당동 419-1)도 함께 적어 지도에서 바로 대조되게 한다
+        // 선택 구역 이름표 — 지번 별칭(예: 사당동 419-1)도 함께 적어 지도에서 바로 대조되게 한다.
+        // 앞에는 사업유형 뱃지(카카오맵과 같은 규칙: 신통기획 → ‘신속통합기획’).
         const parcel = (p.alias ?? []).find((a) => /\d+-\d+/.test(a));
+        const badgeText = [shortZoneType(p.type), shortStage(p.stage)].filter(Boolean).join(" · ");
+        const typeColor = TYPE_COLORS[p.type as MapZoneType] ?? "#64748b";
+        const badge = badgeText
+          ? `<span class="zone-type-badge" style="background:${typeColor}">${badgeText}</span>`
+          : "";
         path.unbindTooltip();
-        path.bindTooltip(parcel ? `<b>${p.name}</b><span class="zone-name-sub"> · ${parcel}</span>` : `<b>${p.name}</b>`, {
-          permanent: true,
-          direction: "center",
-          className: "zone-name-label",
-          opacity: 1,
-        });
+        path.bindTooltip(
+          parcel ? `${badge}<b>${p.name}</b><span class="zone-name-sub"> · ${parcel}</span>` : `${badge}<b>${p.name}</b>`,
+          {
+            permanent: true,
+            direction: "center",
+            className: "zone-name-label",
+            opacity: 1,
+          }
+        );
         path.openTooltip();
       } else if (p.id === prev || path.getTooltip()?.options.permanent) {
         path.unbindTooltip();
@@ -361,6 +461,10 @@ export default function LeafletZoneMap({
   txPins = [],
   txPinsOn = true,
   onToggleTxPins,
+  myPins = [],
+  myPinsOn = false,
+  onToggleMyPins,
+  myFocusId,
   admin,
   fallbackReason,
 }: LeafletZoneMapProps) {
@@ -454,6 +558,10 @@ export default function LeafletZoneMap({
       {/* ── 실거래 가격 핀 — 구역 상세의 ‘구역 내’ 거래 ── */}
       <TxPricePins pins={txPinsOn ? txPins : []} />
 
+      {/* ── 내 매물 핀 — 「내 매물만 보기」가 켜졌을 때 63건 전체 ── */}
+      <MyListingPins pins={myPinsOn ? myPins : []} onSelectZone={onSelectZone} />
+      <FocusMyPin pins={myPinsOn ? myPins : []} focusId={myFocusId} />
+
       <FitSelected
         ring={selected.ring}
         point={selected.point}
@@ -494,6 +602,23 @@ export default function LeafletZoneMap({
 
       {/* 지도 위 토글 — 지하철 노선 · 준공 포함 (구역 클릭과 무관) */}
       <div className="absolute right-3 top-3 z-[600] flex flex-col items-end gap-1.5">
+        {onToggleMyPins && myPins.length > 0 && (
+          <button
+            type="button"
+            onClick={onToggleMyPins}
+            aria-pressed={myPinsOn}
+            data-testid="my-listings-toggle"
+            title={`내가 올린 매물 ${myPins.length}건만 지도에 표시`}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-md transition ${
+              myPinsOn
+                ? "border-amber-600 bg-amber-500 text-white"
+                : "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+            }`}
+          >
+            <span aria-hidden>🏠</span>
+            내 매물만 보기 ({myPins.length})
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setShowSubway((v) => !v)}

@@ -47,8 +47,7 @@ export const TYPE_ORDER: MapZoneType[] = [
  *  · 확대할수록 선을 굵게(zoom 13~14 ×1.5, 15+ ×2) — 구역 경계가 또렷하게 읽히도록
  *  · completed(준공 완료) = 점선 + 옅은 채움 — ‘끝난 구역’임을 한눈에 구분한다
  */
-export function zoneStyle(type: MapZoneType, active = false, featured = false, zoom = 11, completed = false) {
-  const color = TYPE_COLORS[type] ?? "#64748b";
+export function zoneStyle(type: MapZoneType, active = false, featured = false, zoom = 11, completed = false) {  const color = TYPE_COLORS[type] ?? "#64748b";
   const grow = zoom >= 15 ? 2 : zoom >= 13 ? 1.5 : 1;
 
   if (completed) {
@@ -78,4 +77,38 @@ export function zoneStyle(type: MapZoneType, active = false, featured = false, z
     fillColor: color,
     fillOpacity: active ? 0.45 : 0.3,
   };
+}
+
+// ─── 지도 이름표 뱃지용 짧은 이름 ────────────────────────────────────────────
+
+/**
+ * 사업유형 짧은 이름 — 선택 구역 이름표 뱃지.
+ *   · 신통기획 → ‘신속통합기획’ (사용자가 쓰는 말)
+ *   · 민간도심복합(성장거점형/주거중심형) → ‘민간도심복합’
+ */
+export function shortZoneType(type?: string | null): string {
+  if (!type) return "";
+  if (type === "신통기획") return "신속통합기획";
+  if (type.startsWith("민간도심복합")) return "민간도심복합";
+  return type;
+}
+
+/**
+ * 추진단계 짧은 이름 — 선택 구역 이름표 뱃지.
+ *   · ‘연번부여(2026-11-03)’ 같은 긴 단계는 사람이 쓰는 말로 줄인다(연번부여 → 연번동의)
+ *   · 괄호·날짜는 떼고, 모르는 단계는 8자까지만 남겨 이름표가 길어지지 않게 한다
+ */
+export function shortStage(stage?: string | null): string {
+  const s = (stage ?? "").trim();
+  if (!s) return "";
+  if (s.includes("연번")) return "연번동의";
+  if (s.includes("관리처분")) return "관리처분";
+  if (s.includes("조합설립")) return "조합설립";
+  if (s.includes("추진위")) return "추진위";
+  if (s.includes("주민합의체")) return "주민합의체";
+  if (s.includes("사업시행")) return "사업시행인가";
+  if (s.includes("구역지정")) return "구역지정";
+  if (s.includes("후보지")) return "후보지";
+  const base = s.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+  return base.length > 8 ? base.slice(0, 8) : base;
 }

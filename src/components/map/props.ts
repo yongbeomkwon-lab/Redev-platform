@@ -53,6 +53,56 @@ export type ZoneMapProps = {
   txPinsOn?: boolean;
   /** 지도 위 「실거래 핀」 토글 */
   onToggleTxPins?: () => void;
+  /**
+   * 내 매물 핀 — 부동산포스에 올린 권용범 대표 매물(정비구역 안 + 밖 모두).
+   * 「내 매물만 보기」를 켜면 이 핀들이 지도에 찍힌다(상태는 ZoneExplorer가 갖는다).
+   */
+  myPins?: MyListingPin[];
+  /** 내 매물 핀 표시 ON/OFF — 「내 매물만 보기」 토글 상태 */
+  myPinsOn?: boolean;
+  /** 지도 위 「내 매물만 보기」 토글 — 일반 방문자에게도 보인다 */
+  onToggleMyPins?: () => void;
+  /** 지도에 처음 화면을 서울 전체로 맞추라는 요청 토큰(내 매물 토글을 켤 때) */
+  fitSeoulRequest?: number;
+  /** 이 매물 핀을 펼쳐 보라는 요청(/?my=<id> 로 들어왔을 때) */
+  myFocusId?: string | null;
+};
+
+/**
+ * 지도에 찍는 내 매물 핀 1건 — `src/data/my-listings.json`(scripts/build-my-listings.py)의 항목.
+ *   · 가격 라벨은 `매 7.3억` / `전 4.9억` 처럼 거래유형을 한 글자로 줄인다.
+ *   · 정비구역 밖 매물은 zoneId 가 없다 — 지도에는 그대로 찍히고 구역 열기 버튼만 빠진다.
+ */
+export type MyListingPin = {
+  id: string;
+  /** 부동산포스 매물번호 */
+  rfineNo: string;
+  zoneId: string | null;
+  zoneName: string | null;
+  gu: string;
+  dong: string;
+  jibun: string;
+  address: string;
+  jibunAddress: string;
+  buildingName: string;
+  propertyType: string;
+  dealType: string;
+  /** 핀 1줄 — 예: `매 7.3억`, `전 4.9억`, `월 1억/600` */
+  priceLabel: string;
+  /** 카드 본문 — 예: `매매가 7억 3,000만원` */
+  priceText: string;
+  /** 카드 면적 — 예: `전 52.88㎡·16평` */
+  areaLabel: string;
+  floor: string;
+  feature: string;
+  detailUrl: string;
+  expiresAt: string;
+  /** 좌표 정밀도 — `지번` | `건물` | `동`(주소에 지번이 없어 법정동 중심) */
+  geoPrecision: string;
+  /** 이미 검증 매물로 있어 DB에 중복 등록하지 않은 건 */
+  duplicateOf: string | null;
+  lat: number;
+  lng: number;
 };
 
 /**

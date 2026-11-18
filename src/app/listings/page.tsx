@@ -15,6 +15,7 @@ import type { Listing } from "@/lib/types";
 import { calcInitialInvestment, listingDeposit } from "@/lib/types";
 import { getProvider } from "@/lib/data-provider";
 import { listingZoneName, LISTINGS_CHANGED_EVENT } from "@/lib/custom-listings";
+import { isMyListing, MY_LISTINGS_COUNT } from "@/lib/my-listings";
 import { formatMan } from "@/lib/format";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
 
@@ -33,6 +34,8 @@ export default function ListingsPage() {
   const [leaseOnly, setLeaseOnly] = useState(false);
   const [noPermit, setNoPermit] = useState(false);
   const [verifiedOnly, setVerifiedOnly] = useState(true);
+  // 내 매물만 보기 — 부동산포스에 올린 권용범 대표 매물(rfine- 접두·내 번호)
+  const [myOnly, setMyOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>("initial");
   const [compare, setCompare] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
@@ -65,16 +68,18 @@ export default function ListingsPage() {
     const list = listings.filter(
       (l) =>
         hit(l) &&
+        (!myOnly || isMyListing(l)) &&
         (!leaseOnly || l.leaseOperatorOnly === true) &&
         (!noPermit || l.landPermitRequired !== true) &&
-        (!verifiedOnly || l.verified)
+        // 「내 매물만」일 때는 검증 배지 조건을 풀어 내 매물이 빠지지 않게 한다
+        (!verifiedOnly || myOnly || l.verified)
     );
     return list.sort((a, b) => {
       if (sort === "price") return a.salePrice - b.salePrice;
       if (sort === "recent") return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
       return calcInitialInvestment(a) - calcInitialInvestment(b);
     });
-  }, [listings, query, leaseOnly, noPermit, verifiedOnly, sort]);
+  }, [listings, query, leaseOnly, noPermit, verifiedOnly, myOnly, sort]);
 
   const picked = useMemo(
     () => compare.map((id) => listings.find((l) => l.id === id)).filter((l): l is Listing => !!l),
@@ -93,7 +98,8 @@ export default function ListingsPage() {
           <h1 className="text-xl font-bold">검증 매물</h1>
           <p className="text-sm text-slate-600">
             재개발 입주권·조합원 물건을 <b>매매가·기보증금·초기투자금</b>과 함께 봅니다. 구역을 누르면 지도에서
-            경계와 실거래가까지 한 화면에 열립니다.
+            경계와 실거래가까지 한 화면에 열립니다. 부동산포스에 올린 내 매물은{" "}
+            <b>🏠 내 매물만 보기</b>로 모아 볼 수 있습니다.
           </p>
         </div>
         <Link
@@ -114,6 +120,9 @@ export default function ListingsPage() {
           data-testid="listings-search"
           className="mr-1 h-9 w-full max-w-xs rounded-lg border border-slate-300 px-3 text-sm focus:border-blue-500 focus:outline-none"
         />
+        <Chip active={myOnly} onClick={() => setMyOnly((v) => !v)} testId="filter-my-only">
+          🏠 내 매물만 보기 {MY_LISTINGS_COUNT}
+        </Chip>
         <Chip active={verifiedOnly} onClick={() => setVerifiedOnly((v) => !v)} testId="filter-verified">
           검증 매물만
         </Chip>
@@ -217,6 +226,9 @@ export default function ListingsPage() {
             const zoneName = listingZoneName(l);
             const deposit = listingDeposit(l);
             const inCompare = compare.includes(l.id);
+            const mine = isMyListing(l);
+            // 내 매물은 구역이 없을 수 있다 → 지도에서 그 핀을 바로 펀다(/?my=<id>)
+            const mapHref = mine ? `/?my=${encodeURIComponent(l.id)}` : `/?zone=${encodeURIComponent(l.zoneId)}`;
             return (
               <li
                 key={l.id}
@@ -225,8 +237,11 @@ export default function ListingsPage() {
                 className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
               >
                 <div className="flex flex-wrap items-start gap-1.5">
+                  {mine && (
+                    <span className="rounded-md bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">내 매물</span>
+                  )}
                   <Link
-                    href={`/?zone=${encodeURIComponent(l.zoneId)}`}
+                    href={mapHref}
                     data-testid="listing-zone-link"
                     className="text-sm font-bold text-slate-900 underline decoration-slate-300 hover:decoration-slate-800"
                   >
@@ -263,7 +278,7 @@ export default function ListingsPage() {
                     {l.brokerPhone ? ` · ${l.brokerPhone}` : ""}
                   </span>
                   <Link
-                    href={`/?zone=${encodeURIComponent(l.zoneId)}`}
+                    href={mapHref}
                     className="ml-auto rounded-full border border-slate-300 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-slate-500"
                   >
                     지도에서 보기

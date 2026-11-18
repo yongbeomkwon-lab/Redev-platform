@@ -24,9 +24,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
-import { TYPE_COLORS, zoneStyle } from "./colors";
+import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
-import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type TxMapPin } from "./props";
+import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -63,6 +63,21 @@ const TX_PIN_LAYER_STYLE = {
   width: "100%",
   height: "100%",
   zIndex: 95,
+  pointerEvents: "none" as const,
+};
+
+/**
+ * 내 매물 핀 레이어 — 폴리곤 캔버스(2)·실거래 핀(95)·매물 배지(100) 위(z-index 102).
+ *   · 「내 매물만 보기」일 때만 채워지고, 상담의 중심이라 배지·이름표보다 위에 둔다
+ *     (핀을 눌러 펼친 카드가 다른 배지에 가리지 않게).
+ */
+const MY_PIN_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 102,
   pointerEvents: "none" as const,
 };
 
@@ -233,6 +248,11 @@ export default function KakaoZoneMap({
   txPins = [],
   txPinsOn = true,
   onToggleTxPins,
+  myPins = [],
+  myPinsOn = false,
+  onToggleMyPins,
+  fitSeoulRequest,
+  myFocusId,
   admin,
   onFail,
 }: KakaoZoneMapProps) {
@@ -265,6 +285,18 @@ export default function KakaoZoneMap({
   const [openPinId, setOpenPinId] = useState<string | null>(null);
   /** draw() 가 읽는 ‘펼쳐 둔 핀’ — 클로저 대신 ref 로 넘긴다 */
   const openPinRef = useRef<string | null>(null);
+  /** 내 매물 핀 레이어 + 핀 요소(매물 id → 래퍼) — draw 가 매 프레임 좌표를 맞춘다 */
+  const myLayerRef = useRef<HTMLDivElement | null>(null);
+  const myElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  /** 지금 레이어에 놓을 내 매물 핀 — 토글이 꺼지면 빈 배열 */
+  const myAtRef = useRef<MyListingPin[]>([]);
+  /** 내 매물 핀에서 펼쳐 둔 상세 카드(매물 id) */
+  const [openMyId, setOpenMyId] = useState<string | null>(null);
+  const openMyRef = useRef<string | null>(null);
+  /** 마지막으로 처리한 서울 전체 보기 요청 토큰 */
+  const lastSeoulFitRef = useRef(0);
+  /** 마지막으로 펼친 내 매물 핀 요청 */
+  const lastMyFocusRef = useRef<string | null>(null);
   /** 지금 레이어에 놓인 핀·이름표의 좌표 (draw 에서 읽는다) */
   const pinAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
   /** 지금 역 핀 레이어에 놓인 좌표 */
@@ -544,11 +576,76 @@ export default function KakaoZoneMap({
       }
     }
 
+    // ── 내 매물 핀 ──────────────────────────────────────────────────────────
+    //   · 아래쪽 끝이 매물 지점에 닿게 translate(-50%,-100%).
+    //   · 같은 건물·같은 동에 여러 건이 몰려 있어 그대로 두면 핀이 겹친다 → 작은 오프셋을
+    //     차례로 시도해 겹치지 않는 자리를 찾는다. 다 찾아도 겹치면(아주 멀리 축소한 경우)
+    //     숨기지 않고 제자리에 둔다 — 「내 매물 63건」이 한 장에 다 보여야 하기 때문.
+    if (myLayerRef.current) {
+      const placedMy: { x: number; y: number }[] = [];
+      const openId = openMyRef.current;
+      // 서울 전체(레벨 8 이상)처럼 멀리서 볼 때는 두 번째 줄(유형·면적)을 CSS 로 감춰 핀이 서로 덜 가리게 한다
+      const compact = map.getLevel() >= 8;
+      myLayerRef.current.dataset.compact = compact ? "1" : "0";
+      myLayerRef.current.dataset.level = String(map.getLevel());
+      const ordered = openId
+        ? [...myAtRef.current.filter((p) => p.id === openId), ...myAtRef.current.filter((p) => p.id !== openId)]
+        : myAtRef.current;
+      const OFFSETS: [number, number][] = [
+        [0, 0],
+        [14, -9],
+        [-14, -9],
+        [14, 9],
+        [-14, 9],
+        [28, -18],
+        [-28, -18],
+        [28, 18],
+        [-28, 18],
+        [42, 0],
+        [-42, 0],
+      ];
+      for (const p of ordered) {
+        const node = myElsRef.current.get(p.id);
+        if (!node) continue;
+        const x = p0x + (p.lng - lng0) * pxPerLng;
+        const y = p0y + (mercator(p.lat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -120 || x > cw + 120 || y < -90 || y > ch + 90) {
+          node.style.visibility = "hidden";
+          continue;
+        }
+        let ox = 0;
+        let oy = 0;
+        let placed = false;
+        for (const [dx, dy] of OFFSETS) {
+          const clash = placedMy.some((q) => Math.abs(q.x - (x + dx)) < 58 && Math.abs(q.y - (y + dy)) < 19);
+          if (!clash) {
+            ox = dx;
+            oy = dy;
+            placed = true;
+            break;
+          }
+        }
+        const pinEl = node.firstElementChild as HTMLElement | null;
+        // 서울 전체 보기에서 자리가 없는 핀은 가격표 대신 작은 점으로 — 63건 위치가 모두 남는다
+        if (!placed && compact) {
+          if (pinEl) pinEl.dataset.dot = "1";
+          node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+          node.style.visibility = "visible";
+          node.style.zIndex = "1";
+          continue;
+        }
+        if (pinEl) pinEl.dataset.dot = "0";
+        placedMy.push({ x: x + ox, y: y + oy });
+        node.style.transform = `translate3d(${Math.round((x + ox) * 10) / 10}px,${Math.round((y + oy) * 10) / 10}px,0) translate(-50%,-100%)`;
+        node.style.visibility = "visible";
+        node.style.zIndex = p.id === openId ? "3" : "1";
+      }
+    }
+
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-
     const zoomProxy = ZOOM_BASE - map.getLevel();
     viewRef.current = { p0x, p0y, cLat, cLng: lng0, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
 
@@ -1517,17 +1614,44 @@ export default function KakaoZoneMap({
     draw();
   }, [badgeZones, draw]);
 
-  // ── 선택 구역 이름표 + 부드러운 이동 ────────────────────────────────────────
+  // ── 내 매물 핀 ────────────────────────────────────────────────────────────
+  //   · ZoneExplorer 가 `my-listings.json`(63건)을 넘긴다. 토글이 OFF 면 목록을 비워 핀·카드를 감춘다.
+  //   · 핀은 우리 DOM 레이어(z-index 96)에 두고 draw 가 매 프레임 지도 좌표로 옮긴다.
+  const visibleMyPins = useMemo(() => (myPinsOn ? myPins : []), [myPins, myPinsOn]);
+  myAtRef.current = visibleMyPins;
+  openMyRef.current = openMyId;
+
+  // 목록이 바뀌면(토글·필터) 펼친 카드를 닫는다 — 다른 매물의 카드가 남지 않게
+  useEffect(() => {
+    setOpenMyId(null);
+  }, [visibleMyPins]);
+  useEffect(() => {
+    if (!myLayerRef.current) return;
+    draw();
+  }, [visibleMyPins, openMyId, draw]);
+
+  // ── 선택 구역 이름표 + 부드러운 이동 ────────────────────────────────────
   //   이름표도 우리 DOM 레이어(z-index 100)에 둔다 — 카카오 오버레이에 두면 폴리곤 캔버스가
   //   위에 깔려 구역 안쪽에 있을 때 이름표가 구역 색에 반투명하게 덮였다.
+  //   · 앞에 **사업유형 뱃지**를 붙인다(신통기획→‘신속통합기획’ 표기) — 이름만 보고는
+  //     이 구역이 모아타운인지 신통기획인지 알 수 없어 상세를 열어야 했다.
   const labelHtml = useMemo(() => {
     if (!selectedZoneId) return "";
     const seoul = seoulZones.find((z) => z.id === selectedZoneId);
     const featured = zones.find((z) => z.id === selectedZoneId);
     const name = seoul?.name ?? featured?.name;
     if (!name) return "";
+    const type = seoul?.type ?? featured?.type;
+    const stage = seoul?.stage ?? featured?.stage;
     const parcel = (seoul?.alias ?? []).find((a) => /\d+-\d+/.test(a));
-    return `<b>${escapeHtml(name)}</b>${
+    const typeLabel = shortZoneType(type);
+    const stageLabel = shortStage(stage);
+    const badgeText = [typeLabel, stageLabel].filter(Boolean).join(" · ");
+    const typeColor = type ? TYPE_COLORS[type] ?? "#64748b" : "#64748b";
+    const badge = badgeText
+      ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(badgeText)}</span>`
+      : "";
+    return `${badge}<b>${escapeHtml(name)}</b>${
       parcel ? `<span class="zone-name-sub"> · ${escapeHtml(parcel)}</span>` : ""
     }`;
   }, [selectedZoneId, seoulZones, zones]);
@@ -1599,6 +1723,32 @@ export default function KakaoZoneMap({
       settleView();
     }
   }, [zoneFitRequest, selectedZoneId, seoulZones, zones, settleView]);
+
+  // ── ‘서울 전체 보기’ 요청 ─────────────────────────────────────────────────────
+  //   「내 매물만 보기」를 켜면 서울 전체 매물 핀이 한 화면에 들어오도록 넓힌다.
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    if (!k || !map || !ready || !fitSeoulRequest) return;
+    if (lastSeoulFitRef.current === fitSeoulRequest) return;
+    lastSeoulFitRef.current = fitSeoulRequest;
+    fitLatLngSpan(k, map, SEOUL_BOUNDS[0][0], SEOUL_BOUNDS[0][1], SEOUL_BOUNDS[1][0], SEOUL_BOUNDS[1][1], mapElRef.current, true);
+    settleView();
+  }, [fitSeoulRequest, settleView, ready]);
+
+  // ── 내 매물 핀 하나로 이동 + 카드 펼치기 (`/?my=<id>`, 매물 목록의 [지도에서 보기]) ──
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    if (!k || !map || !ready || !myFocusId) return;
+    if (lastMyFocusRef.current === myFocusId) return;
+    lastMyFocusRef.current = myFocusId;
+    const pin = myPins.find((p) => p.id === myFocusId);
+    if (!pin) return;
+    setOpenMyId(pin.id);
+    map.jump(new k.maps.LatLng(pin.lat, pin.lng), 4, { animate: { duration: 350 } });
+    settleView();
+  }, [myFocusId, myPins, settleView, ready]);
 
   // ── 주소 검색 핀 + 말풍선 ──────────────────────────────────────────────
   //   핀은 카카오 CustomOverlay 가 아니라 wrapper 안의 z-index 100 레이어에 둔다(z-index 전쟁 종결).
@@ -1683,8 +1833,8 @@ export default function KakaoZoneMap({
     <div ref={wrapRef} className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl">
       <div ref={mapElRef} className="h-full w-full" />
 
-      {/* ── 선택 구역 이름표 — z-index 100 우리 레이어(폴리곤 캔버스 위) ── */}
-      <div ref={labelLayerRef} style={PIN_LAYER_STYLE} aria-hidden>
+      {/* ── 선택 구역 이름표 — z-index 101: 매물 배지(100)보다 위에 둔다 ── */}
+      <div ref={labelLayerRef} style={{ ...PIN_LAYER_STYLE, zIndex: 101 }} aria-hidden>
         {labelHtml && (
           <div
             className="zone-name-label"
@@ -1857,6 +2007,204 @@ export default function KakaoZoneMap({
         })}
       </div>
 
+      {/* ── 내 매물 핀 — `매 7.3억 / 다세대 · 전 52.88㎡` (z-index 96) ── */}
+      <div ref={myLayerRef} style={MY_PIN_LAYER_STYLE} data-testid="my-pin-layer">
+        {visibleMyPins.map((p) => {
+          const open = openMyId === p.id;
+          const accent = p.dealType === "매매" ? "#b45309" : p.dealType === "전세" ? "#0369a1" : "#7c3aed";
+          const areaShort = (p.areaLabel || "").split("·")[0];
+          return (
+            <div
+              key={p.id}
+              ref={(el) => {
+                if (el) myElsRef.current.set(p.id, el);
+                else myElsRef.current.delete(p.id);
+              }}
+              style={{ position: "absolute", left: 0, top: 0, width: "max-content", visibility: "hidden" }}
+            >
+              <button
+                type="button"
+                className="my-pin-btn"
+                data-testid="my-listing-pin"
+                data-listing-id={p.id}
+                data-rfine-no={p.rfineNo}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMyId((v) => (v === p.id ? null : p.id));
+                }}
+                title={`${p.priceText} · ${p.propertyType} ${p.areaLabel} · ${p.jibunAddress || p.address}`}
+                style={{
+                  display: "block",
+                  pointerEvents: "auto",
+                  border: `1.5px solid ${accent}`,
+                  borderLeft: `4px solid ${accent}`,
+                  background: open ? "#fffbeb" : "#ffffff",
+                  borderRadius: "6px",
+                  padding: "2px 5px",
+                  boxShadow: "0 2px 8px rgba(15,23,42,.32)",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                  lineHeight: 1.15,
+                }}
+              >
+                <span className="my-pin-label">
+                  <span style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>
+                    {p.priceLabel}
+                  </span>
+                  <span
+                    className="my-pin-sub"
+                    style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#475569" }}
+                  >
+                    {p.propertyType}
+                    {areaShort ? ` · ${areaShort}` : ""}
+                  </span>
+                </span>
+                {/* 자리가 없을 때(서울 전체 보기)는 가격표 대신 점으로만 찍어 63건이 다 보이게 한다 */}
+                <span className="my-pin-dot" aria-hidden />
+              </button>
+
+              {open && (
+                <div
+                  data-testid="my-pin-card"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    bottom: "calc(100% + 6px)",
+                    transform: "translateX(-50%)",
+                    width: "264px",
+                    pointerEvents: "auto",
+                    background: "#ffffff",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "10px",
+                    boxShadow: "0 12px 28px rgba(15,23,42,.3)",
+                    padding: "9px 10px",
+                    textAlign: "left",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <span
+                      style={{
+                        fontSize: "9px",
+                        fontWeight: 800,
+                        color: "#fff",
+                        background: accent,
+                        borderRadius: "3px",
+                        padding: "1px 4px",
+                      }}
+                    >
+                      내 매물
+                    </span>
+                    <span style={{ fontSize: "10px", fontWeight: 700, color: "#334155" }}>
+                      {p.propertyType} · {p.dealType}
+                    </span>
+                    <span style={{ marginLeft: "auto", fontSize: "9px", color: "#94a3b8" }}>
+                      포스 {p.rfineNo}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="닫기"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMyId(null);
+                      }}
+                      style={{
+                        border: 0,
+                        background: "transparent",
+                        color: "#94a3b8",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        lineHeight: 1,
+                        padding: 0,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: "3px", fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>
+                    {p.priceText}
+                  </div>
+
+                  <div style={{ marginTop: "2px", fontSize: "10px", lineHeight: 1.35, color: "#475569" }}>
+                    {p.address || p.jibunAddress}
+                  </div>
+
+                  <div style={{ marginTop: "2px", fontSize: "10px", color: "#475569" }}>
+                    {p.areaLabel}
+                    {p.floor ? ` · ${p.floor}층` : ""}
+                    {p.zoneName ? ` · ${p.zoneName}` : ""}
+                  </div>
+
+                  {p.feature && (
+                    <div style={{ marginTop: "4px", fontSize: "10px", lineHeight: 1.4, color: "#334155" }}>
+                      {p.feature}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: "4px", fontSize: "9.5px", color: "#64748b" }}>
+                    부동산포스 {p.rfineNo} · {"010-2758-5292"}
+                    {p.expiresAt ? ` · ${p.expiresAt}까지` : ""}
+                  </div>
+
+                  <div style={{ marginTop: "6px", display: "flex", gap: "4px" }}>
+                    {p.zoneId && p.zoneName && (
+                      <button
+                        type="button"
+                        data-testid="my-pin-zone-open"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (p.zoneId) onSelectZone(p.zoneId);
+                        }}
+                        style={{
+                          flex: 1,
+                          border: `1px solid ${accent}`,
+                          background: "#fffbeb",
+                          color: accent,
+                          borderRadius: "6px",
+                          padding: "3px 4px",
+                          fontSize: "10px",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {p.zoneName} 열기
+                      </button>
+                    )}
+                    {p.detailUrl && (
+                      <a
+                        href={p.detailUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          border: "1px solid #cbd5e1",
+                          background: "#f8fafc",
+                          color: "#334155",
+                          borderRadius: "6px",
+                          padding: "3px 4px",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        부동산포스 상세 ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* ── 주소 검색 핀 — 항상 최상단(불투명 흰 카드 + 드롭핀) ── */}
       <div ref={pinLayerRef} style={PIN_LAYER_STYLE}>
         {addressPin && (
@@ -1919,12 +2267,32 @@ export default function KakaoZoneMap({
             −
           </button>
         </div>
+        {onToggleMyPins && myPins.length > 0 && (
+          <button
+            type="button"
+            onClick={onToggleMyPins}
+            aria-pressed={myPinsOn}
+            data-testid="my-listings-toggle"
+            title={`내가 올린 매물 ${myPins.length}건만 지도에 표시 — 끄면 서울 전체 재개발 지도로 돌아갑니다`}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-md transition ${
+              myPinsOn
+                ? "border-amber-600 bg-amber-500 text-white"
+                : "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+            }`}
+          >
+            <span aria-hidden>🏠</span>
+            <span className="hidden md:inline">내 매물만 보기</span>
+            <span className="md:hidden">내 매물</span>
+            <span className={`font-extrabold ${myPinsOn ? "text-white" : "text-amber-700"}`}>
+              ({myPins.length})
+            </span>
+          </button>
+        )}
         <button
           type="button"
           onClick={toggleSkyview}
           aria-pressed={skyview}
-          title="스카이뷰 — 위성 항공사진 + 도로·지명 라벨"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+          title="스카이뷰 — 위성 항공사진 + 도로·지명 라벨"          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
             skyview
               ? "border-sky-400 bg-sky-50 text-sky-900"
               : "border-slate-300 bg-white text-slate-700 hover:text-slate-900"
@@ -2135,7 +2503,9 @@ function fitLatLngSpan(
   minLng: number,
   maxLat: number,
   maxLng: number,
-  container: HTMLElement | null
+  container: HTMLElement | null,
+  /** true 면 화면을 가능한 꽉 채우도록 레벨을 반올림해 맞춘다(내 매물 서울 전체 보기) */
+  fill = false
 ) {
   if (!Number.isFinite(minLat) || minLat > maxLat) return;
 
@@ -2148,7 +2518,8 @@ function fitLatLngSpan(
   const wPx = Math.max(Math.abs(ne.x - sw.x), 0.5);
   const hPx = Math.max(Math.abs(ne.y - sw.y), 0.5);
   const fit = Math.min((cw - pad * 2) / wPx, (ch - pad * 2) / hPx);
-  const step = Math.floor(Math.log2(Math.max(fit, 0.01)));
+  // 기본은 2배 단위(floor) — 구역 경계가 잘리지 않게. fill 이면 반올림해 화면을 꽉 채운다.
+  const step = fill ? Math.round(Math.log2(Math.max(fit, 0.01))) : Math.floor(Math.log2(Math.max(fit, 0.01)));
   const level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, map.getLevel() - step));
   map.jump(new k.maps.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2), level, {
     animate: { duration: 350 },

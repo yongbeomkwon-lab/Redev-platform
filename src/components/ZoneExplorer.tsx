@@ -45,6 +45,7 @@ import {
   listingCountsByZoneId,
   listingMatchesZone,
 } from "@/lib/custom-listings";
+import { MY_LISTINGS, MY_LISTINGS_COUNT, MY_LISTINGS_AS_OF, MY_LISTING_ZONE_IDS } from "@/lib/my-listings";
 import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
 import {
   ADMIN_STORAGE_KEY,
@@ -104,6 +105,15 @@ export default function ZoneExplorer() {
   const [listingsOnly, setListingsOnly] = useState(false);
   const [leaseOnly, setLeaseOnly] = useState(false);
   const [noPermit, setNoPermit] = useState(false);
+  // ── 내 매물만 보기 ────────────────────────────────────────────────────────
+  //   · 부동산포스에 올린 권용범 대표 매물(`src/data/my-listings.json` 63건)만 남긴다.
+  //   · 켜면: 내 매물이 있는 구역만 지도에 남기고, 63건 전체를 가격 핀으로 찍는다
+  //            (정비구역 밖 일반 매물도 포함). 화면은 서울 전체로 넓힌다.
+  //   · 끄면: 기존 2,400곳 서울 전체 재개발 지도로 즉시 돌아간다.
+  const [myOnly, setMyOnly] = useState(false);
+  const [seoulFitRequest, setSeoulFitRequest] = useState(0);
+  /** 매물 목록에서 `/?my=<id>` 로 들어온 핀 — 지도가 그 핀을 펼친다 */
+  const [myFocusId, setMyFocusId] = useState<string | null>(null);
   // 지도 위 떠 있는 패널 열림 상태
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
@@ -233,6 +243,22 @@ export default function ZoneExplorer() {
     setPanelOpen(true);
   }, []);
 
+  // `/?my=<매물 id>` — 매물 목록에서 내 매물의 [지도에서 보기]로 들어오면
+  //   「내 매물만 보기」를 켜고 그 핀을 지도에 펼친다.
+  useEffect(() => {
+    let id: string | null = null;
+    try {
+      id = new URL(window.location.href).searchParams.get("my");
+    } catch {
+      id = null;
+    }
+    if (!id) return;
+    setMyOnly(true);
+    setMyFocusId(id);
+    setPanelOpen(false);
+    setSeoulFitRequest((v) => v + 1);
+  }, []);
+
   // 서울시 정비구역 전수 레이어
   useEffect(() => {
     loadSeoulZones().then((d) => {
@@ -305,6 +331,35 @@ export default function ZoneExplorer() {
   const listingCounts = useMemo(() => listingCountsByZoneId(filteredListings), [filteredListings]);
   const listingZoneIds = useMemo(() => new Set(Object.keys(listingCounts)), [listingCounts]);
 
+  // ── 내 매물만 보기 ────────────────────────────────────────────────────────
+  //   · 지도에 남길 구역: `my-listings.json` 의 zoneId (좌표·매물설명으로 맞춘 정비구역 19곳)
+  //   · 핀: 내 매물 63건 전체(구역 밖 포함) — 좌표는 카카오 지오코딩
+  const myZoneIds = MY_LISTING_ZONE_IDS;
+  /** 내 매물 구성 — 패널 요약(거래유형·자치구) */
+  const myByDeal = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of MY_LISTINGS) m[p.dealType] = (m[p.dealType] ?? 0) + 1;
+    return m;
+  }, []);
+  const myByGu = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of MY_LISTINGS) m[p.gu] = (m[p.gu] ?? 0) + 1;
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, []);
+
+  /** 「내 매물만 보기」 토글 — 켜면 서울 전체로 넓히고, 끄면 기존 지도로 즉시 돌아간다 */
+  function toggleMyOnly() {
+    const next = !myOnly;
+    setMyOnly(next);
+    if (next) {
+      setSeoulFitRequest((v) => v + 1);
+      // 내 매물이 없는 구역이 선택돼 있으면 선택을 풀어 빈 패널이 남지 않게 한다
+      if (selectedId && !myZoneIds.has(selectedId)) setSelectedId(undefined);
+    } else {
+      setMyFocusId(null);
+    }
+  }
+
   // ── 준공 완료 구역(준공·준공(일부)·입주·사용승인 357곳) 숨김 ─────────────────
   //   이미 입주까지 끝나 아파트가 된 구역이라 상담 대상이 아니다. 기본 지도·검색·
   //   범례 숫자에서 모두 빼고, ‘준공 완료 포함’ 토글을 켠 때만 다시 보여준다(점선 표시).
@@ -322,14 +377,16 @@ export default function ZoneExplorer() {
     () => {
       const base = (typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter))
         // ‘매물 있는 구역’ 필터 — 매물이 없는 구역은 지도에서 뺀다
-        .filter((z) => !listingsOnly || listingZoneIds.has(z.id));
+        .filter((z) => !listingsOnly || listingZoneIds.has(z.id))
+        // 「내 매물만 보기」 — 내 매물이 있는 구역만 남긴다
+        .filter((z) => !myOnly || myZoneIds.has(z.id));
       // 기본 숨김 구역이라도 **검색해 고른 구역**은 지도에 그린다 —
       // 안 그러면 상세 패널만 열리고 지도에서는 사라져 위치를 찾을 수 없다(예: 사당21구역).
       const picked = selectedId ? seoulZones.find((z) => z.id === selectedId) : undefined;
       const rest = base.filter((z) => !z.hiddenByDefault || z.id === selectedId);
       return picked && !rest.some((z) => z.id === picked.id) ? [...rest, picked] : rest;
     },
-    [visibleSeoulZones, typeFilter, listingsOnly, listingZoneIds, selectedId, seoulZones]
+    [visibleSeoulZones, typeFilter, listingsOnly, listingZoneIds, myOnly, myZoneIds, selectedId, seoulZones]
   );
 
   /** 매물이 있는 구역 수 — 필터 칩에 병기(준공 숨김·유형 필터 반영) */
@@ -338,10 +395,13 @@ export default function ZoneExplorer() {
     [mapSeoulZones, listingZoneIds]
   );
 
-  /** 지도에 넘기는 대표 구역 — ‘매물 있는 구역’ 필터가 켜지면 매물 없는 대표 구역은 뺀다 */
+  /** 지도에 넘기는 대표 구역 — ‘매물 있는 구역’·「내 매물만 보기」가 켜지면 해당 구역만 남는다 */
   const mapFeaturedZones = useMemo(
-    () => (listingsOnly ? filtered.filter((z) => listingZoneIds.has(z.id)) : filtered),
-    [filtered, listingsOnly, listingZoneIds]
+    () =>
+      filtered
+        .filter((z) => !listingsOnly || listingZoneIds.has(z.id))
+        .filter((z) => !myOnly || myZoneIds.has(z.id)),
+    [filtered, listingsOnly, listingZoneIds, myOnly, myZoneIds]
   );
 
   function toggleCompleted() {
@@ -949,6 +1009,11 @@ export default function ZoneExplorer() {
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
           listingCounts={listingCounts}
+          myPins={MY_LISTINGS}
+          myPinsOn={myOnly}
+          onToggleMyPins={toggleMyOnly}
+          fitSeoulRequest={seoulFitRequest}
+          myFocusId={myFocusId}
           admin={adminMapConfig}
           txPins={txPins}
           txPinsOn={txPinsOn}
@@ -1473,6 +1538,7 @@ export default function ZoneExplorer() {
             <span className="truncate text-[11px] text-slate-500">
               {typeFilter} · {stageFilter}
               {listingsOnly ? " · 매물 있는 구역" : ""}
+              {myOnly ? " · 내 매물만" : ""}
               {leaseOnly ? " · 임대사업자 승계" : ""}
               {noPermit ? " · 토허제 없음" : ""}
             </span>
@@ -1500,6 +1566,9 @@ export default function ZoneExplorer() {
               </div>
               <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
                 <span className="mr-1 text-[11px] font-semibold text-slate-500">매물 조건</span>
+                <Chip active={myOnly} onClick={toggleMyOnly}>
+                  <span data-testid="filter-my-only">🏠 내 매물만 보기 {MY_LISTINGS_COUNT}</span>
+                </Chip>
                 <Chip
                   active={listingsOnly}
                   onClick={() => setListingsOnly((v) => !v)}
@@ -1513,7 +1582,9 @@ export default function ZoneExplorer() {
                   <span data-testid="filter-no-permit">실거주(토허제) 없음</span>
                 </Chip>
                 <span className="text-[10px] leading-tight text-slate-400">
-                  {filteredListings.length}건 매물 · 지도에 🏠 매물 배지
+                  {myOnly
+                    ? `내 매물 ${MY_LISTINGS_COUNT}건 핀 · 정비구역 ${myZoneIds.size}곳만 표시`
+                    : `${filteredListings.length}건 매물 · 지도에 🏠 매물 배지`}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
@@ -1649,6 +1720,34 @@ export default function ZoneExplorer() {
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {/* 내 매물만 보기 요약 — 핀을 누르기 전에 무엇이 달려 있는지 한눈에 */}
+            {myOnly && !selected && !selectedSeoul && (
+              <div data-testid="my-listings-summary" className="mb-3 space-y-1.5 rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <b className="text-sm font-bold text-amber-950">내 매물 {MY_LISTINGS_COUNT}건</b>
+                  <span className="text-[10px] text-amber-800/80">부동산포스 · {MY_LISTINGS_AS_OF} 기준</span>
+                </div>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-amber-900">
+                  {["매매", "전세", "월세"].map(
+                    (k) => myByDeal[k] && <span key={k}>{k} {myByDeal[k]}</span>
+                  )}
+                  <span className="text-amber-700/60">·</span>
+                  <span>정비구역 안 {MY_LISTINGS.filter((p) => p.zoneId).length}건 / 구역 밖 {MY_LISTINGS.filter((p) => !p.zoneId).length}건</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {myByGu.map(([gu, n]) => (
+                    <span key={gu} className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-200">
+                      {gu} {n}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[10px] leading-snug text-amber-900/80">
+                  지도 핀을 누르면 주소·가격·면적·부동산포스 매물번호가 열립니다. 구역 안 매물은
+                  <b> ‘○○구역 열기’</b>로 경계·실거래까지 볼 수 있어요. 끄면 서울 전체 재개발 지도로 돌아갑니다.
+                </p>
+              </div>
+            )}
+
             {/* 0) 관리자 구역 — 내가 그린 구역의 상세 */}
             {selectedCustom && (
               <div data-testid="admin-custom-card" className="mb-3 space-y-2 rounded-xl border-2 border-sky-300 bg-sky-50/60 p-2.5">
