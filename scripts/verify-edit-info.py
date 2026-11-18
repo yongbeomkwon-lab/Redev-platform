@@ -30,6 +30,23 @@ def log(ok, msg):
         errors.append(str(msg))
 
 
+def color_pixels(page, rgb, tol=8):
+    """지도 캔버스에서 해당 색 픽셀 수 — 저장한 사업유형 색으로 다시 그려졌는지 본다"""
+    return page.evaluate(
+        """([r,g,b,tol]) => {
+          const c = document.querySelector('canvas.kakao-zone-canvas');
+          if (!c) return -1;
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          let n = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            if (Math.abs(d[i]-r)<=tol && Math.abs(d[i+1]-g)<=tol && Math.abs(d[i+2]-b)<=tol && d[i+3]>200) n++;
+          }
+          return n;
+        }""",
+        [rgb[0], rgb[1], rgb[2], tol],
+    )
+
+
 def main() -> int:
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--no-sandbox"])
@@ -107,6 +124,9 @@ def main() -> int:
         log(z.get("replacesName") == "자양동 10번지 일원", f"공식 구역 대체 표시: {z.get('replacesName')}")
         item = page.locator('[data-testid=admin-zone-item]').first.inner_text()
         log("가로주택" in item, "목록 줄에 바뀐 사업유형 표시")
+        page.wait_for_timeout(800)
+        teal = color_pixels(page, (13, 148, 136))  # 가로주택 #0d9488
+        log(teal > 300, f"지도에 가로주택 색(#0d9488) 픽셀 {teal}개 — 저장한 유형으로 다시 그려짐")
 
         print("3) 목록의 ‘경계·정보 수정’")
         page.locator('[data-testid="admin-edit-custom"]').first.click()

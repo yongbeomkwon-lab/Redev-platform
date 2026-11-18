@@ -676,7 +676,10 @@ export default function ZoneExplorer() {
     setAdminFit({ id: zone.id, token: Date.now() });
     setAdminMsg(
       ok
-        ? `‘${zone.name}’ 저장 완료 — 이 브라우저에 보관되어 새로고침해도 남아 있습니다.`
+        ? `‘${zone.name}’ 저장 완료 — 이 브라우저에 보관되어 새로고침해도 남아 있습니다.` +
+            (draft.replacesZoneId
+              ? " 지도에는 저장한 사업유형 색으로 그려지고, 오른쪽 ‘서울시 고시 구역’ 카드는 서울시 공식 데이터 그대로입니다."
+              : "")
         : `‘${zone.name}’를 화면에는 반영했지만 브라우저 저장에 실패했습니다(저장 공간 부족 등).`
     );
   }
