@@ -8,7 +8,7 @@
 //     바로 실행취소·완료·취소와 실시간 면적을 볼 수 있게 한다(오른쪽 상세 패널을 보지 않아도 되게).
 //   · 일반 방문자에게는 이 컴포넌트가 아예 렌더되지 않는다.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
   CUSTOM_ZONE_STAGES,
@@ -93,6 +93,24 @@ export function AdminZonePanel(props: AdminPanelProps) {
 
   const draftArea = draftPoints && draftPoints.length >= 3 ? areaOf(draftPoints) : 0;
   const listId = useId();
+  const metaRef = useRef<HTMLDivElement | null>(null);
+  // 정보 입력 폼이 열리면(경계·정보 수정 직후 포함) 패널 안에서 폼이 보이도록 스크롤한다.
+  //   값이 바뀔 때마다(타이핑) 다시 스크롤하지 않도록 ‘열림 여부’만 본다.
+  const metaOpen = !!meta;
+  const editingZone = !!(editing?.id || editing?.replacesName);
+  useEffect(() => {
+    if (!metaOpen) return;
+    const el = metaRef.current;
+    if (!el) return;
+    const t = window.setTimeout(() => {
+      try {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch {
+        /* 스크롤을 지원하지 않는 환경은 그냥 둔다 */
+      }
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [metaOpen]);
   // 서울시 단계 이름이 목록에 없어도(예: '사업시행인가' 개편 전 이름) 그 값이 그대로 보이게
   const stageOptions = meta && !(CUSTOM_ZONE_STAGES as readonly string[]).includes(meta.stage)
     ? [...CUSTOM_ZONE_STAGES, meta.stage]
@@ -105,7 +123,7 @@ export function AdminZonePanel(props: AdminPanelProps) {
     >
       <div className="flex items-center gap-2">
         <span className="rounded-md bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">관리자</span>
-        <b className="text-xs font-bold text-slate-900">구역 경계 그리기·수정</b>
+        <b className="text-xs font-bold text-slate-900">구역 경계·정보 수정</b>
         <button
           type="button"
           data-testid="admin-exit"
@@ -139,21 +157,27 @@ export function AdminZonePanel(props: AdminPanelProps) {
           disabled={!canEditSelectedRing}
           title={
             canEditSelectedRing
-              ? "지금 선택한 구역의 경계를 핸들로 고칩니다"
+              ? "지금 선택한 구역의 경계와 정보(사업유형·추진단계)를 함께 고칩니다"
               : "먼저 지도나 검색에서 경계가 있는 구역을 선택하세요"
           }
           className={BTN_LIGHT}
         >
-          경계 수정{selectedZoneName ? ` · ${selectedZoneName}` : ""}
+          경계·정보 수정{selectedZoneName ? ` · ${selectedZoneName}` : ""}
         </button>
       </div>
+      {!draftPoints && (
+        <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
+          구역을 고른 뒤 <b className="text-slate-700">경계·정보 수정</b>을 누르면 경계를 안 고쳐도
+          사업유형·추진단계·비고를 바로 고쳐 저장할 수 있습니다.
+        </p>
+      )}
 
       {/* ── 진행 중인 초안 ─────────────────────────────────────────── */}
       {draftPoints && (
         <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50/70 p-2">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[11px] font-bold text-sky-900">
-              {editing?.id || editing?.replacesName ? "경계 수정 중" : "그리는 중"}
+              {editingZone ? "경계·정보 수정 중" : "그리는 중"}
             </span>
             <span className="shrink-0 text-[10px] font-semibold text-sky-700">
               꼭짓점 {draftPoints.length}개
@@ -189,8 +213,8 @@ export function AdminZonePanel(props: AdminPanelProps) {
               type="button"
               data-testid="admin-finish"
               onClick={props.onFinish}
-              disabled={draftPoints.length < 3 || !!meta}
-              title="그리기 완료 (지도에서 더블클릭·우클릭·Enter 도 같다)"
+              disabled={draftPoints.length < 3}
+              title="경계 고치기 완료 (지도에서 더블클릭·우클릭·Enter 도 같다)"
               className={BTN_DARK}
             >
               ✓ 완료
@@ -200,18 +224,29 @@ export function AdminZonePanel(props: AdminPanelProps) {
             </button>
           </div>
           <p className="mt-1 text-[10px] leading-snug text-sky-900/80">
-            {adding
-              ? "지도 탭: 점 추가 · 더블클릭/우클릭/Enter: 완료(그 자리에서) · Esc: 취소"
-              : "꼭짓점 핸들을 끌어 옮기고, 변 가운데 + 로 점을 추가하세요."}{" "}
-            점의 ✕ 배지(또는 우클릭)로 삭제합니다.
+            {meta
+              ? "아래 정보 입력 폼이 열려 있습니다 — 경계를 안 고쳐도 사업유형·추진단계만 바꿔 저장할 수 있습니다."
+              : adding
+                ? "지도 탭: 점 추가 · 더블클릭/우클릭/Enter: 완료(그 자리에서) · Esc: 취소"
+                : "꼭짓점 핸들을 끌어 옮기고, 변 가운데 + 로 점을 추가하세요."}{" "}
+            {!meta && "점의 ✕ 배지(또는 우클릭)로 삭제합니다."}
           </p>
         </div>
       )}
 
       {/* ── 메타 정보 입력 ─────────────────────────────────────────── */}
       {meta && (
-        <div data-testid="admin-meta-form" className="mt-2 rounded-xl border border-slate-300 bg-white p-2">
+        <div
+          ref={metaRef}
+          data-testid="admin-meta-form"
+          className="mt-2 rounded-xl border border-slate-300 bg-white p-2"
+        >
           <p className="text-[11px] font-bold text-slate-800">구역 정보 입력</p>
+          {editingZone && (
+            <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+              경계는 고친 그대로, 사업유형·추진단계·비고는 여기 값으로 저장됩니다.
+            </p>
+          )}
           <label className="mt-1.5 block text-[10px] font-semibold text-slate-500">
             구역명 <span className="text-rose-500">*</span>
             <input
@@ -347,10 +382,11 @@ export function AdminZonePanel(props: AdminPanelProps) {
                 <div className="mt-1 flex gap-1">
                   <button
                     type="button"
+                    data-testid="admin-edit-custom"
                     onClick={() => props.onEditCustomGeometry(z.id)}
                     className="rounded border border-slate-300 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600 hover:border-slate-500 hover:text-slate-900"
                   >
-                    경계 수정
+                    경계·정보 수정
                   </button>
                   <button
                     type="button"
@@ -407,7 +443,7 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
       className="pointer-events-auto flex items-center gap-1 rounded-full border border-sky-300 bg-white/95 px-1.5 py-1 shadow-xl backdrop-blur"
     >
       <span className="ml-0.5 hidden text-[10px] font-bold text-sky-800 lg:inline">
-        {editing?.id || editing?.replacesName ? "경계 수정" : "그리기"}
+        {editing?.id || editing?.replacesName ? "경계·정보 수정" : "그리기"}
       </span>
       <span className="text-[10px] font-semibold text-slate-600">{draftPoints.length}점</span>
       <span
@@ -438,8 +474,8 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
           e.stopPropagation();
           props.onFinish();
         }}
-        disabled={draftPoints.length < 3 || !!props.meta}
-        title="그리기 완료 — 구역 정보 입력으로 (지도에서 더블클릭·우클릭·Enter 도 같다)"
+        disabled={draftPoints.length < 3}
+        title="경계 고치기 완료 — 구역 정보 입력으로 (지도에서 더블클릭·우클릭·Enter 도 같다)"
         className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-slate-800 disabled:opacity-40"
       >
         ✓ 완료

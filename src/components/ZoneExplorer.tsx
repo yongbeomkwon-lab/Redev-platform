@@ -118,7 +118,10 @@ export default function ZoneExplorer() {
     replacesName?: string;
     replacesArea?: number;
   } | null>(null);
-  /** 완료 후 입력하는 메타정보 */
+  /**
+   * 구역 정보 입력 폼 — ‘경계·정보 수정’을 누르면 초안과 함께 바로 열린다(경계를 안 고쳐도
+   * 사업유형·추진단계만 바꿔 저장할 수 있게). 새로 그릴 때는 ✓ 완료를 누른 뒤 열린다.
+   */
   const [adminMeta, setAdminMeta] = useState<AdminMetaForm | null>(null);
   const [adminMsg, setAdminMsg] = useState<string | null>(null);
   const [selectedCustomId, setSelectedCustomId] = useState<string | undefined>(undefined);
@@ -507,35 +510,71 @@ export default function ZoneExplorer() {
     );
   }
 
-  /** 선택한 구역(관리자 구역 또는 공식·대표 구역)의 경계를 고치기 시작한다 */
+  /**
+   * 초안에 맞는 구역 정보 기본값 — 저장된 관리자 구역이면 그 값, 공식·대표 구역이면
+   * 그 구역의 사업유형·추진단계·자치구를 그대로 채운다(‘경계·정보 수정’에서 바로 고칠 수 있게).
+   */
+  function metaFromDraft(d: {
+    editingId?: string;
+    replacesZoneId?: string;
+    replacesName?: string;
+  }): AdminMetaForm {
+    const base = d.editingId ? customZones.find((z) => z.id === d.editingId) : undefined;
+    const official = d.replacesZoneId ? seoulZones.find((z) => z.id === d.replacesZoneId) : undefined;
+    const officialType = official?.type as CustomZoneType | undefined;
+    return {
+      name: base?.name ?? d.replacesName ?? official?.name ?? "",
+      type:
+        base?.type ??
+        (officialType && (CUSTOM_ZONE_TYPES as readonly string[]).includes(officialType)
+          ? officialType
+          : "일반재개발"),
+      stage: base?.stage ?? official?.stage ?? "추진준비",
+      gu: base?.gu ?? official?.gu ?? "",
+      note: base?.note ?? "",
+    };
+  }
+
+  /**
+   * 선택한 구역(관리자 구역 또는 공식·대표 구역)의 경계·정보를 고치기 시작한다.
+   *   경계를 안 고쳐도 사업유형·추진단계를 바로 고쳐 저장할 수 있도록 정보 입력 폼도 함께 연다.
+   */
   function startEditSelected() {
-    setAdminMeta(null);
     setPanelOpen(true);
     if (selectedCustom) {
-      setDraft({
+      const next = {
         points: selectedCustom.ring.map(([lat, lng]) => [lat, lng] as [number, number]),
         editingId: selectedCustom.id,
         ...(selectedCustom.replacesZoneId ? { replacesZoneId: selectedCustom.replacesZoneId } : {}),
         ...(selectedCustom.replacesName ? { replacesName: selectedCustom.replacesName } : {}),
         ...(selectedCustom.replacesArea ? { replacesArea: selectedCustom.replacesArea } : {}),
-      });
-      setAdminMsg(`‘${selectedCustom.name}’ 경계를 고칩니다 — 점을 끌고, 변의 +로 추가, ✕로 삭제하세요.`);
+      };
+      setDraft(next);
+      setAdminMeta(metaFromDraft(next));
+      setAdminMsg(
+        `‘${selectedCustom.name}’ 경계·정보를 고칩니다 — 경계는 그대로 두고 사업유형·추진단계만 바꿔 저장해도 됩니다.`
+      );
       return;
     }
     const ring = selectedSeoul?.polygon ?? selected?.polygon;
     if (!ring || ring.length < 3) {
       setAdminMsg("선택한 구역에 경계 도형이 없습니다. ‘새 구역 그리기’로 시작하세요.");
+      setAdminMeta(null);
       return;
     }
     const name = selectedSeoul?.name ?? selected?.name ?? "선택 구역";
     const officialArea = selectedSeoul?.area ?? ringAreaSqm(ring);
-    setDraft({
+    const next = {
       points: ring.map(([lat, lng]) => [lat, lng] as [number, number]),
       replacesZoneId: selectedSeoul?.id ?? selected?.id,
       replacesName: name,
       replacesArea: officialArea,
-    });
-    setAdminMsg(`${name} 경계를 고칩니다 — 점을 끌고, 변의 +로 추가, ✕로 삭제하세요.`);
+    };
+    setDraft(next);
+    setAdminMeta(metaFromDraft(next));
+    setAdminMsg(
+      `${name} 경계·정보를 고칩니다 — 점을 끌어 경계를 고치거나, 경계는 그대로 두고 사업유형·추진단계만 바꿔 저장하세요.`
+    );
   }
 
   function addDraftPoint(lat: number, lng: number) {
@@ -573,23 +612,18 @@ export default function ZoneExplorer() {
     setDraft((d) => (d && d.points.length ? { ...d, points: d.points.slice(0, -1) } : d));
   }
 
-  /** 완료 → 메타 입력 폼 */
+  /** 완료 → 메타 입력 폼 (이미 열려 있으면 입력값을 덮어쓰지 않는다) */
   function finishDraft() {
     if (!draft) return;
     if (draft.points.length < 3) {
       setAdminMsg("꼭짓점을 3개 이상 찍어야 구역이 됩니다.");
       return;
     }
-    const base = draft.editingId ? customZones.find((z) => z.id === draft.editingId) : undefined;
-    const official = draft.replacesZoneId ? seoulZones.find((z) => z.id === draft.replacesZoneId) : undefined;
-    const officialType = official?.type as CustomZoneType | undefined;
-    setAdminMeta({
-      name: base?.name ?? draft.replacesName ?? official?.name ?? "",
-      type: base?.type ?? (officialType && (CUSTOM_ZONE_TYPES as readonly string[]).includes(officialType) ? officialType : "일반재개발"),
-      stage: base?.stage ?? official?.stage ?? "추진준비",
-      gu: base?.gu ?? official?.gu ?? "",
-      note: base?.note ?? "",
-    });
+    if (adminMeta) {
+      setAdminMsg("구역 정보 입력 폼이 열려 있습니다 — 값을 고쳐 저장하세요.");
+      return;
+    }
+    setAdminMeta(metaFromDraft(draft));
     setAdminMsg("구역 정보를 입력하고 저장하세요.");
   }
 
@@ -605,9 +639,13 @@ export default function ZoneExplorer() {
     setAdminMsg("구역 정보 입력을 닫았습니다 — 점을 더 고치거나 완료를 다시 누르세요.");
   }
 
-  /** 메타 입력 → 저장(localStorage) */
+  /** 메타 입력 → 저장(localStorage) — 그리는/고치는 중이어도 꼭짓점 3개 이상이면 지금 모양대로 저장 */
   function saveDraftZone() {
     if (!draft || !adminMeta) return;
+    if (draft.points.length < 3) {
+      setAdminMsg("꼭짓점을 3개 이상 찍거나 경계가 있는 구역을 골라야 저장할 수 있습니다.");
+      return;
+    }
     const name = adminMeta.name.trim();
     if (!name) {
       setAdminMsg("구역명을 입력하세요.");
@@ -648,20 +686,22 @@ export default function ZoneExplorer() {
     setAdminFit({ id, token: Date.now() });
   }
 
+  /** 목록의 ‘경계·정보 수정’ — 경계 핸들과 함께 정보 입력 폼을 바로 연다 */
   function editCustomGeometry(id: string) {
     const z = customZones.find((v) => v.id === id);
     if (!z) return;
     setSelectedCustomId(id);
-    setAdminMeta(null);
     setPanelOpen(true);
-    setDraft({
+    const next = {
       points: z.ring.map(([lat, lng]) => [lat, lng] as [number, number]),
       editingId: z.id,
       ...(z.replacesZoneId ? { replacesZoneId: z.replacesZoneId } : {}),
       ...(z.replacesName ? { replacesName: z.replacesName } : {}),
       ...(z.replacesArea ? { replacesArea: z.replacesArea } : {}),
-    });
-    setAdminMsg(`‘${z.name}’ 경계를 고칩니다 — 점을 끌고, 변의 +로 추가, ✕로 삭제하세요.`);
+    };
+    setDraft(next);
+    setAdminMeta(metaFromDraft(next));
+    setAdminMsg(`‘${z.name}’ 경계·정보를 고칩니다 — 사업유형·추진단계만 바꿔 저장해도 됩니다.`);
   }
 
   function deleteCustomZone(id: string) {
