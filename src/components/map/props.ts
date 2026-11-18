@@ -9,11 +9,19 @@ export const SEOUL_BOUNDS: [[number, number], [number, number]] = [
   [37.702, 127.184],
 ];
 
+/**
+ * 매물 배지 — 구역 id → 매물 건수.
+ *   지도는 매물이 1건 이상인 구역의 중심에 `🏠 매물 N` 배지를 얹는다(우리 DOM 레이어 z-index 100).
+ */
+export type ZoneListingCounts = Record<string, number>;
+
 export type ZoneMapProps = {
   /** 대표 구역 (상세 데이터 보유 — 실거래·매물 포함) */
   zones: Zone[];
   /** 서울시 정비구역 전수 (호출측이 표시 범위만 걸러서 넘긴다 — 준공 숨김 등) */
   seoulZones: SeoulZone[];
+  /** 구역별 매물 건수 — 있으면 지도에 🏠 매물 N 배지를 그린다 */
+  listingCounts?: ZoneListingCounts;
   selectedZoneId?: string;
   onSelectZone: (id: string) => void;
   /** 준공·입주 완료 구역까지 표시 중인지 (지도 위 토글 표시용) */

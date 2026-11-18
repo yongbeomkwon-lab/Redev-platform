@@ -25,8 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
-import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";
-import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
+import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps } from "./props";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
@@ -36,6 +35,21 @@ import type {
   KakaoPolygon,
   KakaoSDK,
 } from "./kakao-loader";
+
+/**
+ * 매물 배지 레이어 — 지도 컨테이너 위 전체 크기 레이어(z-index 100).
+ *  · 폴리곤은 캔버스(z-index 2)에 있으므로 그보다 위, 화면 UI(600~700)보다는 아래에 둔다.
+ *  · 레이어 자체는 `transform` 을 쓰지 않는다(자식 배지마다 draw 가 좌표를 맞춘다).
+ */
+const BADGE_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 100,
+  pointerEvents: "none" as const,
+};
 
 /** 카카오 레벨(1=최대 확대, 14=최대 축소)을 Leaflet 줌(클수록 확대)처럼 다루기 위한 기준값 */
 const ZOOM_BASE = 20;
@@ -194,6 +208,7 @@ export default function KakaoZoneMap({
   addressPin,
   stationPin,
   zoneFitRequest,
+  listingCounts,
   admin,
   onFail,
 }: KakaoZoneMapProps) {
@@ -214,6 +229,10 @@ export default function KakaoZoneMap({
   /** 지하철역 핀 레이어 — 주소 핀과 동시에 떠 있을 수 있어 따로 둔다 */
   const stationLayerRef = useRef<HTMLDivElement | null>(null);
   const labelLayerRef = useRef<HTMLDivElement | null>(null);
+  /** 매물 배지 레이어 + 배지 요소(구역 id → 버튼) — draw 가 매 프레임 좌표를 맞춘다 */
+  const badgeLayerRef = useRef<HTMLDivElement | null>(null);
+  const badgeElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const badgeAtRef = useRef<{ id: string; name: string; count: number; lat: number; lng: number }[]>([]);
   /** 지금 레이어에 놓인 핀·이름표의 좌표 (draw 에서 읽는다) */
   const pinAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
   /** 지금 역 핀 레이어에 놓인 좌표 */
@@ -421,6 +440,42 @@ export default function KakaoZoneMap({
     placeOnMap(labelLayerRef.current, labelAtRef.current.lat, labelAtRef.current.lng);
     placeOnMap(pinLayerRef.current, pinAtRef.current.lat, pinAtRef.current.lng);
     placeOnMap(stationLayerRef.current, stationAtRef.current.lat, stationAtRef.current.lng);
+
+    // 매물 배지 — 구역 중심에 `🏠 매물 N`. 지도와 같은 변환으로 매 프레임 좌표를 맞추고,
+    // 가까이서 겹치는 배지는 숨긴다(도시 전체 보기에서 글자가 뭉개지지 않게).
+    //   · **선택한 구역 배지를 가장 먼저** 놓는다 — 옆 구역 배지에 밀려 사라지지 않게.
+    if (badgeLayerRef.current) {
+      const placedBadges: { x: number; y: number }[] = [];
+      const sel = selectedRef.current;
+      const allBadges = badgeAtRef.current;
+      const orderedBadges = sel
+        ? [...allBadges.filter((b) => b.id === sel), ...allBadges.filter((b) => b.id !== sel)]
+        : allBadges;
+      for (const b of orderedBadges) {
+        const node = badgeElsRef.current.get(b.id);
+        if (!node) continue;
+        const x = p0x + (b.lng - lng0) * pxPerLng;
+        const y = p0y + (mercator(b.lat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -140 || x > cw + 140 || y < -50 || y > ch + 50) {
+          node.style.visibility = "hidden";
+          continue;
+        }
+        let clash = false;
+        for (const p of placedBadges) {
+          if (Math.abs(p.x - x) < 34 && Math.abs(p.y - y) < 20) {
+            clash = true;
+            break;
+          }
+        }
+        if (clash) {
+          node.style.visibility = "hidden";
+          continue;
+        }
+        placedBadges.push({ x, y });
+        node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+        node.style.visibility = "visible";
+      }
+    }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
@@ -1350,6 +1405,35 @@ export default function KakaoZoneMap({
     adminCursorRef.current = null;
   };
 
+  // ── 매물 배지 — 매물이 있는 구역의 중심 목록 ────────────────────────
+  //   · 좌표는 구역 중심(고시 구역 → 대표 구역 순). 경계 미고시 후보지도 중심이 있으면 찍는다.
+  //   · 개수는 호출측(ZoneExplorer)이 필터를 반영해 넘긴다.
+  const badgeZones = useMemo(() => {
+    const counts = listingCounts ?? {};
+    const out: { id: string; name: string; count: number; lat: number; lng: number }[] = [];
+    const seen = new Set<string>();
+    for (const z of seoulZones) {
+      const count = counts[z.id];
+      if (!count || !z.center || !Number.isFinite(z.center[0]) || !Number.isFinite(z.center[1])) continue;
+      seen.add(z.id);
+      out.push({ id: z.id, name: z.name, count, lat: z.center[0], lng: z.center[1] });
+    }
+    // 전수 목록에 없는 대표 구역(직접 만든 데이터)도 배지를 잃지 않게
+    for (const z of zones) {
+      const count = counts[z.id];
+      if (!count || seen.has(z.id) || !z.center) continue;
+      out.push({ id: z.id, name: z.name, count, lat: z.center[0], lng: z.center[1] });
+    }
+    return out;
+  }, [listingCounts, seoulZones, zones]);
+  badgeAtRef.current = badgeZones;
+
+  // 매물이 늘거나 줄면 배지 자리를 다시 그린다(등록 직후 새로고침 없이 반영)
+  useEffect(() => {
+    if (!badgeLayerRef.current) return;
+    draw();
+  }, [badgeZones, draw]);
+
   // ── 선택 구역 이름표 + 부드러운 이동 ────────────────────────────────────────
   //   이름표도 우리 DOM 레이어(z-index 100)에 둔다 — 카카오 오버레이에 두면 폴리곤 캔버스가
   //   위에 깔려 구역 안쪽에 있을 때 이름표가 구역 색에 반투명하게 덮였다.
@@ -1532,6 +1616,55 @@ export default function KakaoZoneMap({
             dangerouslySetInnerHTML={{ __html: labelHtml }}
           />
         )}
+      </div>
+
+      {/* ── 매물 배지 — `🏠 매물 N` (z-index 100 우리 레이어, 폴리곤 위) ── */}
+      <div ref={badgeLayerRef} style={BADGE_LAYER_STYLE}>
+        {badgeZones.map((b) => (
+          <button
+            key={b.id}
+            type="button"
+            ref={(el) => {
+              if (el) badgeElsRef.current.set(b.id, el);
+              else badgeElsRef.current.delete(b.id);
+            }}
+            data-testid="zone-listing-badge"
+            data-zone-id={b.id}
+            data-zone-name={b.name}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectZone(b.id);
+            }}
+            title={`${b.name} — 매물 ${b.count}건 (누르면 이 구역 상세가 열립니다)`}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: "max-content",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "3px",
+              borderRadius: "999px",
+              border: "2px solid #b45309",
+              background: "#fffbeb",
+              color: "#7c2d12",
+              fontSize: "11px",
+              fontWeight: 800,
+              lineHeight: 1,
+              padding: "3px 7px",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              pointerEvents: "auto",
+              visibility: "hidden",
+              boxShadow: "0 3px 10px rgba(15,23,42,.35), 0 1px 3px rgba(15,23,42,.3)",
+            }}
+          >
+            <span aria-hidden style={{ fontSize: "11px", lineHeight: 1 }}>
+              🏠
+            </span>
+            <span>매물 {b.count}</span>
+          </button>
+        ))}
       </div>
 
       {/* ── 주소 검색 핀 — 항상 최상단(불투명 흰 카드 + 드롭핀) ── */}

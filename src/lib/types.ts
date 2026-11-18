@@ -99,25 +99,54 @@ export type Transaction = {
   officialLandValue: number; // 거래시점 공시지가 기준 토지가 (만원) — 배수 계산용
 };
 
-/** 중개사 매물 (유료 등록) */
+/**
+ * 중개사 매물 (검증 매물 · 등록 매물)
+ *
+ * ▶ 재개발 실무 필드
+ *    · 매매가 = 조합원 지위(입주권) 매매가. 여기서 **기보증금**을 빼면 매수자가 실제로 내는 돈이 된다.
+ *    · `deposit`(기보증금)과 옛 필드 `expectedJeonse`(예상 전세 보증금 회수액)는 같은 자리의 값이다
+ *      — 기존 샘플 매물이 쓰던 이름을 지우지 않고, 새 매물은 `deposit`으로 적는다.
+ *    · `leaseOperatorOnly`(임대사업자 승계 필수) · `landPermitRequired`(토지거래허가구역/실거주 의무)는
+ *      지방 투자자가 가장 먼저 거르는 조건이라 매물에 붙여 둔다.
+ *
+ * ▶ 호환성
+ *    · 예전 `Listing`은 감정평가액·불하금·추가분담금이 필수였다. 검증 매물 JSON처럼 그 값이 없는
+ *      매물도 담을 수 있도록 **선택 필드**로 바꿨다(값이 없으면 계산·표시에서 0/미입력으로 다룬다).
+ */
 export type Listing = {
   id: string;
   zoneId: string;
+  /** 구역명 — zones.geojson 의 이름. zoneId 가 맞지 않는 저장분·직접 입력 매물은 이름으로 찾는다 */
+  zoneName?: string;
+  /** 자치구 (예: 동작구) */
+  gu?: string;
+  /** 매물 종류 — 다세대/도시형, 단독/다가구, 아파트, 상가주택, 오피스텔 */
+  propertyType?: string;
   brokerName: string; // 중개사명
   brokerAgency: string; // 중개사무소
   brokerPhone: string; // 직통 (검증 열람권 구매 시 공개)
-  brokerLicense: string; // 개설등록번호
-  unitType: string; // 희망 타입 예: "84D", "59A", "일반매물"
+  brokerLicense?: string; // 개설등록번호
+  unitType: string; // 희망 타입 예: "84D", "59A", "전용 29.18㎡ (404호)"
   salePrice: number; // 매매가 (만원)
-  appraisedValue: number; // 감정평가액 (만원)
+  appraisedValue?: number; // 감정평가액 (만원)
   premium?: number; // 프리미엄 (만원) — 매매가 중 감정가 초과분
-  transferFeeIncluded: boolean; // 불하금 포함 여부
+  transferFeeIncluded?: boolean; // 불하금 포함 여부
   transferFee?: number; // 불하금 (만원)
-  expectedJeonse: number; // 예상 전세/보증금 회수액 (만원)
-  expectedAdditionalCost: number; // 예상 추가분담금 (만원, 추정)
-  note?: string;
+  /** 기보증금 (만원) — 초기투자금 = 매매가 − 기보증금 */
+  deposit?: number;
+  expectedJeonse?: number; // 예상 전세/보증금 회수액 (만원) — 기존 샘플 필드(deposit 과 같은 자리)
+  expectedAdditionalCost?: number; // 예상 추가분담금 (만원, 추정)
+  /** 전용면적 (㎡) */
+  exclusiveAreaSqm?: number;
+  /** 대지지분 (㎡) */
+  landShareSqm?: number;
+  /** 임대사업자 승계 필수 여부 — 임대사업자만 승계해 매수할 수 있는 물건 */
+  leaseOperatorOnly?: boolean;
+  /** 토지거래허가구역(실거주 의무) 해당 여부 — false 면 실거주·토허제에서 자유롭다 */
+  landPermitRequired?: boolean;
+  note?: string; // 매물 핵심 특징
   verified: boolean; // 검증 매물 여부
-  createdAt: string;
+  createdAt?: string;
 };
 
 /** 브로커 요금제 */
@@ -159,20 +188,32 @@ export const UNLOCK_PRICE = 3; // 만원 / 매물 1건
 /** 취득세·등기·중개보수 등 부대비용 추정: 매매가의 2% */
 export const EST_OTHER_COST_RATE = 0.02;
 
-/** 초기투자금 = 매매가 + (불하금 포함 시) 불하금 + 부대비용(2%) */
+/** 매물의 기보증금 — 새 필드 `deposit`, 없으면 옛 필드 `expectedJeonse` */
+export function listingDeposit(l: Listing): number {
+  return l.deposit ?? l.expectedJeonse ?? 0;
+}
+
+/**
+ * 초기투자금 = 매매가 − 기보증금(또는 예상 전세) + (불하금 포함 시) 불하금
+ *   · 재개발 입주권 매매에서 매수자가 실제로 준비하는 현금이다.
+ *     매매가 7.8억 · 기보증금 2.77억 → 5.03억 (상도23구역 다원씨앤아이 404호).
+ *   · 취득세·법무·중개보수는 별도다(`EST_OTHER_COST_RATE`) — 초기투자금에 섞으면 실무 계산과 어긋난다.
+ */
 export function calcInitialInvestment(l: Listing): number {
   const transfer = l.transferFeeIncluded ? (l.transferFee ?? 0) : 0;
-  return Math.round(l.salePrice + transfer + l.salePrice * EST_OTHER_COST_RATE);
+  return Math.max(0, Math.round(l.salePrice - listingDeposit(l) + transfer));
 }
 
-/** 추정 권리가액 = 매매가 − 감정평가액 (감정가 대비 프리미엄) */
+/** 추정 권리가액 = 매매가 − 감정평가액 (감정가 대비 프리미엄). 감정가가 없으면 0 */
 export function calcImpliedRights(l: Listing): number {
-  return l.salePrice - l.appraisedValue;
+  return l.appraisedValue ? l.salePrice - l.appraisedValue : 0;
 }
 
-/** 총 소요자금 = 초기투자금 + 예상 추가분담금 − 전세 보증금 회수액 */
+/** 총 소요자금 = 초기투자금 + 취득 부대비용(2%) + 예상 추가분담금 */
 export function calcTotalRequired(l: Listing): number {
-  return calcInitialInvestment(l) + l.expectedAdditionalCost - l.expectedJeonse;
+  return Math.round(
+    calcInitialInvestment(l) + l.salePrice * EST_OTHER_COST_RATE + (l.expectedAdditionalCost ?? 0)
+  );
 }
 
 /** 공시지가 배수 = 거래금액 ÷ 대지지분 기준 공시지가 */

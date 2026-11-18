@@ -11,7 +11,8 @@
 // 실제 연동 가이드는 scripts/README-gis.md와 README.md 참고.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Listing, Transaction, Zone } from "@/lib/types";
-import { LISTINGS, TRANSACTIONS, ZONES } from "@/data/sample";
+import { TRANSACTIONS, ZONES } from "@/data/sample";
+import { allListings } from "@/lib/custom-listings";
 
 export interface DataProvider {
   name: string;
@@ -33,7 +34,9 @@ export const mockProvider: DataProvider = {
   },
   async getListings(zoneId) {
     await delay(60);
-    return zoneId ? LISTINGS.filter((l) => l.zoneId === zoneId) : LISTINGS;
+    // 정식 검증 매물(verified-listings.json) + 샘플 + 이 브라우저 등록 매물을 합쳐 보여준다
+    const list = allListings();
+    return zoneId ? list.filter((l) => l.zoneId === zoneId) : list;
   },
 };
 

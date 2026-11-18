@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "source": "리디브 검증 매물 — 중개사 확인 물건",
+    "asOf": "2026-11-18",
+    "count": 1,
+    "note": "정식 검증 매물만 담습니다(건축물대장·현장 확인을 거친 물건). 새 매물 등록은 /register 에서 하며, 이 브라우저에 저장된 등록분과 함께 보입니다. 검증 매물로 이 파일에 올리려면 관리자가 이 JSON 의 listings 배열에 항목을 추가하면 됩니다.",
+    "fields": {
+      "salePrice": "매매가(만원)",
+      "deposit": "기보증금(만원) — 초기투자금 = 매매가 − 기보증금",
+      "exclusiveAreaSqm": "전용면적(㎡)",
+      "landShareSqm": "대지지분(㎡)",
+      "leaseOperatorOnly": "임대사업자 승계 필수",
+      "landPermitRequired": "토지거래허가구역(실거주 의무)"
+    }
+  },
+  "listings": [
+    {
+      "id": "v-sangdo23-dawon-404",
+      "zoneId": "11000UQ120PS202601310018",
+      "zoneName": "상도23구역",
+      "gu": "동작구",
+      "propertyType": "다세대/도시형",
+      "brokerAgency": "삼성동 eXp Realty Korea",
+      "brokerName": "권용범 중개사",
+      "brokerPhone": "문의 요청 시 안내",
+      "unitType": "전용 29.18㎡ (404호)",
+      "salePrice": 78000,
+      "deposit": 27700,
+      "exclusiveAreaSqm": 29.175,
+      "leaseOperatorOnly": true,
+      "landPermitRequired": false,
+      "verified": true,
+      "note": "임대사업자 승계 필수 물건 · 초기투자금 약 5.03억 · 2018.08 사용승인",
+      "createdAt": "2026-11-18"
+    }
+  ]
+}

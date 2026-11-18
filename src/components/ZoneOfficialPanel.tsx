@@ -13,8 +13,10 @@
 //   라벨은 줄바꿈 금지, 값은 필요할 때만 단어 단위로 감싼다.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { SeoulZonesMeta, SeoulZone } from "@/lib/seoul-zones";
+import type { Listing } from "@/lib/types";
 import { TYPE_COLORS } from "./map/colors";
 import ZoneTransactions from "./ZoneTransactions";
+import { ZoneListingCards } from "./ZoneListingCards";
 
 const PYEONG = 3.305785;
 
@@ -22,10 +24,13 @@ export default function ZoneOfficialPanel({
   zone,
   meta,
   onClose,
+  listings = [],
 }: {
   zone: SeoulZone;
   meta: SeoulZonesMeta;
   onClose: () => void;
+  /** 이 구역의 매물(zoneId 또는 zoneName 매칭) — 있으면 고시 데이터 아래에 카드로 붙는다 */
+  listings?: Listing[];
 }) {
   const color = TYPE_COLORS[zone.type] ?? "#64748b";
   const pyeong = Math.round(zone.area / PYEONG);
@@ -168,6 +173,9 @@ export default function ZoneOfficialPanel({
         )}
       </div>
 
+      {/* 검증 매물 — 실거래가 위에 붙여 '지금 나온 물건'을 먼저 보여준다 */}
+      <ZoneListingCards listings={listings} zoneId={zone.id} zoneName={zone.name} />
+
       {/* 국토부 실거래가 — 서울시 고시 데이터 바로 아래에 붙여 경계·면적과 시세를 함께 본다 */}
       <ZoneTransactions
         gu={zone.gu}
@@ -185,12 +193,12 @@ export default function ZoneOfficialPanel({
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">이름 근거: {zone.nameNote}</p>
         )}
         <p className="mt-2 text-[11px] leading-relaxed">
-          세대수·비례율·시공사·중개사 매물은 앱의 <b>대표 구역 6곳</b>(신림1·반포주공1단지 3주구·
+          세대수·비례율·시공사는 앱의 <b>대표 구역 6곳</b>(신림1·반포주공1단지 3주구·
           노량진1·한남뉴타운·성수전략2·북아현1-1)에 샘플로 붙어 있습니다.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed">
           이 구역은 서울시 고시 데이터(경계·사업유형·추진단계·면적)와 위의 국토부 실거래가를 함께
-          보여줍니다. 매물·비례율은 중개사 등록 후 채워집니다.
+          보여줍니다. 매물은 중개사가 <b>/register</b> 에 등록하면 이 패널과 지도에 바로 표시됩니다.
         </p>
         {sources.length > 0 && (
           <div className="mt-3 border-t border-slate-200 pt-2 text-[10px] text-slate-500">

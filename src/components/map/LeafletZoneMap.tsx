@@ -138,6 +138,48 @@ function StationPinMarker({ pin }: { pin?: StationPin | null }) {
   );
 }
 
+/**
+ * 매물 배지 — `🏠 매물 N`. 카카오맵(BADGE_LAYER_STYLE, z-index 100)과 같은 생김새로,
+ * Leaflet 에서는 divIcon 마커로 폴리곤 캔버스(400)보다 위 pane(700)에 얹는다.
+ * 누르면 그 구역 상세가 열린다(마커 클릭은 지도 클릭으로 번지지 않는다).
+ */
+function ListingBadges({
+  zones,
+  counts,
+  onSelect,
+}: {
+  zones: SeoulZone[];
+  counts: Record<string, number>;
+  onSelect: (id: string) => void;
+}) {
+  const badges = useMemo(
+    () =>
+      zones
+        .filter((z) => (counts[z.id] ?? 0) > 0 && z.center && Number.isFinite(z.center[0]))
+        .map((z) => ({ id: z.id, name: z.name, count: counts[z.id], center: z.center })),
+    [zones, counts]
+  );
+  if (badges.length === 0) return null;
+  return (
+    <Pane name="redevListingBadges" style={{ zIndex: 700 }}>
+      {badges.map((b) => (
+        <Marker
+          key={b.id}
+          position={b.center}
+          icon={L.divIcon({
+            className: "redev-listing-badge",
+            html: `<div style="transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:3px;border-radius:999px;border:2px solid #b45309;background:#fffbeb;color:#7c2d12;font-size:11px;font-weight:800;line-height:1;padding:3px 7px;white-space:nowrap;box-shadow:0 3px 10px rgba(15,23,42,.35);"><span aria-hidden>🏠</span> 매물 ${b.count}</div>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          })}
+          eventHandlers={{ click: () => onSelect(b.id) }}
+          keyboard={false}
+        />
+      ))}
+    </Pane>
+  );
+}
+
 /** 확대 수준을 상위로 알린다 — 줌이 바뀌면 선 굵기를 다시 계산한다 */
 function ZoomWatcher({ onChange }: { onChange: (zoom: number) => void }) {
   const map = useMap();
@@ -276,6 +318,7 @@ export default function LeafletZoneMap({
   addressPin,
   stationPin,
   zoneFitRequest,
+  listingCounts = {},
   admin,
   fallbackReason,
 }: LeafletZoneMapProps) {
@@ -362,6 +405,9 @@ export default function LeafletZoneMap({
           </Tooltip>
         </CircleMarker>
       ))}
+
+      {/* ── 매물 배지 — 카카오맵과 같은 `🏠 매물 N` ── */}
+      <ListingBadges zones={seoulZones} counts={listingCounts} onSelect={onSelectZone} />
 
       <FitSelected
         ring={selected.ring}

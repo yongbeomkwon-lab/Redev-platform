@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from "react";
 import type { Listing, MapZoneType, Transaction, Zone, ZoneStage } from "@/lib/types";
-import { STAGE_ORDER, calcMultiple } from "@/lib/types";
+import { STAGE_ORDER, calcInitialInvestment, calcMultiple } from "@/lib/types";
 import {
   loadSeoulZones,
   refreshSeoulZones,
@@ -38,6 +38,12 @@ import {
 import type { AddressPin, AdminMapConfig, AdminZoneShape, StationPin } from "@/components/map/props";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
+import { ZoneListingCards } from "@/components/ZoneListingCards";
+import {
+  LISTINGS_CHANGED_EVENT,
+  listingCountsByZoneId,
+  listingMatchesZone,
+} from "@/lib/custom-listings";
 import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
 import {
   ADMIN_STORAGE_KEY,
@@ -85,6 +91,13 @@ export default function ZoneExplorer() {
   const [loading, setLoading] = useState(true);
   // 준공 완료 구역 표시 여부 — 기본은 숨김(진행 중 구역만 보여준다)
   const [showCompleted, setShowCompleted] = useState(false);
+  // ── 매물 필터 ────────────────────────────────────────────────────────────
+  //   · listingsOnly: 매물이 있는 구역만 지도에 남긴다
+  //   · leaseOnly / noPermit: 매물 조건(임대사업자 승계 · 토허제 없음)으로 구역을 거른다
+  //     → 지도 배지의 숫자도 같은 조건으로 센다(필터와 배지가 다른 말을 하지 않게).
+  const [listingsOnly, setListingsOnly] = useState(false);
+  const [leaseOnly, setLeaseOnly] = useState(false);
+  const [noPermit, setNoPermit] = useState(false);
   // 지도 위 떠 있는 패널 열림 상태
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
@@ -180,6 +193,31 @@ export default function ZoneExplorer() {
       .catch(() => setLoading(false));
   }, []);
 
+  // 매물이 바뀌면(등록·삭제) 목록을 다시 읽어 지도 배지·카드에 바로 반영한다
+  useEffect(() => {
+    const reload = () => {
+      getProvider()
+        .getListings()
+        .then((l) => setListings(l))
+        .catch(() => {});
+    };
+    window.addEventListener(LISTINGS_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(LISTINGS_CHANGED_EVENT, reload);
+  }, []);
+
+  // `/?zone=<구역 id>` — 매물 목록·등록 완료 화면에서 넘어오면 그 구역 상세를 바로 열어 준다
+  useEffect(() => {
+    let id: string | null = null;
+    try {
+      id = new URL(window.location.href).searchParams.get("zone");
+    } catch {
+      id = null;
+    }
+    if (!id) return;
+    setSelectedId(id);
+    setPanelOpen(true);
+  }, []);
+
   // 서울시 정비구역 전수 레이어
   useEffect(() => {
     loadSeoulZones().then((d) => {
@@ -228,7 +266,25 @@ export default function ZoneExplorer() {
   // 대표 구역이 아닌 구역 — 서울시 고시 데이터만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
-  const selectedListings = listings.filter((l) => l.zoneId === selectedId);
+  // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
+  const selectedListings = listings.filter((l) =>
+    listingMatchesZone(l, selectedId, selectedSeoul?.name ?? selected?.name)
+  );
+
+  // ── 매물 조건 필터 ────────────────────────────────────────────────────────
+  //   · 지도 배지 숫자·‘매물 있는 구역’ 필터 모두 **같은 목록**에서 센다 —
+  //     임대사업자 승계·토허제 조건을 켜면 그 조건에 맞는 매물만 배지에 잡힌다.
+  const filteredListings = useMemo(
+    () =>
+      listings.filter(
+        (l) =>
+          (!leaseOnly || l.leaseOperatorOnly === true) &&
+          (!noPermit || l.landPermitRequired !== true)
+      ),
+    [listings, leaseOnly, noPermit]
+  );
+  const listingCounts = useMemo(() => listingCountsByZoneId(filteredListings), [filteredListings]);
+  const listingZoneIds = useMemo(() => new Set(Object.keys(listingCounts)), [listingCounts]);
 
   // ── 준공 완료 구역(준공·준공(일부)·입주·사용승인 357곳) 숨김 ─────────────────
   //   이미 입주까지 끝나 아파트가 된 구역이라 상담 대상이 아니다. 기본 지도·검색·
@@ -245,10 +301,23 @@ export default function ZoneExplorer() {
   //     지도에서만 빠진다 — 구역이 겹쳐 두 색으로 보이지 않게.
   const mapSeoulZones = useMemo(
     () =>
-      (typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter)).filter(
-        (z) => !z.hiddenByDefault
-      ),
-    [visibleSeoulZones, typeFilter]
+      (typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter))
+        .filter((z) => !z.hiddenByDefault)
+        // ‘매물 있는 구역’ 필터 — 매물이 없는 구역은 지도에서 뺀다
+        .filter((z) => !listingsOnly || listingZoneIds.has(z.id)),
+    [visibleSeoulZones, typeFilter, listingsOnly, listingZoneIds]
+  );
+
+  /** 매물이 있는 구역 수 — 필터 칩에 병기(준공 숨김·유형 필터 반영) */
+  const listingZoneTotal = useMemo(
+    () => mapSeoulZones.filter((z) => listingZoneIds.has(z.id)).length,
+    [mapSeoulZones, listingZoneIds]
+  );
+
+  /** 지도에 넘기는 대표 구역 — ‘매물 있는 구역’ 필터가 켜지면 매물 없는 대표 구역은 뺀다 */
+  const mapFeaturedZones = useMemo(
+    () => (listingsOnly ? filtered.filter((z) => listingZoneIds.has(z.id)) : filtered),
+    [filtered, listingsOnly, listingZoneIds]
   );
 
   function toggleCompleted() {
@@ -829,7 +898,7 @@ export default function ZoneExplorer() {
       {/* ── 지도: 화면 전체 ─────────────────────────────────────────────────── */}
       <div className="absolute inset-0">
         <MapPanel
-          zones={filtered}
+          zones={mapFeaturedZones}
           seoulZones={mapSeoulZones}
           selectedZoneId={selectedId}
           onSelectZone={pickZone}
@@ -839,6 +908,7 @@ export default function ZoneExplorer() {
           addressPin={addressPin}
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
+          listingCounts={listingCounts}
           admin={adminMapConfig}
         />
       </div>
@@ -1359,6 +1429,9 @@ export default function ZoneExplorer() {
             <span className="text-xs font-bold text-slate-800">필터</span>
             <span className="truncate text-[11px] text-slate-500">
               {typeFilter} · {stageFilter}
+              {listingsOnly ? " · 매물 있는 구역" : ""}
+              {leaseOnly ? " · 임대사업자 승계" : ""}
+              {noPermit ? " · 토허제 없음" : ""}
             </span>
             <span className="ml-auto shrink-0 text-[11px] font-semibold text-slate-400">
               {filtersOpen ? "접기 ▲" : "펼치기 ▼"}
@@ -1381,6 +1454,24 @@ export default function ZoneExplorer() {
                     {s}
                   </Chip>
                 ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
+                <span className="mr-1 text-[11px] font-semibold text-slate-500">매물 조건</span>
+                <Chip
+                  active={listingsOnly}
+                  onClick={() => setListingsOnly((v) => !v)}
+                >
+                  <span data-testid="filter-listings-only">🏠 매물 있는 구역 {listingZoneTotal}</span>
+                </Chip>
+                <Chip active={leaseOnly} onClick={() => setLeaseOnly((v) => !v)}>
+                  <span data-testid="filter-lease-only">임대사업자 승계</span>
+                </Chip>
+                <Chip active={noPermit} onClick={() => setNoPermit((v) => !v)}>
+                  <span data-testid="filter-no-permit">실거주(토허제) 없음</span>
+                </Chip>
+                <span className="text-[10px] leading-tight text-slate-400">
+                  {filteredListings.length}건 매물 · 지도에 🏠 매물 배지
+                </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
                 <button
@@ -1620,6 +1711,9 @@ export default function ZoneExplorer() {
                 )}
                 <p className="text-[11px] leading-relaxed text-slate-500">{selected.summary}</p>
 
+                {/* 검증 매물 — 실거래가 위에 '지금 나온 물건'을 먼저 */}
+                <ZoneListingCards listings={selectedListings} zoneId={selected.id} zoneName={selected.name} />
+
                 {/* 국토부 실거래가 — 샘플 거래와 별개로 실제 신고 거래를 함께 보여준다 */}
                 <ZoneTransactions
                   gu={selected.district}
@@ -1720,6 +1814,7 @@ export default function ZoneExplorer() {
             {selectedSeoul && (
               <ZoneOfficialPanel
                 zone={selectedSeoul}
+                listings={selectedListings}
                 meta={
                   seoulMeta ?? {
                     source: "서울 열린데이터광장 OA-22712 서울시 도시계획사업 현황(서울플랜+)",
@@ -1737,10 +1832,13 @@ export default function ZoneExplorer() {
             {!selected && !selectedSeoul && (
               <div className="space-y-2">
                 {filtered.map((z) => {
-                  const zListings = listings.filter((l) => l.zoneId === z.id);
+                  const zListings = listings.filter((l) => listingMatchesZone(l, z.id, z.name));
                   const lowest = transactions
                     .filter((t) => t.zoneId === z.id)
                     .reduce((m, t) => Math.min(m, t.price), Infinity);
+                  const lowestInitial = zListings.length
+                    ? Math.min(...zListings.map((l) => calcInitialInvestment(l)))
+                    : z.lowestInitialInvestment;
                   return (
                     <button
                       key={z.id}
@@ -1762,9 +1860,9 @@ export default function ZoneExplorer() {
                         <span>
                           최저가 <b className="text-slate-900">{isFinite(lowest) ? man(lowest) : "-"}</b>만원
                         </span>
-                        {z.lowestInitialInvestment && (
+                        {lowestInitial !== undefined && (
                           <span>
-                            초기투자 <b className="text-slate-900">{man(z.lowestInitialInvestment)}</b>만원
+                            초기투자 <b className="text-slate-900">{man(lowestInitial ?? 0)}</b>만원
                           </span>
                         )}
                       </div>
