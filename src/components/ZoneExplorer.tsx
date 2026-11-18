@@ -24,6 +24,7 @@ import MapPanel from "@/components/map/MapPanel";
 import { TYPE_COLORS, TYPE_ORDER } from "@/components/map/colors";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import ZoneTransactions from "@/components/ZoneTransactions";
+import LandPermitNotice from "@/components/LandPermitNotice";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { looksLikeAddress, searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
 import { loadSubwayStations, lineNames, SUBWAY_LINES, searchStations, type SubwayStation } from "@/lib/subway-stations";
@@ -35,7 +36,7 @@ import {
   verdictHeadline,
   type AddressVerdict,
 } from "@/lib/address-verdict";
-import type { AddressPin, AdminMapConfig, AdminZoneShape, StationPin } from "@/components/map/props";
+import type { AddressPin, AdminMapConfig, AdminZoneShape, StationPin, TxMapPin } from "@/components/map/props";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
@@ -117,6 +118,11 @@ export default function ZoneExplorer() {
   // ‘구역 전체 보기’ 요청 토큰 — 주소 핀은 핀 지점을 확대해 보여주므로, 구역 경계 전체는 버튼으로 본다.
   // 값이 바뀔 때마다 지도가 선택 구역 경계에 화면을 맞춘다(카카오맵·OSM 공통).
   const [zoneFitRequest, setZoneFitRequest] = useState(0);
+  // ── 지도 실거래 가격 핀 ────────────────────────────────────────────────
+  //   · 구역 상세의 실거래 목록(ZoneTransactions)이 지번을 좌표로 바꿔 **구역 안 거래**만
+  //     넘겨 준다. 표시 상태(ON/OFF)는 지도 위 토글이 바꾸도록 여기서 갖는다.
+  const [txPins, setTxPins] = useState<TxMapPin[]>([]);
+  const [txPinsOn, setTxPinsOn] = useState(true);
 
   // ── 관리자 모드(?admin=1) ────────────────────────────────────────────────
   //   일반 방문자는 이 상태가 모두 비어 있어 화면이 기존과 똑같다.
@@ -266,6 +272,10 @@ export default function ZoneExplorer() {
   // 대표 구역이 아닌 구역 — 서울시 고시 데이터만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
+  // 구역을 바꾸거나 닫으면 이전 구역의 실거래 핀을 지도에서 지운다
+  useEffect(() => {
+    setTxPins([]);
+  }, [selectedId]);
   // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
   const selectedListings = listings.filter((l) =>
     listingMatchesZone(l, selectedId, selectedSeoul?.name ?? selected?.name)
@@ -910,6 +920,9 @@ export default function ZoneExplorer() {
           zoneFitRequest={zoneFitRequest}
           listingCounts={listingCounts}
           admin={adminMapConfig}
+          txPins={txPins}
+          txPinsOn={txPinsOn}
+          onToggleTxPins={() => setTxPinsOn((v) => !v)}
         />
       </div>
 
@@ -1652,6 +1665,13 @@ export default function ZoneExplorer() {
             {/* 1) 대표 구역 상세 */}
             {selected && (
               <div className="space-y-4">
+                {/* 토허제 참고 안내 — 상세 패널 맨 위(확정 판정이 아님을 함께 밝힌다) */}
+                <LandPermitNotice
+                  gu={selected.district}
+                  names={[selected.name]}
+                  type={selected.type}
+                  flagged={selected.toehoApplied}
+                />
                 <div className="flex flex-wrap items-center gap-1.5">
                   <TypeBadge type={selected.type} />
                   <StageBadge stage={selected.stage} stageOrder={STAGE_ORDER[selected.stage]} />
@@ -1721,6 +1741,7 @@ export default function ZoneExplorer() {
                   center={selected.center}
                   polygon={selected.polygon}
                   parts={selected.parts}
+                  onTxPins={setTxPins}
                 />
 
                 <div>
@@ -1815,6 +1836,7 @@ export default function ZoneExplorer() {
               <ZoneOfficialPanel
                 zone={selectedSeoul}
                 listings={selectedListings}
+                onTxPins={setTxPins}
                 meta={
                   seoulMeta ?? {
                     source: "서울 열린데이터광장 OA-22712 서울시 도시계획사업 현황(서울플랜+)",

@@ -44,6 +44,41 @@ export type ZoneMapProps = {
    * 없으면(일반 방문자) 지도는 기존과 완전히 같다.
    */
   admin?: AdminMapConfig;
+  /**
+   * 지도에 얹는 실거래 가격 핀 — 구역 상세(ZoneTransactions)가 지번을 좌표로 바꿔
+   * 구역 경계 안 거래만 추려 넘긴다. 비어 있으면 핀·토글을 그리지 않는다.
+   */
+  txPins?: TxMapPin[];
+  /** 실거래 핀 표시 ON/OFF — 상태는 ZoneExplorer가 갖는다 */
+  txPinsOn?: boolean;
+  /** 지도 위 「실거래 핀」 토글 */
+  onToggleTxPins?: () => void;
+};
+
+/**
+ * 지도 위 실거래 가격 핀 1건 — 지번 좌표가 확인된 아파트·연립다세대 거래.
+ *   같은 지번에 여러 거래가 있으면 최신 1건만 핀으로 찍는다(핀이 겹치지 않게).
+ */
+export type TxMapPin = {
+  id: string;
+  /** 단지명(연립·다세대는 건물명) */
+  name: string;
+  /** 아파트 | 연립·다세대 */
+  kind: string;
+  lat: number;
+  lng: number;
+  /** 거래금액(만원) */
+  price: number;
+  /** 핀에 쓰는 짧은 가격 — 예: 7.8억 */
+  priceLabel: string;
+  /** 핀에 쓰는 면적 — 예: 전용 59㎡ */
+  areaLabel: string;
+  /** 계약일 YYYY-MM-DD */
+  dealDate: string;
+  jibun: string;
+  umdNm: string;
+  /** 평당가(만원/평) — 전용 기준, 없으면 null */
+  pyeongPrice: number | null;
 };
 
 /** 관리자 모드가 지도에 넘기는 값 — 저장된 구역(그리기) + 지금 그리는 초안 */

@@ -17,6 +17,8 @@ import type { Listing } from "@/lib/types";
 import { TYPE_COLORS } from "./map/colors";
 import ZoneTransactions from "./ZoneTransactions";
 import { ZoneListingCards } from "./ZoneListingCards";
+import LandPermitNotice from "./LandPermitNotice";
+import type { TxMapPin } from "./map/props";
 
 const PYEONG = 3.305785;
 
@@ -25,12 +27,15 @@ export default function ZoneOfficialPanel({
   meta,
   onClose,
   listings = [],
+  onTxPins,
 }: {
   zone: SeoulZone;
   meta: SeoulZonesMeta;
   onClose: () => void;
   /** 이 구역의 매물(zoneId 또는 zoneName 매칭) — 있으면 고시 데이터 아래에 카드로 붙는다 */
   listings?: Listing[];
+  /** 실거래 좌표를 지도 가격 핀으로 넘긴다 */
+  onTxPins?: (pins: TxMapPin[]) => void;
 }) {
   const color = TYPE_COLORS[zone.type] ?? "#64748b";
   const pyeong = Math.round(zone.area / PYEONG);
@@ -42,6 +47,9 @@ export default function ZoneOfficialPanel({
 
   return (
     <section className="space-y-3">
+      {/* 토허제 참고 안내 — 패널 맨 위에 조용한 배지로(확정 판정 아님을 함께 밝힌다) */}
+      <LandPermitNotice gu={zone.gu} names={[zone.name, ...(zone.alias ?? [])]} type={zone.type} kind={zone.kind} />
+
       <div className="flex flex-wrap items-center gap-1.5">
         <h2 className="text-lg font-bold leading-tight text-slate-900">{zone.name}</h2>
         <span
@@ -184,6 +192,7 @@ export default function ZoneOfficialPanel({
         polygon={zone.polygon}
         parts={zone.parts}
         holes={zone.holes}
+        onTxPins={onTxPins}
       />
 
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-slate-600">

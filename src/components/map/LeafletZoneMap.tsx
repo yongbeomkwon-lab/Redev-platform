@@ -32,7 +32,7 @@ import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import SubwayLayer from "./SubwayLayer";
-import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps } from "./props";
+import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps, type TxMapPin } from "./props";
 import { addressPinHtml, stationPinHtml } from "./address-pin";
 
 export { TYPE_COLORS };
@@ -180,6 +180,44 @@ function ListingBadges({
   );
 }
 
+/**
+ * 실거래 가격 핀 — 카카오맵(z-index 95)과 같은 생김새(`7.8억 / 전용 59㎡`)로,
+ * Leaflet 에서는 divIcon 마커로 폴리곤 캔버스(400)·매물 배지(700) 사이 pane(690)에 얹는다.
+ * 마우스를 올리면 단지명·거래일·면적·평당가가 툴팁으로 뜬다.
+ */
+function TxPricePins({ pins }: { pins: TxMapPin[] }) {
+  if (pins.length === 0) return null;
+  return (
+    <Pane name="redevTxPins" style={{ zIndex: 690 }}>
+      {pins.map((p) => {
+        const accent = p.kind === "연립·다세대" ? "#7c3aed" : "#1d4ed8";
+        const name = p.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const area = (p.areaLabel || p.kind).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        return (
+          <Marker
+            key={p.id}
+            position={[p.lat, p.lng]}
+            keyboard={false}
+            icon={L.divIcon({
+              className: "redev-tx-pin",
+              html: `<div style="transform:translate(-50%,-100%);display:block;text-align:center;border:1.5px solid ${accent};border-left:4px solid ${accent};background:#fff;border-radius:6px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:#0f172a;">${p.priceLabel}</span><span style="display:block;font-size:9px;font-weight:600;color:#475569;">${area}</span></div>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            })}
+          >
+            <Tooltip direction="top" opacity={0.97}>
+              <b>{name}</b> · {p.dealDate}
+              <br />
+              {p.kind} {p.areaLabel} · {p.priceLabel}
+              {p.pyeongPrice ? ` · 평당 ${p.pyeongPrice.toLocaleString()}만` : ""}
+            </Tooltip>
+          </Marker>
+        );
+      })}
+    </Pane>
+  );
+}
+
 /** 확대 수준을 상위로 알린다 — 줌이 바뀌면 선 굵기를 다시 계산한다 */
 function ZoomWatcher({ onChange }: { onChange: (zoom: number) => void }) {
   const map = useMap();
@@ -319,6 +357,9 @@ export default function LeafletZoneMap({
   stationPin,
   zoneFitRequest,
   listingCounts = {},
+  txPins = [],
+  txPinsOn = true,
+  onToggleTxPins,
   admin,
   fallbackReason,
 }: LeafletZoneMapProps) {
@@ -409,6 +450,9 @@ export default function LeafletZoneMap({
       {/* ── 매물 배지 — 카카오맵과 같은 `🏠 매물 N` ── */}
       <ListingBadges zones={seoulZones} counts={listingCounts} onSelect={onSelectZone} />
 
+      {/* ── 실거래 가격 핀 — 구역 상세의 ‘구역 내’ 거래 ── */}
+      <TxPricePins pins={txPinsOn ? txPins : []} />
+
       <FitSelected
         ring={selected.ring}
         point={selected.point}
@@ -463,6 +507,24 @@ export default function LeafletZoneMap({
           <span aria-hidden>🚇</span>
           지하철 노선
         </button>
+        {onToggleTxPins && txPins.length > 0 && (
+          <button
+            type="button"
+            onClick={onToggleTxPins}
+            aria-pressed={txPinsOn}
+            data-testid="tx-pins-toggle"
+            title="구역 안 실거래 가격 핀 표시"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+              txPinsOn
+                ? "border-blue-400 bg-blue-50 text-blue-900"
+                : "border-slate-300 bg-white text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <span aria-hidden>🏷</span>
+            실거래 핀
+            <span className="font-normal text-slate-400">{txPins.length}</span>
+          </button>
+        )}
         {onToggleCompleted && (
           <button
             type="button"

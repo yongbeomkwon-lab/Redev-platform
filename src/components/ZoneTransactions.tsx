@@ -29,6 +29,10 @@ import {
 } from "@/lib/molit";
 import { geocodeJibun, legalDongAtPoint, type GeoPoint } from "@/lib/kakao-address";
 import { hasShape, pointInZone, sampleZonePoints, type ZoneShape } from "@/lib/zone-geo";
+import type { TxMapPin } from "@/components/map/props";
+
+/** 지도에 찍는 핀 상한 — 구역 안 거래가 많아도 지도가 뭉개지지 않게(최신 거래부터) */
+const PIN_CAP = 60;
 
 const KIND_COLORS: Record<MolitTransactionKind, string> = {
   아파트: "#2563eb",
@@ -69,6 +73,7 @@ export default function ZoneTransactions({
   polygon,
   parts,
   holes,
+  onTxPins,
 }: {
   gu: string;
   /** 구역 이름·별칭 — 법정동·지번을 찾는 근거 */
@@ -81,6 +86,12 @@ export default function ZoneTransactions({
   parts?: [number, number][][] | null;
   /** 구역 안에 뚫린 구멍 */
   holes?: [number, number][][] | null;
+  /**
+   * 구역 안 거래의 좌표를 지도 가격 핀으로 넘긴다.
+   *   · 지번 좌표를 얻은 아파트·연립다세대 거래만, 같은 지번은 최신 1건만.
+   *   · 구역이 바뀌거나 표시할 거래가 없으면 빈 배열을 넘긴다.
+   */
+  onTxPins?: (pins: TxMapPin[]) => void;
 }) {
   const [dongs, setDongs] = useState<string[] | null>(null);
   const [dongNote, setDongNote] = useState<string | null>(null);
@@ -275,15 +286,66 @@ export default function ZoneTransactions({
   const zoneCount = useMemo(() => zoneRows.filter((r) => !r.canceled).length, [zoneRows]);
   const totalCount = data?.summary?.count ?? 0;
 
-  // 지금 고른 유형·기간의 평균 평당가 — 전용(아파트·연립)과 대지(단독·다가구)를 섞지 않는다
-  const avg = useMemo(() => {
-    const live = filtered.filter((r) => !r.canceled && r.pyeongPrice);
-    const mean = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  // ── 요약 바 — 건수 · 최근 최저~최고 · 평균 평당가 ──────────────────────────
+  //   · 유형 탭(전체/아파트/단독·다가구/연립·다세대)에 따라 `filtered`가 바뀌므로
+  //     요약도 같은 목록으로 다시 계산한다(탭과 숫자가 다른 말을 하지 않게).
+  //   · 해제(취소)된 거래는 시세가 아니므로 건수·최저·최고·평균에서 모두 뺀다.
+  const stats = useMemo(() => {
+    const live = filtered.filter((r) => !r.canceled);
+    const prices = live.map((r) => r.price).filter((v) => Number.isFinite(v) && v > 0);
+    const mean = (xs: number[]) =>
+      xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null;
     return {
-      jeon: mean(live.filter((r) => r.pyeongBasis === "전용").map((r) => r.pyeongPrice as number)),
-      land: mean(live.filter((r) => r.pyeongBasis === "대지").map((r) => r.pyeongPrice as number)),
+      count: live.length,
+      min: prices.length ? Math.min(...prices) : null,
+      max: prices.length ? Math.max(...prices) : null,
+      jeon: mean(live.filter((r) => r.pyeongBasis === "전용" && r.pyeongPrice).map((r) => r.pyeongPrice as number)),
+      land: mean(live.filter((r) => r.pyeongBasis === "대지" && r.pyeongPrice).map((r) => r.pyeongPrice as number)),
     };
   }, [filtered]);
+
+  // ── 지도 가격 핀 — 구역 경계 안 거래의 좌표를 위로 넘긴다 ──────────────────
+  //   · 지번 좌표가 확인된 아파트·연립다세대만(단독·다가구는 지번이 가려져 있어 좌표가 없다).
+  //   · 같은 지번에 여러 거래가 있으면 **최신 1건**만 남겨 핀이 겹치지 않게 한다.
+  const mapPins = useMemo<TxMapPin[]>(() => {
+    if (!shaped) return [];
+    const byJibun = new Map<string, TxMapPin>();
+    for (const t of rows) {
+      if (t.kind === "단독·다가구" || t.canceled) continue;
+      const k = txKey(t);
+      if (!insideKeys.has(k)) continue;
+      const p = geo[k];
+      if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+      const prev = byJibun.get(k);
+      if (prev && prev.dealDate >= t.dealDate) continue;
+      byJibun.set(k, {
+        id: t.id,
+        name: t.name,
+        kind: t.kind,
+        lat: p.lat,
+        lng: p.lng,
+        price: t.price,
+        priceLabel: eokShort(t.price),
+        areaLabel: t.areaSqm ? `전용 ${Math.round(t.areaSqm)}㎡` : "",
+        dealDate: t.dealDate,
+        jibun: t.jibun,
+        umdNm: t.umdNm,
+        pyeongPrice: t.pyeongPrice ?? null,
+      });
+    }
+    return [...byJibun.values()]
+      .sort((a, b) => b.dealDate.localeCompare(a.dealDate))
+      .slice(0, PIN_CAP);
+  }, [rows, insideKeys, geo, shaped]);
+
+  const pinsRef = useRef(onTxPins);
+  pinsRef.current = onTxPins;
+  const pinSig = mapPins.map((p) => `${p.id}:${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join("|");
+  useEffect(() => {
+    pinsRef.current?.(mapPins);
+  }, [pinSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 패널을 닫거나 다른 구역으로 옮기면 지도 핀도 지운다
+  useEffect(() => () => pinsRef.current?.([]), []);
 
   const missKinds = (data?.coverage ?? []).filter((c) => !c.ok);
   const dongLabel = dongs?.join("·") ?? "";
@@ -421,17 +483,75 @@ export default function ZoneTransactions({
 
       {state === "ready" && (
         <>
-          {/* 요약 */}
+          {/* 요약 바 — 건수 · 최근 최저~최고 · 평균 평당가 (유형 탭·기간에 따라 자동 재계산) */}
+          <div
+            data-testid="tx-summary"
+            className="mb-1.5 grid grid-cols-3 divide-x divide-blue-100 overflow-hidden rounded-lg border border-blue-200 bg-white"
+          >
+            <div className="px-2 py-1.5">
+              <div className="text-[9px] font-semibold text-slate-500">{kind === "전체" ? "거래 건수" : `${kind} 건수`}</div>
+              <div data-testid="tx-summary-count" className="text-[13px] font-bold leading-tight text-slate-900">
+                {stats.count}
+                <span className="text-[10px] font-semibold text-slate-500">건</span>
+              </div>
+              <div className="text-[9px] leading-tight text-slate-400">
+                {months}개월 · {mode === "zone" ? "구역 내" : "법정동"}
+              </div>
+            </div>
+            <div className="px-2 py-1.5">
+              <div className="text-[9px] font-semibold text-slate-500">최근 최저~최고</div>
+              <div data-testid="tx-summary-range" className="text-[12px] font-bold leading-tight text-slate-900">
+                {stats.min !== null && stats.max !== null ? (
+                  stats.min === stats.max ? (
+                    eokShort(stats.min)
+                  ) : (
+                    <>
+                      {eokShort(stats.min)}
+                      <span className="text-slate-400"> ~ </span>
+                      {eokShort(stats.max)}
+                    </>
+                  )
+                ) : (
+                  <span className="text-slate-400">-</span>
+                )}
+              </div>
+              <div className="text-[9px] leading-tight text-slate-400">해제 거래 제외</div>
+            </div>
+            <div className="px-2 py-1.5">
+              <div className="text-[9px] font-semibold text-slate-500">평균 평당(3.3㎡)</div>
+              <div data-testid="tx-summary-pyeong" className="text-[12px] font-bold leading-tight text-slate-900">
+                {stats.jeon !== null ? (
+                  <>
+                    {stats.jeon.toLocaleString()}
+                    <span className="text-[10px] font-semibold text-slate-500">만</span>
+                  </>
+                ) : stats.land !== null ? (
+                  <>
+                    {stats.land.toLocaleString()}
+                    <span className="text-[10px] font-semibold text-slate-500">만</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">-</span>
+                )}
+              </div>
+              <div className="text-[9px] leading-tight text-slate-400">
+                {stats.jeon !== null ? "전용 기준" : stats.land !== null ? "대지 기준" : "계산 불가"}
+                {stats.jeon !== null && stats.land !== null ? ` · 대지 ${stats.land.toLocaleString()}만` : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* 경계 판정 진행·해제 건수 — 요약 숫자의 근거를 함께 보여준다 */}
           <div className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-blue-900/80">
-            <span>
-              <b className="text-blue-900">{mode === "zone" ? zoneCount : totalCount}건</b>
-              {data?.summary?.canceled ? ` (해제 ${data.summary.canceled}건 별도)` : ""}
-            </span>
-            {avg.jeon ? <span>평균 평당 <b className="text-blue-900">{avg.jeon.toLocaleString()}만</b></span> : null}
-            {avg.land ? <span>대지 평당 <b className="text-blue-900">{avg.land.toLocaleString()}만</b></span> : null}
+            {data?.summary?.canceled ? <span>해제(취소) {data.summary.canceled}건 별도</span> : null}
             {mode === "zone" && shaped && progress.total > 0 && (
               <span className="text-blue-800/70">
                 경계 판정 {progress.done}/{progress.total}지번{geoCapped ? ` (최근 ${GEO_CAP}건까지)` : ""}
+              </span>
+            )}
+            {mapPins.length > 0 && (
+              <span data-testid="tx-pin-count" className="text-blue-800/70">
+                지도 가격 핀 {mapPins.length}곳
               </span>
             )}
           </div>

@@ -26,7 +26,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import { TYPE_COLORS, zoneStyle } from "./colors";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
-import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps } from "./props";
+import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type TxMapPin } from "./props";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -49,6 +49,27 @@ const BADGE_LAYER_STYLE = {
   height: "100%",
   zIndex: 100,
   pointerEvents: "none" as const,
+};
+
+/**
+ * 실거래 가격 핀 레이어 — 폴리곤 캔버스(2) 위, 매물 배지·이름표(100) 아래(z-index 95).
+ *   · 핀이 배지·이름표를 가리지 않고, 구역 색에는 묻히지 않는 층을 고른다.
+ *   · 레이어는 클릭을 통과시키고, 핀 버튼만 pointerEvents: auto 로 받는다.
+ */
+const TX_PIN_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 95,
+  pointerEvents: "none" as const,
+};
+
+/** 실거래 핀 색 — 유형 구분(아파트=파랑, 연립·다세대=보라) */
+const TX_PIN_COLORS: Record<string, string> = {
+  아파트: "#1d4ed8",
+  "연립·다세대": "#7c3aed",
 };
 
 /** 카카오 레벨(1=최대 확대, 14=최대 축소)을 Leaflet 줌(클수록 확대)처럼 다루기 위한 기준값 */
@@ -209,6 +230,9 @@ export default function KakaoZoneMap({
   stationPin,
   zoneFitRequest,
   listingCounts,
+  txPins = [],
+  txPinsOn = true,
+  onToggleTxPins,
   admin,
   onFail,
 }: KakaoZoneMapProps) {
@@ -233,6 +257,14 @@ export default function KakaoZoneMap({
   const badgeLayerRef = useRef<HTMLDivElement | null>(null);
   const badgeElsRef = useRef<Map<string, HTMLElement>>(new Map());
   const badgeAtRef = useRef<{ id: string; name: string; count: number; lat: number; lng: number }[]>([]);
+  /** 실거래 가격 핀 레이어 + 핀 요소(거래 id → 래퍼) — draw 가 매 프레임 좌표를 맞춘다 */
+  const txLayerRef = useRef<HTMLDivElement | null>(null);
+  const txElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const txAtRef = useRef<TxMapPin[]>([]);
+  /** 지금 펼쳐 둔 핀 상세 카드(거래 id) — 하나만 열린다 */
+  const [openPinId, setOpenPinId] = useState<string | null>(null);
+  /** draw() 가 읽는 ‘펼쳐 둔 핀’ — 클로저 대신 ref 로 넘긴다 */
+  const openPinRef = useRef<string | null>(null);
   /** 지금 레이어에 놓인 핀·이름표의 좌표 (draw 에서 읽는다) */
   const pinAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
   /** 지금 역 핀 레이어에 놓인 좌표 */
@@ -473,6 +505,41 @@ export default function KakaoZoneMap({
         }
         placedBadges.push({ x, y });
         node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+        node.style.visibility = "visible";
+      }
+    }
+
+    // 실거래 가격 핀 — 같은 변환으로 좌표를 맞춘다.
+    //   · 핀은 아래쪽 끝이 거래 지점에 닿게 translate(-50%,-100%).
+    //   · 겹치면 뒤에 오는 핀을 숨긴다(펼쳐 둔 핀 상세는 항상 우선).
+    if (txLayerRef.current) {
+      const placedPins: { x: number; y: number }[] = [];
+      const openId = openPinRef.current;
+      const ordered = openId
+        ? [...txAtRef.current.filter((p) => p.id === openId), ...txAtRef.current.filter((p) => p.id !== openId)]
+        : txAtRef.current;
+      for (const p of ordered) {
+        const node = txElsRef.current.get(p.id);
+        if (!node) continue;
+        const x = p0x + (p.lng - lng0) * pxPerLng;
+        const y = p0y + (mercator(p.lat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -90 || x > cw + 90 || y < -70 || y > ch + 70) {
+          node.style.visibility = "hidden";
+          continue;
+        }
+        let clash = false;
+        for (const q of placedPins) {
+          if (Math.abs(q.x - x) < 42 && Math.abs(q.y - y) < 24) {
+            clash = true;
+            break;
+          }
+        }
+        if (clash && p.id !== openId) {
+          node.style.visibility = "hidden";
+          continue;
+        }
+        placedPins.push({ x, y });
+        node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-100%)`;
         node.style.visibility = "visible";
       }
     }
@@ -1428,6 +1495,22 @@ export default function KakaoZoneMap({
   }, [listingCounts, seoulZones, zones]);
   badgeAtRef.current = badgeZones;
 
+  // ── 실거래 가격 핀 ────────────────────────────────────────────────────────
+  //   · 호출측(ZoneExplorer)이 구역 상세에서 계산한 ‘구역 안 거래’ 좌표를 넘긴다.
+  //   · 토글이 OFF 면 목록을 비워 핀·상세 카드를 함께 감춘다(토글 자체는 남는다).
+  const visibleTxPins = useMemo(() => (txPinsOn ? txPins : []), [txPins, txPinsOn]);
+  txAtRef.current = visibleTxPins;
+  openPinRef.current = openPinId;
+
+  // 핀 목록이 바뀌면(구역 이동·토글) 자리를 다시 그린다 — 펼친 카드는 닫는다
+  useEffect(() => {
+    setOpenPinId(null);
+  }, [visibleTxPins]);
+  useEffect(() => {
+    if (!txLayerRef.current) return;
+    draw();
+  }, [visibleTxPins, openPinId, draw]);
+
   // 매물이 늘거나 줄면 배지 자리를 다시 그린다(등록 직후 새로고침 없이 반영)
   useEffect(() => {
     if (!badgeLayerRef.current) return;
@@ -1667,6 +1750,112 @@ export default function KakaoZoneMap({
         ))}
       </div>
 
+      {/* ── 실거래 가격 핀 — `7.8억 / 전용 59㎡` (z-index 95: 폴리곤 위·매물 배지 아래) ── */}
+      <div ref={txLayerRef} style={TX_PIN_LAYER_STYLE} data-testid="tx-pin-layer">
+        {visibleTxPins.map((p) => {
+          const accent = TX_PIN_COLORS[p.kind] ?? "#334155";
+          const open = openPinId === p.id;
+          return (
+            <div
+              key={p.id}
+              ref={(el) => {
+                if (el) txElsRef.current.set(p.id, el);
+                else txElsRef.current.delete(p.id);
+              }}
+              style={{ position: "absolute", left: 0, top: 0, width: "max-content", visibility: "hidden" }}
+            >
+              <button
+                type="button"
+                data-testid="tx-price-pin"
+                data-tx-id={p.id}
+                data-tx-name={p.name}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenPinId((v) => (v === p.id ? null : p.id));
+                }}
+                title={`${p.name} · ${p.dealDate} · ${p.areaLabel} · ${p.priceLabel}`}
+                style={{
+                  display: "block",
+                  pointerEvents: "auto",
+                  border: `1.5px solid ${accent}`,
+                  borderLeft: `4px solid ${accent}`,
+                  background: open ? "#f8fafc" : "#ffffff",
+                  borderRadius: "6px",
+                  padding: "2px 5px",
+                  boxShadow: "0 2px 7px rgba(15,23,42,.3)",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                  lineHeight: 1.15,
+                }}
+              >
+                <span style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>
+                  {p.priceLabel}
+                </span>
+                <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#475569" }}>
+                  {p.areaLabel || p.kind}
+                </span>
+              </button>
+
+              {open && (
+                <div
+                  data-testid="tx-pin-card"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    bottom: "calc(100% + 6px)",
+                    transform: "translateX(-50%)",
+                    width: "max-content",
+                    maxWidth: "200px",
+                    pointerEvents: "auto",
+                    background: "#ffffff",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "8px",
+                    boxShadow: "0 10px 24px rgba(15,23,42,.28)",
+                    padding: "6px 8px",
+                    textAlign: "left",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span
+                      style={{ fontSize: "9px", fontWeight: 800, color: "#fff", background: accent, borderRadius: "3px", padding: "1px 4px" }}
+                    >
+                      {p.kind}
+                    </span>
+                    <b style={{ fontSize: "11px", color: "#0f172a" }}>{p.name}</b>
+                    <button
+                      type="button"
+                      aria-label="닫기"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenPinId(null);
+                      }}
+                      style={{ marginLeft: "auto", pointerEvents: "auto", border: 0, background: "transparent", color: "#94a3b8", fontSize: "11px", cursor: "pointer", lineHeight: 1 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{ marginTop: "2px", fontSize: "10px", color: "#475569" }}>
+                    {p.dealDate} · {p.areaLabel || "면적 미상"}
+                  </div>
+                  <div style={{ marginTop: "1px", fontSize: "11px", fontWeight: 700, color: "#0f172a" }}>
+                    {p.priceLabel}
+                    <span style={{ fontSize: "9px", fontWeight: 500, color: "#64748b" }}>
+                      {" "}({p.price.toLocaleString()}만원)
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#475569" }}>
+                    {p.pyeongPrice ? `평당 ${p.pyeongPrice.toLocaleString()}만 · ` : ""}
+                    {p.umdNm} {p.jibun}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* ── 주소 검색 핀 — 항상 최상단(불투명 흰 카드 + 드롭핀) ── */}
       <div ref={pinLayerRef} style={PIN_LAYER_STYLE}>
         {addressPin && (
@@ -1757,6 +1946,24 @@ export default function KakaoZoneMap({
           <span aria-hidden>📐</span>
           <span className="hidden md:inline">지적편집도</span>
         </button>
+        {onToggleTxPins && txPins.length > 0 && (
+          <button
+            type="button"
+            onClick={onToggleTxPins}
+            aria-pressed={txPinsOn}
+            data-testid="tx-pins-toggle"
+            title="구역 안 실거래 가격 핀 표시"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+              txPinsOn
+                ? "border-blue-400 bg-blue-50 text-blue-900"
+                : "border-slate-300 bg-white text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <span aria-hidden>🏷</span>
+            <span className="hidden md:inline">실거래 핀</span>
+            <span className="font-normal text-slate-400">{txPins.length}</span>
+          </button>
+        )}
         {onToggleCompleted && (
           <button
             type="button"
