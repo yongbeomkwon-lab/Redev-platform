@@ -11,18 +11,24 @@ import Link from "next/link";
 import type { Listing } from "@/lib/types";
 import { calcInitialInvestment, listingDeposit } from "@/lib/types";
 import { formatMan } from "@/lib/format";
+import { isMyListing } from "@/lib/my-listings";
 import { Badge } from "./Badges";
 
 /** 임대사업자 승계 · 토허제(실거주) 조건 배지 — 매물 카드·목록에서 같은 말을 쓴다 */
 export function ListingConditionBadges({ listing }: { listing: Listing }) {
+  // 부동산포스에서 옮긴 내 매물은 토지거래허가·실거주 조건을 함께 받아 오지 않았다
+  // — '없음'이라고 단정하지 않고 '확인 필요'로 보여 준다(계약 전 확인 사항).
+  const permitKnown = !isMyListing(listing);
   return (
     <>
       {listing.verified && <Badge tone="green">검증</Badge>}
       {listing.leaseOperatorOnly && <Badge tone="amber">임대사업자 승계 필수</Badge>}
       {listing.landPermitRequired ? (
         <Badge tone="red">토허제 · 실거주 의무</Badge>
-      ) : (
+      ) : permitKnown ? (
         <Badge tone="blue">실거주·토허제 없음</Badge>
+      ) : (
+        <Badge tone="slate">토허제·실거주 확인 필요</Badge>
       )}
     </>
   );
