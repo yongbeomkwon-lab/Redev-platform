@@ -1637,13 +1637,17 @@ export default function KakaoZoneMap({
   //   위에 깔려 구역 안쪽에 있을 때 이름표가 구역 색에 반투명하게 덮였다.
   //   · 앞에 **사업유형 뱃지**를 붙인다(신통기획→‘신속통합기획’ 표기) — 이름만 보고는
   //     이 구역이 모아타운인지 신통기획인지 알 수 없어 상세를 열어야 했다.
+  // 이름표·화면 맞추기가 보는 선택 id — 관리자 모드에서 직접 그린 구역을 고르면 selectedZoneId 가
+  // 비어 있어(선택은 selectedCustomId 로만 관리된다) 이름표가 안 떴다. 관리자 선택을 함께 본다.
+  const labelZoneId = selectedZoneId ?? admin?.selectedId;
+
   const labelHtml = useMemo(() => {
-    if (!selectedZoneId) return "";
-    const seoul = seoulZones.find((z) => z.id === selectedZoneId);
-    const featured = zones.find((z) => z.id === selectedZoneId);
+    if (!labelZoneId) return "";
+    const seoul = seoulZones.find((z) => z.id === labelZoneId);
+    const featured = zones.find((z) => z.id === labelZoneId);
     // 관리자 모드에서 직접 그려 저장한 구역도 이름표를 보여준다 — 예전에는 서울시 데이터·대표 구역만
     // 찾아서 관리자 구역을 고르면 뱃지가 아예 안 떴다(2026-11-18 제보).
-    const custom = admin?.zones?.find((z) => z.id === selectedZoneId);
+    const custom = admin?.zones?.find((z) => z.id === labelZoneId);
     const name = seoul?.name ?? featured?.name ?? custom?.name;
     if (!name) return "";
     const type = seoul?.type ?? featured?.type ?? custom?.type;
@@ -1659,22 +1663,22 @@ export default function KakaoZoneMap({
     return `${badge}<b>${escapeHtml(name)}</b>${
       parcel ? `<span class="zone-name-sub"> · ${escapeHtml(parcel)}</span>` : ""
     }`;
-  }, [selectedZoneId, seoulZones, zones, admin?.zones]);
+  }, [labelZoneId, seoulZones, zones, admin?.zones]);
 
   useEffect(() => {
     const k = sdkRef.current;
     const map = mapRef.current;
-    if (!k || !map || !selectedZoneId) {
+    if (!k || !map || !labelZoneId) {
       labelAtRef.current = { lat: NaN, lng: NaN };
       if (labelLayerRef.current) labelLayerRef.current.style.visibility = "hidden";
       return;
     }
-    const seoul = seoulZones.find((z) => z.id === selectedZoneId);
-    const featured = zones.find((z) => z.id === selectedZoneId);
+    const seoul = seoulZones.find((z) => z.id === labelZoneId);
+    const featured = zones.find((z) => z.id === labelZoneId);
     // 관리자 구역은 서울시 데이터에 없으므로 링 중심(평균)을 이름표 위치로 쓴다
-    const custom = admin?.zones?.find((z) => z.id === selectedZoneId);
-    const zoneChanged = lastLabelZoneRef.current !== selectedZoneId;
-    lastLabelZoneRef.current = selectedZoneId;
+    const custom = admin?.zones?.find((z) => z.id === labelZoneId);
+    const zoneChanged = lastLabelZoneRef.current !== labelZoneId;
+    lastLabelZoneRef.current = labelZoneId;
     const customCenter =
       custom && custom.ring.length >= 3
         ? [
@@ -1686,6 +1690,13 @@ export default function KakaoZoneMap({
     const lng = seoul ? seoul.center[1] : featured?.polygon?.[0]?.[1] ?? customCenter?.[1];
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
     labelAtRef.current = { lat, lng };
+
+    // 관리자 모드에서 직접 그린 구역만 고른 경우 — 화면 이동은 관리자 ‘맞추기’(admin.fit)가 맡는다.
+    // 여기서는 이름표 위치만 잡고 그린다(이중으로 화면이 튀지 않게).
+    if (!selectedZoneId && custom) {
+      draw();
+      return;
+    }
 
     // 주소 핀으로 들어온 구역이면 화면은 핀(골목·건물명)에 맞춰 둔다 — 구역 전체는 ‘구역 전체 보기’ 버튼
     const pinned = addressPin && addressPin.zoneId === selectedZoneId;
@@ -1716,7 +1727,7 @@ export default function KakaoZoneMap({
     }
     draw();
     settleView();
-  }, [selectedZoneId, seoulZones, zones, addressPin, draw, settleView, admin?.zones]);
+  }, [selectedZoneId, labelZoneId, seoulZones, zones, addressPin, draw, settleView, admin?.zones]);
 
   // ── ‘구역 전체 보기’ 요청 — 주소 핀 화면에서 구역 경계 전체로 넓힌다 ─────────
   //   요청 토큰이 **바뀐 순간에만** 움직인다(다른 구역을 골랐을 때 다시 맞추지 않도록).
