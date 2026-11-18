@@ -107,6 +107,26 @@ def main() -> int:
     )
     print(f"[광흥창301-1] 점선원 → 고시 지형도면 다각형 {ring_area_m2(ring):,.0f}㎡, 정점 {len(ring)}")
 
+
+    # ── 4) 상수동 319-4 — 연번부여 취소(2026-10-26) 반영 ───────────────
+    f = by["mapo-sangsu-319-4"]
+    p = f["properties"]
+    p["stage"] = "연번부여 취소(2026-10-26)"
+    if "번호부여 취소" not in (p.get("note") or ""):
+        p["note"] = (
+            (p.get("note") or "") +
+            " 2026-10-26 마포구가 추진주체의 요청으로 2026-09-22 발급한 동의서 번호부여(동의양식 제19호)를 "
+            "취소했습니다(동의서 효력 정지, 행정기관부여 번호 취소). 이 일대는 추진주체 3곳이 연번 16·18·19호를 "
+            "각각 받아 별도 구역계로 추진 중이니, 구역계·연번을 반드시 확인해야 합니다 "
+            "(연번 16호 = (가칭)당인동 15-22, 약 6.7만㎡)."
+        )
+    add_source = p.get("sources") or []
+    label = "마포구 — 신속통합기획 후보지 신청 동의서 번호 부여 취소 안내(상수동 319-4번지 일대, 제19호, 2026-10-26)"
+    if not any(s.get("label") == label for s in add_source):
+        add_source.append({"label": label, "url": "https://www.mapo.go.kr/"})
+        p["sources"] = add_source
+    print("[상수동319-4] 연번부여 취소(2026-10-26) 반영")
+
     if "--check" in sys.argv:
         return 0
     data["metadata"]["sadang419Realign"] = {
