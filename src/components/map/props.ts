@@ -79,6 +79,8 @@ export type TxMapPin = {
   umdNm: string;
   /** 평당가(만원/평) — 전용 기준, 없으면 null */
   pyeongPrice: number | null;
+  /** 지분(대지) 평당가(만원/평) — 연립·다세대는 대지권면적, 없으면 null */
+  landPyeongPrice?: number | null;
 };
 
 /** 관리자 모드가 지도에 넘기는 값 — 저장된 구역(그리기) + 지금 그리는 초안 */

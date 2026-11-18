@@ -203,6 +203,8 @@ function toTransaction(kind: MolitTransactionKind, it: RawItem): MolitTransactio
 
   let areaSqm: number | null = null;
   let plottageSqm: number | null = null;
+  /** 지분(대지) 평당가 기준 면적 — 단독·다가구 대지면적, 연립·다세대 대지권면적 */
+  let landBasisSqm: number | null = null;
   let name = "";
   let pyeongBasis: "전용" | "대지" = "전용";
 
@@ -214,12 +216,15 @@ function toTransaction(kind: MolitTransactionKind, it: RawItem): MolitTransactio
     areaSqm = num(it.totalFloorAr);
     name = (it.houseType ?? "").trim() || "단독·다가구";
     pyeongBasis = "대지";
+    landBasisSqm = plottageSqm;
   } else {
-    // 연립·다세대(RHTrade2) — 전용면적(excluUseAr)으로 평당가를 내고, 건물명(mhouseNm)을 이름으로 쓴다.
-    // 대지권면적(landAr)은 전용면적이 비어 있을 때만 대체 기준으로 쓴다(대지면적과는 다른 값이라 표시명은 그대로 둔다).
+    // 연립·다세대(RHTrade2) — 전용면적(excluUseAr)으로 전용 평당가를 내고, 건물명(mhouseNm)을 이름으로 쓴다.
+    //   대지권면적(landAr)은 전용면적과 별개 값이라 **항상 따로** 읽어 지분(대지) 평당가를 낸다.
+    //   (예전엔 전용면적이 비었을 때만 landAr 을 읽어, 지분 정보가 화면에서 사라졌다.)
     areaSqm = num(it.excluUseAr);
-    if (!areaSqm) plottageSqm = num(it.landAr);
+    plottageSqm = num(it.landAr);
     name = (it.mhouseNm ?? "").trim() || (it.houseType ?? "").trim() || "연립·다세대";
+    landBasisSqm = plottageSqm;
   }
 
   const baseArea = pyeongBasis === "대지" ? plottageSqm ?? areaSqm : areaSqm;
@@ -237,6 +242,7 @@ function toTransaction(kind: MolitTransactionKind, it: RawItem): MolitTransactio
     price,
     pyeongPrice: areaPyeongPrice(price, baseArea),
     pyeongBasis,
+    landPyeongPrice: areaPyeongPrice(price, landBasisSqm),
     dealDate,
     dealingType: (it.dealingGbn ?? "").trim(),
     canceled,

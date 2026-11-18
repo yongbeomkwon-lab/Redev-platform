@@ -1846,7 +1846,8 @@ export default function KakaoZoneMap({
                     </span>
                   </div>
                   <div style={{ fontSize: "10px", color: "#475569" }}>
-                    {p.pyeongPrice ? `평당 ${p.pyeongPrice.toLocaleString()}만 · ` : ""}
+                    {p.pyeongPrice ? `${p.kind === "연립·다세대" ? "전용" : "평당"} ${p.pyeongPrice.toLocaleString()}만 · ` : ""}
+                    {p.landPyeongPrice ? `지분 ${p.landPyeongPrice.toLocaleString()}만 · ` : ""}
                     {p.umdNm} {p.jibun}
                   </div>
                 </div>

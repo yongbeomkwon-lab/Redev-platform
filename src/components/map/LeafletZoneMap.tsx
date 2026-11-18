@@ -209,7 +209,8 @@ function TxPricePins({ pins }: { pins: TxMapPin[] }) {
               <b>{name}</b> · {p.dealDate}
               <br />
               {p.kind} {p.areaLabel} · {p.priceLabel}
-              {p.pyeongPrice ? ` · 평당 ${p.pyeongPrice.toLocaleString()}만` : ""}
+              {p.pyeongPrice ? ` · ${p.kind === "연립·다세대" ? "전용" : "평당"} ${p.pyeongPrice.toLocaleString()}만` : ""}
+              {p.landPyeongPrice ? ` · 지분 ${p.landPyeongPrice.toLocaleString()}만` : ""}
             </Tooltip>
           </Marker>
         );

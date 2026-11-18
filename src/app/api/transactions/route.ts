@@ -109,9 +109,9 @@ export async function GET(req: Request) {
     .filter((r) => r.pyeongBasis === "전용")
     .map((r) => r.pyeongPrice)
     .filter((v): v is number => !!v && v > 0);
+  // 지분·대지 평당가 — 단독·다가구(대지면적) + 연립·다세대(대지권면적 landAr)
   const landPyeongPrices = live
-    .filter((r) => r.pyeongBasis === "대지")
-    .map((r) => r.pyeongPrice)
+    .map((r) => r.landPyeongPrice)
     .filter((v): v is number => !!v && v > 0);
   const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
 

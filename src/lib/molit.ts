@@ -64,7 +64,7 @@ export type MolitTransaction = {
   jibun: string;
   /** 전용면적(아파트·연립) 또는 연면적(단독·다가구) ㎡ */
   areaSqm: number | null;
-  /** 대지면적 ㎡ — 단독·다가구만 */
+  /** 대지면적(단독·다가구 `plottageAr`) 또는 대지권면적=대지지분(연립·다세대 `landAr`) ㎡ */
   plottageSqm: number | null;
   floor: number | null;
   buildYear: number | null;
@@ -73,6 +73,12 @@ export type MolitTransaction = {
   /** 평당가 (만원/평) — 아파트·연립은 전용, 단독·다가구는 대지 기준 */
   pyeongPrice: number | null;
   pyeongBasis: "전용" | "대지";
+  /**
+   * 지분(대지) 평당가 (만원/평) — 단독·다가구는 대지면적, 연립·다세대는 대지권면적(landAr) 기준.
+   *   · 국토부 대지권면적이 없는 거래(아파트 등)는 null.
+   *   · 단독·다가구는 `pyeongPrice`(대지 기준)와 같은 값이고, 연립·다세대는 전용 기준 `pyeongPrice`와 별개다.
+   */
+  landPyeongPrice: number | null;
   /** 계약일 YYYY-MM-DD */
   dealDate: string;
   /** 중개거래 / 직거래 */
@@ -113,7 +119,7 @@ export type MolitSummary = {
   canceled: number;
   /** 해제 거래를 뺀 평균 평당가 — 아파트·연립(전용면적 기준) 만원/평 */
   avgPyeongPrice: number | null;
-  /** 해제 거래를 뺀 평균 대지 평당가 — 단독·다가구(대지면적 기준) 만원/평 */
+  /** 해제 거래를 뺀 평균 지분·대지 평당가 — 단독·다가구(대지면적)·연립·다세대(대지권면적) 만원/평 */
   avgLandPyeongPrice: number | null;
 };
 

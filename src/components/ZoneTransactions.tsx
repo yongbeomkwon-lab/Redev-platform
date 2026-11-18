@@ -300,7 +300,12 @@ export default function ZoneTransactions({
       min: prices.length ? Math.min(...prices) : null,
       max: prices.length ? Math.max(...prices) : null,
       jeon: mean(live.filter((r) => r.pyeongBasis === "전용" && r.pyeongPrice).map((r) => r.pyeongPrice as number)),
-      land: mean(live.filter((r) => r.pyeongBasis === "대지" && r.pyeongPrice).map((r) => r.pyeongPrice as number)),
+      // 지분·대지 평당가 — 연립·다세대(대지권면적 landAr) + 단독·다가구(대지면적) 모두 포함
+      land: mean(live.map((r) => r.landPyeongPrice).filter((v): v is number => !!v && v > 0)),
+      landKinds: {
+        yeonrip: live.filter((r) => r.kind === "연립·다세대" && r.landPyeongPrice).length,
+        danok: live.filter((r) => r.kind === "단독·다가구" && r.landPyeongPrice).length,
+      },
     };
   }, [filtered]);
 
@@ -331,6 +336,7 @@ export default function ZoneTransactions({
         jibun: t.jibun,
         umdNm: t.umdNm,
         pyeongPrice: t.pyeongPrice ?? null,
+        landPyeongPrice: t.landPyeongPrice ?? null,
       });
     }
     return [...byJibun.values()]
@@ -483,12 +489,12 @@ export default function ZoneTransactions({
 
       {state === "ready" && (
         <>
-          {/* 요약 바 — 건수 · 최근 최저~최고 · 평균 평당가 (유형 탭·기간에 따라 자동 재계산) */}
+          {/* 요약 바 — 건수 · 최근 최저~최고 · 평균 전용평당 · 평균 지분·대지평당 (유형 탭·기간에 따라 자동 재계산) */}
           <div
             data-testid="tx-summary"
-            className="mb-1.5 grid grid-cols-3 divide-x divide-blue-100 overflow-hidden rounded-lg border border-blue-200 bg-white"
+            className="mb-1.5 grid grid-cols-2 overflow-hidden rounded-lg border border-blue-200 bg-white"
           >
-            <div className="px-2 py-1.5">
+            <div className="border-b border-blue-100 px-2 py-1.5">
               <div className="text-[9px] font-semibold text-slate-500">{kind === "전체" ? "거래 건수" : `${kind} 건수`}</div>
               <div data-testid="tx-summary-count" className="text-[13px] font-bold leading-tight text-slate-900">
                 {stats.count}
@@ -498,7 +504,7 @@ export default function ZoneTransactions({
                 {months}개월 · {mode === "zone" ? "구역 내" : "법정동"}
               </div>
             </div>
-            <div className="px-2 py-1.5">
+            <div className="border-b border-l border-blue-100 px-2 py-1.5">
               <div className="text-[9px] font-semibold text-slate-500">최근 최저~최고</div>
               <div data-testid="tx-summary-range" className="text-[12px] font-bold leading-tight text-slate-900">
                 {stats.min !== null && stats.max !== null ? (
@@ -518,25 +524,35 @@ export default function ZoneTransactions({
               <div className="text-[9px] leading-tight text-slate-400">해제 거래 제외</div>
             </div>
             <div className="px-2 py-1.5">
-              <div className="text-[9px] font-semibold text-slate-500">평균 평당(3.3㎡)</div>
+              <div className="text-[9px] font-semibold text-slate-500">평균 전용평당</div>
               <div data-testid="tx-summary-pyeong" className="text-[12px] font-bold leading-tight text-slate-900">
                 {stats.jeon !== null ? (
                   <>
                     {stats.jeon.toLocaleString()}
                     <span className="text-[10px] font-semibold text-slate-500">만</span>
                   </>
-                ) : stats.land !== null ? (
+                ) : (
+                  <span className="text-slate-400">-</span>
+                )}
+              </div>
+              <div className="text-[9px] leading-tight text-slate-400">전용면적(아파트·연립)</div>
+            </div>
+            <div className="border-l border-blue-100 px-2 py-1.5">
+              <div className="text-[9px] font-semibold text-slate-500">평균 지분·대지평당</div>
+              <div data-testid="tx-summary-land" className="text-[12px] font-bold leading-tight text-violet-800">
+                {stats.land !== null ? (
                   <>
                     {stats.land.toLocaleString()}
-                    <span className="text-[10px] font-semibold text-slate-500">만</span>
+                    <span className="text-[10px] font-semibold text-violet-500">만</span>
                   </>
                 ) : (
                   <span className="text-slate-400">-</span>
                 )}
               </div>
               <div className="text-[9px] leading-tight text-slate-400">
-                {stats.jeon !== null ? "전용 기준" : stats.land !== null ? "대지 기준" : "계산 불가"}
-                {stats.jeon !== null && stats.land !== null ? ` · 대지 ${stats.land.toLocaleString()}만` : ""}
+                {stats.landKinds.yeonrip + stats.landKinds.danok > 0
+                  ? `연립 지분 ${stats.landKinds.yeonrip} · 단독 ${stats.landKinds.danok}건`
+                  : "대지지분 있는 거래 없음"}
               </div>
             </div>
           </div>
@@ -618,6 +634,10 @@ export default function ZoneTransactions({
               </li>
             )}
             {!shaped && <li>· 이 구역은 경계 도형이 없어(경계 미고시) 법정동 전체 거래만 보여줍니다.</li>}
+            <li>
+              · 연립·다세대 <b className="font-semibold text-slate-600">지분평당가</b>는 국토부 대지권면적(landAr) 기준입니다. 단독·다가구는
+              대지면적, 아파트는 대지지분 정보가 없어 전용면적 기준으로 계산합니다.
+            </li>
             {(data?.notices ?? []).map((n) => (
               <li key={n}>· {n}</li>
             ))}
@@ -742,7 +762,10 @@ function TxRow({
 }) {
   const area = t.areaSqm ? `${t.areaSqm.toFixed(t.areaSqm >= 100 ? 0 : 1)}㎡` : null;
   const pyeong = t.areaSqm ? toPyeong(t.areaSqm) : null;
-  const land = t.plottageSqm ? `${t.plottageSqm.toFixed(0)}㎡` : null;
+  /** 단독·다가구는 대지면적, 연립·다세대는 대지권면적(지분) — 둘 다 `plottageSqm`에 실려 온다 */
+  const landSqm = t.plottageSqm && t.plottageSqm > 0 ? t.plottageSqm : null;
+  const land = landSqm ? `${landSqm.toFixed(landSqm >= 100 ? 0 : 1)}㎡` : null;
+  const landPyeong = landSqm ? toPyeong(landSqm) : null;
   return (
     <li className={"flex items-start gap-2 px-2.5 py-1.5 " + (t.canceled ? "bg-rose-50/50" : "")}>
       <div className="min-w-0 flex-1">
@@ -771,6 +794,13 @@ function TxRow({
             <>
               {area ? ` · 전용 ${area}` : ""}
               {pyeong ? ` (${pyeong}평)` : ""}
+              {t.kind === "연립·다세대" && land ? (
+                <span className="font-medium text-violet-700">
+                  {" · 지분 "}
+                  {land}
+                  {landPyeong ? ` (${landPyeong}평)` : ""}
+                </span>
+              ) : null}
             </>
           )}
           {t.floor ? ` · ${t.floor}층` : ""}
@@ -786,11 +816,23 @@ function TxRow({
           {eokShort(t.price)}
         </div>
         <div className="text-[10px] text-slate-500">
-          {t.pyeongPrice ? `평당 ${t.pyeongPrice.toLocaleString()}만` : "-"}
+          {t.kind === "단독·다가구"
+            ? t.landPyeongPrice
+              ? `대지 평당 ${t.landPyeongPrice.toLocaleString()}만`
+              : "-"
+            : t.pyeongPrice
+              ? `전용 평당 ${t.pyeongPrice.toLocaleString()}만`
+              : "-"}
         </div>
-        <div className="text-[9px] text-slate-400">
-          {t.pyeongBasis === "대지" ? "대지 기준" : "전용 기준"}
-        </div>
+        {t.kind === "연립·다세대" ? (
+          <div className="text-[10px] font-semibold text-violet-700">
+            {t.landPyeongPrice ? `지분 평당 ${t.landPyeongPrice.toLocaleString()}만` : "지분 정보 없음"}
+          </div>
+        ) : (
+          <div className="text-[9px] text-slate-400">
+            {t.kind === "단독·다가구" ? "대지면적 기준" : "전용면적 기준"}
+          </div>
+        )}
       </div>
     </li>
   );
