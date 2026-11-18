@@ -274,13 +274,104 @@ def apply_sangsu(features):
     return 1
 
 
+def apply_sadang419(features):
+    """(가칭)사당동 419 일대 민간도심복합 — 사용자 제공 사업지 분석 이미지 2장에서 옮긴 경계.
+
+    · IMG_0236(카카오 지도 화면): 사업대상지 35,688.1㎡ 폴리곤 내부 음영을 따라 추적
+    · 지도 위 지물 7곳(다인공방·네오베이커리·산빛교회·삼성할인마트·황금종교회·최윤정치과·정안사)의
+      카카오 좌표로 아핀 정합(잔차 0.8~12.3m) → 면적을 공지된 35,688.1㎡에 맞춰 미세 조정
+    · 사당15구역(사당동 419-1, 서울시 UQ120 경계)과 겹치는 부분은 차집합으로 정리
+    """
+    zone_id = "dj-sadang-419-mdb"
+    if any(f["properties"].get("id") == zone_id for f in features):
+        print("[건너뜀] 사당동 419 민간도심복합 — 이미 있음")
+        return 0
+    src = ROOT / "scripts" / "data" / "official-sadang-419.json"
+    d = json.loads(src.read_text(encoding="utf-8"))
+    ring = [[p[1], p[0]] for p in d["polygon"]]
+    ring.append(ring[0][:])
+    props = {
+        "id": zone_id,
+        "name": "(가칭)사당동 419 일대 민간도심복합",
+        "alias": [
+            "사당동 419",
+            "사당동 419 일대",
+            "사당동419",
+            "사당역세권 민간도심복합",
+            "사당동 419 일대 민간도심복합",
+            "(가칭)사당동 419 일대 민간도심복합",
+        ],
+        "type": "민간도심복합(주거중심형)",
+        "kind": "민간도심복합개발(주거중심형)",
+        "stage": "추진준비",
+        "gu": "동작구",
+        "area": d["area"],
+        "featured": False,
+        "sourceId": "사업지 현황 분석 자료(사용자 제공)",
+        "geom": "가상경계",
+        "center": d["center"],
+        "centerLabel": "사당로·남부순환로 사이 사당동 419 일대(사당역 서북쪽)",
+        "areaNote": (
+            "사업대상지 35,688.1㎡(약 10,796평) — 제공 자료 표기 / 사당15구역과 겹친 부분을 뺀 지도 도형 면적 35,008㎡. 참고로 전체 검토범위(총면적)는 56,477.0㎡"
+        ),
+        "boundaryNote": (
+            "사용자가 보낸 사업지 현황 분석 자료 2장에서 옮긴 참고 경계입니다. 카카오 지도 화면(IMG_0236)의"
+            " 35,688.1㎡ 폴리곤 내부 음영을 따라 추적하고, 지도 위 지물 7곳(다인공방·네오베이커리·산빛교회·"
+            "삼성할인마트·황금종교회·최윤정치과의원·정안사)의 카카오 좌표로 정합한 뒤(잔차 0.8~12.3m)"
+            " 면적을 35,688.1㎡에 맞췄습니다. 사당15구역(사당동 419-1 일대, 서울시 UQ120 경계)과 겹친 부분은"
+            " 차집합으로 정리해 지도에서 두 구역이 겹치지 않게 했습니다. 공식 고시 전 추진준비 단계여서"
+            " 실제 구역계와는 ±10~15m 차이가 있을 수 있습니다."
+        ),
+        "note": (
+            "사당역 서북쪽 사당동 419 일대(사당로·남부순환로 사이)에서 추진 중인 (가칭)민간도심복합개발사업입니다."
+            " 제공 자료는 서울특별시 「도심 복합개발 지원에 관한 조례」(2026.1.5.) 준용 검토를 전제로 사업대상지"
+            " 35,688.1㎡와 역세권 경계(350m·500m)를 표시하고 있습니다. 인접한 사당동 419-1 일대는 사당15구역"
+            "(신속통합기획, 대상지 선정 추진중)으로 이미 따로 추진되고 있어 두 사업의 경계·추진 주체를 함께"
+            " 확인해야 합니다. 고시된 구역계가 없는 추진준비 단계입니다."
+        ),
+        "sources": [],
+    }
+    feat = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [ring]}, "properties": props}
+
+    # 사당15구역과 겹치는 부분은 차집합으로 정리(멱등)
+    try:
+        from shapely.geometry import shape as shp_shape
+
+        official = next(
+            (f for f in features if f["properties"].get("id") == "11000UQ120PS202601310020"), None
+        )
+        if official is not None:
+            import shapely
+            from shapely.geometry import Polygon as SPoly
+
+            g = SPoly(feat["geometry"]["coordinates"][0])
+            go = shp_shape(official["geometry"])
+            inter = g.intersection(go)
+            if inter.area * 9.8e9 > 0.5:
+                diff = g.difference(go)
+                polys = list(diff.geoms) if diff.geom_type == "MultiPolygon" else [diff]
+                if len(polys) == 1:
+                    feat["geometry"] = {
+                        "type": "Polygon",
+                        "coordinates": [[[round(x, 7), round(y, 7)] for x, y in polys[0].exterior.coords]],
+                    }
+                props["area"] = round(diff.area * 9.8e9)
+                print(f"[보정] 사당동 419 — 사당15구역과 겹친 {round(inter.area * 9.8e9):,}㎡ 차집합 제거")
+    except Exception as e:  # shapely 없으면 그대로 추가
+        print("[알림] 사당동 419 겹침 정리 건너뜀:", e)
+
+    features.append(feat)
+    print(f"[추가] (가칭)사당동 419 일대 민간도심복합 ({props['area']:,}㎡)")
+    return 1
+
+
 def main() -> int:
     data = json.loads(PATH.read_text(encoding="utf-8"))
     features = data["features"]
     before = len(features)
 
     apply_restrictions(features)
-    added = apply_suyu(features) + apply_sangsu(features)
+    added = apply_suyu(features) + apply_sangsu(features) + apply_sadang419(features)
     touched = apply_gwangheungchang(features)
 
     data["metadata"]["count"] = len(features)
