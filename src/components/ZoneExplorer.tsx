@@ -1791,7 +1791,7 @@ export default function ZoneExplorer() {
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">
                     구역 내 등록 매물 비교
                     <span className="ml-1.5 text-[10px] font-normal text-slate-400">
-                      열람은 유료 열람권 / 등록은 유료 플랜
+                      매매가·초기투자금 무료 / 권리가액·연락처는 열람권
                     </span>
                   </h3>
                   <ListingCompare

@@ -1,7 +1,9 @@
 "use client";
 // ─────────────────────────────────────────────────────────────────────────────
 // ListingCompare — 구역 내 매물 비교 (갈타맵 스타일 컬럼 비교 + 재개발뷰 뱃지)
-// 무료: 매매가·타입·매물 수 공개 / 유료: 초기투자금·시뮬레이션·연락처 열람
+//   · 매매가·기보증금·**초기투자금**은 목록·매물 카드와 같이 무료 공개한다 — 초기투자금으로
+//     걸러 보는 것이 지방 투자자의 첫 동작이라, 같은 화면에서 어떤 매물은 잠겨 있으면 안 된다.
+//   · 유료(열람권)는 **추정 권리가액·투자 시뮬레이션·중개사 직통 연락처**만.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Listing, Zone } from "@/lib/types";
 import { calcImpliedRights, calcInitialInvestment, UNLOCK_PRICE } from "@/lib/types";
@@ -63,8 +65,11 @@ export function ListingCompare({
                 <td className="py-2 pr-2">{l.unitType}</td>
                 <td className="py-2 pr-2 text-right">{formatMan(l.salePrice)}</td>
                 <td className="py-2 pr-2 text-right">
+                  <span className="font-semibold text-blue-700">{formatMan(calcInitialInvestment(l))}</span>
+                </td>
+                <td className="py-2 pr-2 text-right">
                   {unlocked ? (
-                    <span className="font-semibold text-blue-700">{formatMan(calcInitialInvestment(l))}</span>
+                    formatMan(calcImpliedRights(l))
                   ) : (
                     <button
                       onClick={() => onUnlockRequest(l)}
@@ -73,9 +78,6 @@ export function ListingCompare({
                       🔒 열람권 {formatMan(UNLOCK_PRICE)}에 열기
                     </button>
                   )}
-                </td>
-                <td className="py-2 pr-2 text-right">
-                  {unlocked ? formatMan(calcImpliedRights(l)) : <span className="text-slate-300">🔒</span>}
                 </td>
                 <td className="py-2 pr-2">
                   {l.transferFeeIncluded ? (
@@ -91,7 +93,8 @@ export function ListingCompare({
         </tbody>
       </table>
       <p className="mt-2 text-xs text-slate-400">
-        * 참고순위는 같은 구역 등록 매물 기준 매매가 낮은 순. 초기투자금·시뮬레이션·연락처는 열람권 구매 후 확인.
+        * 참고순위는 같은 구역 등록 매물 기준 매매가 낮은 순. 추정 권리가액·투자 시뮬레이션·중개사 직통 연락처는
+        열람권 구매 후 확인. 초기투자금은 매매가 − 기보증금으로 계산한 값입니다(부대비용 별도).
       </p>
     </div>
   );
