@@ -503,6 +503,60 @@ def apply_sindang655(features):
     print("[별칭] 신당동 741 ← '신당동 655·620' (같은 사업, 표기 변경)")
 
 
+# ── ⑤ 겹침 정리: 중동 112(사전검토·UQ120 일반화) − 성산동 160-4 모아타운(UQ181 실경계) ─
+#   일반화 경계(UQ120)는 도로·필지를 다듬어 그린 도형이라 이웃 실경계(UQ181)와 살짝 겹친다.
+#   2026-11-18 사용자 제보(스크린샷): 중동 112 남쪽 모서리가 성산동 160-4 모아타운과 겹침.
+#   → 성산동 160-4는 손대지 않고, 중동 112에서 겹치는 부분만 차집합으로 잘라낸다.
+JUNG_ID = "11000UQ120PS202505311065"
+SEONGSAN_ID = "11440UQ120PS202605060001"
+
+
+def trim_overlap(features):
+    try:
+        from shapely.geometry import Polygon as SPoly, MultiPolygon as SMulti
+    except Exception:
+        print("[건너뜀] shapely 없음 — 중동 112 겹침 정리 못 함")
+        return
+    a = find(features, JUNG_ID)
+    b = find(features, SEONGSAN_ID)
+    ga = SPoly(a["geometry"]["coordinates"][0]).buffer(0)
+    gb = SPoly(b["geometry"]["coordinates"][0]).buffer(0)
+    inter = ga.intersection(gb)
+    if inter.area * 9.8e9 < 0.5:
+        print("[건너뜀] 중동 112 ↔ 성산동 160-4 겹침 없음(이미 정리)")
+        return
+    diff = ga.difference(gb)
+    polys = list(diff.geoms) if isinstance(diff, SMulti) else [diff]
+
+    def ring(coords):
+        return [[round(x, 7), round(y, 7)] for x, y in coords]
+
+    if len(polys) == 1:
+        geom = {"type": "Polygon", "coordinates": [ring(polys[0].exterior.coords)]}
+    else:
+        geom = {
+            "type": "MultiPolygon",
+            "coordinates": [[ring(p.exterior.coords)] + [ring(i.coords) for i in p.interiors] for p in polys],
+        }
+    a["geometry"] = geom
+    props = a["properties"]
+    trimmed = inter.area * 9.8e9
+    props["area"] = round(diff.area * 9.8e9)
+    props["note"] = (props.get("note") or "") + (
+        f" 2026-11-18 겹침 정리: 남쪽 모서리가 성산동 160-4번지 일대 모아타운(마포구 관리지역고시, UQ181 실경계)과"
+        f" 겹치는 부분 {round(trimmed):,}㎡를 차집합으로 잘라냈습니다(성산동 160-4 경계는 그대로)."
+    )
+    props["areaNote"] = (
+        f"서울플랜+ 고시면적 58,027㎡ / 이웃 실경계와 겹친 {round(trimmed):,}㎡를 뺀 도형 면적 {props['area']:,}㎡"
+    )
+    props["boundaryNote"] = (
+        (props.get("boundaryNote") or "")
+        + " 서울플랜+ UQ120 일반화 도형에서 성산동 160-4번지 일대 모아타운(UQ181)과 겹치는 남쪽 모서리를 차집합으로 제거."
+    ).strip()
+    props["geom"] = "UQ120보정"
+    print(f"[보정] 중동 112 — 겹침 {round(trimmed):,}㎡ 제거 → 면적 {props['area']:,}㎡")
+
+
 def apply_new(features):
     existing = {f["properties"].get("id") for f in features}
     added = 0
@@ -554,6 +608,7 @@ def main() -> int:
     poly_area = apply_yongdu(features)
     apply_sinjeong(features)
     apply_sindang655(features)
+    trim_overlap(features)
     added = apply_new(features)
 
     data["metadata"]["count"] = len(features)
