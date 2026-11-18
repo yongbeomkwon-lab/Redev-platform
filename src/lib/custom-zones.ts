@@ -2,9 +2,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // 관리자 모드 — 지도에서 직접 그린 구역(커스텀 구역)
 //
-//   · 대표님이 지도 위에서 직접 경계를 그리고/고쳐서 쓰는 구역이다. 서버가 없으므로
-//     **이 브라우저의 localStorage** 에만 저장된다(새로고침해도 유지, 다른 기기와는 공유되지 않음).
-//   · 저장된 구역은 관리자 모드에서만 지도에 그려진다 — 일반 방문자 화면은 그대로다.
+//   · 대표님이 지도 위에서 직접 경계를 그리고/고쳐서 쓰는 구역이다.
+//     저장하면 **공용 DB(Supabase `public.custom_zones`)** 에 올라가고, 이 브라우저에도 사본이 남는다.
+//     → 새로고침·다른 기기·다른 관리자 화면에서도 같은 구역이 보인다(일반 방문자 지도는 그대로).
+//   · DB 가 잠깐 죽었거나 로컬 dev(환경변수 없음)이면 예전처럼 이 브라우저에만 저장된다.
 //   · 내보내기(JSON 다운로드·클립보드 복사)는 `public/data/zones.geojson` 의 feature 모양과
 //     `scripts/data/official-*.json` 의 좌표 순서를 함께 담아, 대표님이 그 파일을 그대로
 //     넘겨주면 정식 데이터로 병합할 수 있게 한다.
@@ -14,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS } from "@/components/map/colors";
+import { ZONE_TYPE_KIND, zoneFromRow, type ZoneRecord } from "@/lib/db-mapping";
 
 /** 사업유형 — 기존 8분류 + 민간도심복합 2유형 + 기타(직접 입력 구역) */
 export const CUSTOM_ZONE_TYPES = [
@@ -35,10 +37,7 @@ export type CustomZoneType = MapZoneType | "기타";
  *   내보낸 GeoJSON 의 kind 가 '관리자 직접 입력'으로 뭉개져 유형이 사라지는 걸 막는다
  *   (민간도심복합처럼 유형 이름에 소분류가 들어 있는 사업만 지정).
  */
-export const CUSTOM_TYPE_KIND: Partial<Record<CustomZoneType, string>> = {
-  "민간도심복합(성장거점형)": "민간도심복합개발(성장거점형)",
-  "민간도심복합(주거중심형)": "민간도심복합개발(주거중심형)",
-};
+export const CUSTOM_TYPE_KIND: Partial<Record<CustomZoneType, string>> = ZONE_TYPE_KIND;
 
 /** 추진단계 — 서울시 데이터(서울플랜+)의 단계 이름 + 추진준비(구역지정 전) */
 export const CUSTOM_ZONE_STAGES = [
@@ -83,27 +82,10 @@ export const SEOUL_GU = [
 ] as const;
 
 /** 지도에 그린 구역 한 건 */
-export type CustomZone = {
-  id: string;
-  name: string;
+export type CustomZone = Omit<ZoneRecord, "type"> & {
   type: CustomZoneType;
-  stage: CustomZoneStage | string;
-  gu: string;
-  note: string;
-  /** 외곽 링 — [위도, 경도] (첫 점을 끝에 반복하지 않는다) */
-  ring: [number, number][];
-  /** 그린 도형의 면적(㎡) — 구면 근사 계산 */
-  areaSqm: number;
-  /**
-   * 서울시 고시 구역의 경계를 고쳐서 만든 경우, 그 구역의 id.
-   * 병합할 때 이 구역의 도형을 대체해야 한다는 표시다.
-   */
-  replacesZoneId?: string;
-  replacesName?: string;
-  /** 고시·공고 면적(참고) — 내가 그린 면적과 비교해 보여준다 */
-  replacesArea?: number;
-  createdAt: string;
-  updatedAt: string;
+  /** 공용 DB 에서 읽어 온 구역(이 브라우저 저장분이 아니다) — localStorage 에는 다시 쓰지 않는다 */
+  fromDb?: boolean;
 };
 
 export const ADMIN_STORAGE_KEY = "redev.admin";
@@ -171,11 +153,134 @@ export function loadCustomZones(): CustomZone[] {
 export function saveCustomZones(list: CustomZone[]): boolean {
   if (typeof window === "undefined") return false;
   try {
-    window.localStorage.setItem(CUSTOM_ZONES_STORAGE_KEY, JSON.stringify(list));
+    // 공용 DB 에서 읽어 온 구역(fromDb)은 이 브라우저 저장본이 아니다 — DB 가 진실이고,
+    // 여기에도 복사해 두면 다른 기기에서 지운 구역이 남의 화면에 되살아난다.
+    const own = list.filter((z) => !z.fromDb).map(({ fromDb: _fromDb, ...z }) => z);
+    window.localStorage.setItem(CUSTOM_ZONES_STORAGE_KEY, JSON.stringify(own));
     return true;
   } catch {
     return false;
   }
+}
+
+// ─── 공용 DB(Supabase) 연동 ────────────────────────────────────────────────
+
+/** 공용 DB 에서 읽은 구역 캐시 */
+let dbZones: CustomZone[] = [];
+let dbSource: "supabase" | "static" = "static";
+let dbMessage: string | null = null;
+let dbLoaded = false;
+
+/** 지금 화면이 DB 구역을 실제로 받았는지(안내 문구용) */
+export function customZonesDbState(): { source: "supabase" | "static"; loaded: boolean; message: string | null } {
+  return { source: dbSource, loaded: dbLoaded, message: dbMessage };
+}
+
+/** DB 행 → 화면 구역(사업유형이 우리 분류에 없으면 ‘기타’) */
+function fromDbRow(row: Record<string, unknown>): CustomZone | null {
+  const z = zoneFromRow(row);
+  if (!z) return null;
+  const { type, ...rest } = z;
+  return {
+    ...rest,
+    type: (CUSTOM_ZONE_TYPES as readonly string[]).includes(type) ? (type as CustomZoneType) : "기타",
+    fromDb: true,
+  };
+}
+
+/** 공용 DB 의 관리자 구역을 불러와 캐시에 담는다 — 실패해도 조용히 넘어간다 */
+export async function loadDbCustomZones(): Promise<CustomZone[]> {
+  if (typeof window === "undefined") return dbZones;
+  try {
+    const res = await fetch("/api/custom-zones", { cache: "no-store" });
+    const json = (await res.json()) as { ok?: boolean; source?: string; items?: Record<string, unknown>[]; message?: string };
+    if (json?.ok) {
+      dbZones = (json.items ?? []).map(fromDbRow).filter((z): z is CustomZone => !!z);
+      dbSource = json.source === "supabase" ? "supabase" : "static";
+      dbMessage = json.message ?? null;
+      dbLoaded = true;
+    } else {
+      dbMessage = json?.message ?? "구역 DB 응답을 읽지 못했습니다.";
+    }
+  } catch {
+    dbMessage = "구역 DB에 연결하지 못했습니다(오프라인?).";
+  }
+  return dbZones;
+}
+
+/**
+ * 화면 목록 = 공용 DB 구역 + 이 브라우저에만 있는 구역(id 기준 중복 제거).
+ *   · 같은 id 가 양쪽에 있으면 DB 값을 쓴다(공유본이 진실).
+ *   · DB 에 없는 참고값(고시면적 replacesArea)만 이 브라우저 값을 채워 넣는다.
+ */
+export function mergeCustomZones(db: CustomZone[], local: CustomZone[]): CustomZone[] {
+  const out: CustomZone[] = [];
+  const index = new Map<string, number>();
+  for (const z of db) {
+    if (index.has(z.id)) continue;
+    index.set(z.id, out.length);
+    out.push(z);
+  }
+  for (const z of local) {
+    const at = index.get(z.id);
+    if (at === undefined) {
+      index.set(z.id, out.length);
+      out.push(z);
+      continue;
+    }
+    if (z.replacesArea && !out[at].replacesArea) out[at] = { ...out[at], replacesArea: z.replacesArea };
+  }
+  return out;
+}
+
+/** 페이지가 처음 관리자 구역을 읽을 때: DB 를 먼저 읽고 이 브라우저 저장분과 합친다 */
+export async function loadAllCustomZones(): Promise<CustomZone[]> {
+  await loadDbCustomZones();
+  return mergeCustomZones(dbZones, loadCustomZones());
+}
+
+/** 구역 1건을 공용 DB 에 올린다(upsert) — 성공하면 캐시와 이 브라우저 사본에도 반영 */
+export async function pushCustomZoneToDb(z: CustomZone): Promise<{ ok: boolean; shared: boolean; message?: string }> {
+  try {
+    const res = await fetch("/api/custom-zones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...z, fromDb: undefined }),
+    });
+    const json = (await res.json()) as { ok?: boolean; source?: string; item?: Record<string, unknown>; message?: string };
+    if (res.ok && json?.ok && json.source === "supabase") {
+      const saved = json.item ? fromDbRow(json.item) : null;
+      const item: CustomZone = saved ? { ...saved, fromDb: undefined } : z;
+      const i = dbZones.findIndex((v) => v.id === item.id);
+      dbZones = i >= 0 ? dbZones.map((v, k) => (k === i ? { ...item, fromDb: true } : v)) : [{ ...item, fromDb: true }, ...dbZones];
+      dbSource = "supabase";
+      dbLoaded = true;
+      return { ok: true, shared: true };
+    }
+    return { ok: false, shared: false, message: json?.message ?? `구역 DB 저장 실패 (HTTP ${res.status})` };
+  } catch (e) {
+    return { ok: false, shared: false, message: e instanceof Error ? e.message : "구역 DB에 연결하지 못했습니다." };
+  }
+}
+
+/** 구역 1건을 공용 DB 에서 지운다 */
+export async function deleteCustomZoneFromDb(id: string): Promise<{ ok: boolean; shared: boolean; message?: string }> {
+  try {
+    const res = await fetch(`/api/custom-zones?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const json = (await res.json()) as { ok?: boolean; source?: string; message?: string };
+    if (res.ok && json?.ok) {
+      dbZones = dbZones.filter((z) => z.id !== id);
+      return { ok: true, shared: json.source === "supabase" };
+    }
+    return { ok: false, shared: false, message: json?.message ?? `구역 DB 삭제 실패 (HTTP ${res.status})` };
+  } catch (e) {
+    return { ok: false, shared: false, message: e instanceof Error ? e.message : "구역 DB에 연결하지 못했습니다." };
+  }
+}
+
+/** 이 구역이 공용 DB 에도 있는지 — ‘공유됨’ 표시에 쓴다 */
+export function isCustomZoneShared(id: string): boolean {
+  return dbZones.some((z) => z.id === id);
 }
 
 export function newCustomZoneId(): string {

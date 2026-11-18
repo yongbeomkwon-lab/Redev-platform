@@ -1,12 +1,14 @@
 "use client";
 // ─────────────────────────────────────────────────────────────────────────────
-// 매물 저장소 — 정식 검증 매물 + 샘플 매물 + 이 브라우저에서 등록한 매물
+// 매물 저장소 — 정식 검증 매물 + 공용 DB(Supabase) + 샘플 매물 + 이 브라우저에서 등록한 매물
 //
-//  ▶ 왜 세 곳을 합치나
+//  ▶ 왜 네 곳을 합치나
 //    · `src/data/verified-listings.json` : 중개사가 확인한 **정식 검증 매물**(배포본에 함께 나간다).
+//    · `/api/listings` (Supabase `public.listings`) : **모든 방문자가 함께 보는 공용 DB**.
+//      `/register` 에서 등록하면 여기로 올라가고, 새로고침·다른 기기·다른 사람 화면에도 그대로 보인다.
 //    · `src/data/sample.ts` LISTINGS     : 첫 화면용 샘플. 예전 링크·화면이 그대로 이어지도록 남긴다.
-//    · `localStorage(redev.customListings.v1)` : `/register` 에서 바로 등록한 매물. 서버가 없으므로
-//      **이 브라우저에만** 저장된다(새로고침해도 유지, 다른 기기와는 공유되지 않음).
+//    · `localStorage(redev.customListings.v1)` : `/register` 에서 등록한 매물의 **이 브라우저 사본**.
+//      DB 가 잠깐 죽었거나 로컬 dev(환경변수 없음)에서도 등록한 매물이 화면에서 사라지지 않게 한다.
 //  ▶ 화면(메인 지도 `/` · 매물 목록 `/listings`)은 언제나 `allListings()` 하나만 본다.
 //  ▶ 내보내기(JSON 다운로드·복사)는 `verified-listings.json` 과 **같은 모양**으로 만든다 —
 //    대표님이 그 파일을 받아 `src/data/verified-listings.json` 에 그대로 넣으면 정식 매물이 된다.
@@ -20,6 +22,90 @@ import verifiedFile from "@/data/verified-listings.json";
 export const CUSTOM_LISTINGS_STORAGE_KEY = "redev.customListings.v1";
 /** 매물이 바뀌었음을 같은 화면 안에 알리는 이벤트(등록 직후 지도·목록 갱신용) */
 export const LISTINGS_CHANGED_EVENT = "redev:listings-changed";
+
+// ─── 공용 DB(Supabase) 연동 ────────────────────────────────────────────────
+
+/** 어디서 온 데이터인가 — "supabase" 면 공용 DB, "static" 이면 DB 미설정·응답 실패 */
+export type DbSource = "supabase" | "static";
+
+/** GET /api/listings 결과 캐시 — 탭이 살아 있는 동안 유지된다 */
+let dbListings: Listing[] = [];
+let dbSource: DbSource = "static";
+let dbMessage: string | null = null;
+let dbLoaded = false;
+
+/** 지금 화면이 DB 매물을 실제로 받았는지(안내 문구용) */
+export function listingsDbState(): { source: DbSource; loaded: boolean; message: string | null } {
+  return { source: dbSource, loaded: dbLoaded, message: dbMessage };
+}
+
+/**
+ * 공용 DB 매물을 불러와 캐시에 담는다.
+ *   · 실패해도 조용히 넘어간다 — 화면은 정식 JSON + 이 브라우저 저장분으로 계속 돈다.
+ *   · 등록·삭제 직후에는 `force` 없이 다시 불러도 된다(서버가 매번 새로 읽는다).
+ */
+export async function loadDbListings(): Promise<Listing[]> {
+  if (typeof window === "undefined") return dbListings;
+  try {
+    const res = await fetch("/api/listings", { cache: "no-store" });
+    const json = (await res.json()) as { ok?: boolean; source?: string; items?: unknown[]; message?: string };
+    if (json?.ok) {
+      dbListings = (json.items ?? []).map(normalizeListing).filter((l): l is Listing => !!l);
+      dbSource = json.source === "supabase" ? "supabase" : "static";
+      dbMessage = json.message ?? null;
+      dbLoaded = true;
+    } else {
+      dbMessage = json?.message ?? "매물 DB 응답을 읽지 못했습니다.";
+    }
+  } catch {
+    dbMessage = "매물 DB에 연결하지 못했습니다(오프라인?).";
+  }
+  return dbListings;
+}
+
+/** 매물 1건을 공용 DB에 올린다(upsert). 성공하면 캐시에도 바로 반영 */
+export async function pushListingToDb(listing: Listing): Promise<{ ok: boolean; shared: boolean; message?: string }> {
+  try {
+    const res = await fetch("/api/listings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(listing),
+    });
+    const json = (await res.json()) as { ok?: boolean; source?: string; item?: unknown; message?: string };
+    if (res.ok && json?.ok && json.source === "supabase") {
+      const saved = json.item ? normalizeListing(json.item) : null;
+      const item = saved ?? listing;
+      const i = dbListings.findIndex((l) => l.id === item.id);
+      dbListings = i >= 0 ? dbListings.map((l, k) => (k === i ? item : l)) : [item, ...dbListings];
+      dbSource = "supabase";
+      dbLoaded = true;
+      return { ok: true, shared: true };
+    }
+    return { ok: false, shared: false, message: json?.message ?? `매물 DB 저장 실패 (HTTP ${res.status})` };
+  } catch (e) {
+    return { ok: false, shared: false, message: e instanceof Error ? e.message : "매물 DB에 연결하지 못했습니다." };
+  }
+}
+
+/** 매물 1건을 공용 DB에서 지운다 */
+export async function deleteListingFromDb(id: string): Promise<{ ok: boolean; shared: boolean; message?: string }> {
+  try {
+    const res = await fetch(`/api/listings?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const json = (await res.json()) as { ok?: boolean; source?: string; message?: string };
+    if (res.ok && json?.ok) {
+      dbListings = dbListings.filter((l) => l.id !== id);
+      return { ok: true, shared: json.source === "supabase" };
+    }
+    return { ok: false, shared: false, message: json?.message ?? `매물 DB 삭제 실패 (HTTP ${res.status})` };
+  } catch (e) {
+    return { ok: false, shared: false, message: e instanceof Error ? e.message : "매물 DB에 연결하지 못했습니다." };
+  }
+}
+
+/** 이 매물이 공용 DB 에도 있는지 — 등록 목록의 ‘공유됨’ 표시에 쓴다 */
+export function isListingShared(id: string): boolean {
+  return dbListings.some((l) => l.id === id);
+}
 
 const num = (v: unknown): number | undefined =>
   typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : undefined;
@@ -128,18 +214,30 @@ export function newListingId(): string {
 }
 
 /**
- * 화면이 보는 전체 매물 = 정식 검증 매물 + 샘플 매물 + 이 브라우저 등록 매물.
- * 같은 id 가 두 곳에 있으면 앞의 것을 쓴다(검증 JSON 이 샘플보다 우선).
+ * 화면이 보는 전체 매물 = 정식 검증 매물 + 공용 DB + 샘플 + 이 브라우저 등록 매물.
+ * 같은 id 가 두 곳에 있으면 앞의 것을 쓴다(검증 JSON → DB → 샘플 → 이 브라우저).
+ * DB 캐시는 `loadDbListings()` 가 채운다 — 아직 안 불렀으면 예전과 똑같이 동작한다.
  */
 export function allListings(): Listing[] {
   const out: Listing[] = [];
   const seen = new Set<string>();
-  for (const l of [...verifiedListings(), ...LISTINGS.map((l) => normalizeListing(l)).filter((l): l is Listing => !!l), ...loadCustomListings()]) {
+  for (const l of [
+    ...verifiedListings(),
+    ...dbListings,
+    ...LISTINGS.map((l) => normalizeListing(l)).filter((l): l is Listing => !!l),
+    ...loadCustomListings(),
+  ]) {
     if (seen.has(l.id)) continue;
     seen.add(l.id);
     out.push(l);
   }
   return out;
+}
+
+/** DB 까지 불러온 전체 매물 — 페이지가 처음 목록을 읽을 때 쓴다 */
+export async function allListingsWithDb(): Promise<Listing[]> {
+  await loadDbListings();
+  return allListings();
 }
 
 // ─── 구역 매칭 · 집계 ────────────────────────────────────────────────────────

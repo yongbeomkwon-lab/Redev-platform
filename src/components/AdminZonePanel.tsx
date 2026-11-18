@@ -136,8 +136,8 @@ export function AdminZonePanel(props: AdminPanelProps) {
       </div>
 
       <p className="mt-1 text-[10px] leading-snug text-slate-500">
-        지도에서 직접 그린 구역은 <b className="text-slate-700">이 브라우저에만</b> 저장됩니다. 마음에 들면
-        JSON으로 내려받아 대표 데이터에 병합하세요.
+        지도에서 직접 그린 구역은 <b className="text-slate-700">공용 DB에 저장되어 모든 기기·관리자 화면</b>에
+        보입니다(일반 방문자 지도에는 그려지지 않습니다). JSON으로 내려받아 대표 데이터에 병합할 수도 있습니다.
       </p>
 
       {/* ── 시작 버튼 ─────────────────────────────────────────────── */}

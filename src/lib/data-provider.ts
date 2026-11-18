@@ -12,7 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Listing, Transaction, Zone } from "@/lib/types";
 import { TRANSACTIONS, ZONES } from "@/data/sample";
-import { allListings } from "@/lib/custom-listings";
+import { allListings, loadDbListings } from "@/lib/custom-listings";
 
 export interface DataProvider {
   name: string;
@@ -33,8 +33,8 @@ export const mockProvider: DataProvider = {
     return zoneId ? TRANSACTIONS.filter((t) => t.zoneId === zoneId) : TRANSACTIONS;
   },
   async getListings(zoneId) {
-    await delay(60);
-    // 정식 검증 매물(verified-listings.json) + 샘플 + 이 브라우저 등록 매물을 합쳐 보여준다
+    // 공용 DB(Supabase)를 먼저 읽고, 정식 검증 매물 + 샘플 + 이 브라우저 등록 매물과 id 기준으로 합친다
+    await loadDbListings();
     const list = allListings();
     return zoneId ? list.filter((l) => l.zoneId === zoneId) : list;
   },

@@ -5,10 +5,10 @@
 //  · 예전 화면은 "요금제 선택 → 모의 결제" 3단계라 실제로 매물을 올릴 수 없었다.
 //    지금은 **바로 입력하는 실무 폼**이다: 구역을 2,289곳 중에서 검색해 고르고,
 //    매매가·기보증금·전용면적·임대사업자 승계·토허제 여부를 적으면 초기투자금이 실시간으로 계산된다.
-//  · 저장은 이 브라우저의 localStorage(`redev.customListings.v1`) — 새로고침해도 남고,
-//    메인 지도(`/`)와 매물 목록(`/listings`)에 **즉시** 배지·카드로 나타난다.
-//  · 다른 사람에게도 보이게 하려면 [JSON 다운로드/복사] 로 받은 내용을
-//    `src/data/verified-listings.json` 에 넣으면 정식 검증 매물이 된다(파일 모양이 같다).
+//  · 저장은 **공용 DB(Supabase `public.listings`)** 와 이 브라우저(localStorage) 두 곳에 동시에 한다.
+//    → 등록한 매물은 메인 지도(`/`)·매물 목록(`/listings`)에 바로 나타나고,
+//      새로고침·다른 기기·다른 방문자 화면에서도 그대로 보인다.
+//    → DB 가 잠몃 죽거나 로컬 dev(환경변수 없음)이면 예전처럼 이 브라우저에만 저장되고 그 사실을 안내한다.
 //  · 진입: `?zone=<구역 id>` 로 들어오면 그 구역이 미리 선택된다(지도·상세 패널의 '매물 등록하기').
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,10 +22,13 @@ import { Badge } from "@/components/Badges";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
 import {
   deleteCustomListing,
+  deleteListingFromDb,
   listingExportFileName,
   listingsToJson,
   loadCustomListings,
+  loadDbListings,
   newListingId,
+  pushListingToDb,
   upsertCustomListing,
 } from "@/lib/custom-listings";
 
@@ -68,6 +71,13 @@ export default function RegisterPage() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [mine, setMine] = useState<Listing[]>([]);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  /** 등록 저장 중(DB 응답을 기다리는 중) */
+  const [saving, setSaving] = useState(false);
+  /** 방금 등록한 매물이 공용 DB 에 올라갔는지 — null 이면 아직 응답 전 */
+  const [shared, setShared] = useState<boolean | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  /** 공용 DB 에 있는 매물 id — ‘공유됨’ 표시에 쓴다 */
+  const [sharedIds, setSharedIds] = useState<string[]>([]);
 
   // 구역 전수(2,289곳) — 지도와 같은 데이터(public/data/zones.geojson)
   useEffect(() => {
@@ -79,6 +89,10 @@ export default function RegisterPage() {
   // 이 브라우저에 등록한 매물 + `?zone=` 진입 시 구역 미리 선택
   useEffect(() => {
     setMine(loadCustomListings());
+    // 공용 DB 매물 id 를 확보해 두면 ‘내가 등록한 매물’에서 공유 여부를 바로 보여줄 수 있다
+    void loadDbListings()
+      .then((db) => setSharedIds(db.map((l) => l.id)))
+      .catch(() => {});
     let id: string | null = null;
     try {
       id = new URL(window.location.href).searchParams.get("zone");
@@ -168,8 +182,8 @@ export default function RegisterPage() {
     setCopyMsg(null);
   }
 
-  function submit() {
-    if (!zone) return;
+  async function submit() {
+    if (!zone || saving) return;
     const listing: Listing = {
       ...draft,
       id: newListingId(),
@@ -178,20 +192,30 @@ export default function RegisterPage() {
       note: note.trim() || undefined,
       createdAt: new Date().toISOString().slice(0, 10),
     };
+    setSaving(true);
+    setShared(null);
+    setShareError(null);
+    // ① 이 브라우저 사본(즉시) — DB 가 죽어도 등록한 매물이 화면에서 사라지지 않게
     const { ok, list } = upsertCustomListing(listing);
     setMine(list);
     setSaveFailed(!ok);
     setSaved(listing);
+    // ② 공용 DB — 모든 방문자·기기에서 보이게
+    const pushed = await pushListingToDb(listing);
+    setSaving(false);
+    setShared(pushed.shared);
+    setShareError(pushed.shared ? null : (pushed.message ?? null));
+    if (pushed.shared) setSharedIds((prev) => (prev.includes(listing.id) ? prev : [...prev, listing.id]));
     // 등록한 구역으로 지도에서 바로 확인할 수 있게 주소를 남겨 둔다(아래 링크가 쓴다)
-    if (ok) {
-      setCopyMsg(null);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    if (ok) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function remove(id: string) {
+  async function remove(id: string) {
     setMine(deleteCustomListing(id));
     if (saved?.id === id) setSaved(null);
+    const removed = await deleteListingFromDb(id);
+    if (removed.ok) setSharedIds((prev) => prev.filter((x) => x !== id));
+    else setCopyMsg(`DB 에서 지우지 못했습니다 — ${removed.message ?? "연결 실패"} (이 브라우저에서만 지워졌습니다)`);
   }
 
   function download() {
@@ -234,8 +258,8 @@ export default function RegisterPage() {
 
       <div className="rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2 text-[12px] leading-relaxed text-blue-900">
         <b>베타 무료 등록</b> — 지금은 요금제·결제 없이 바로 등록됩니다(단건 9만원/월 29만원 요금제는 정식
-        오픈 시 적용). 등록한 매물은 <b>이 브라우저</b>에 저장되어 메인 지도와 매물 목록에 바로 나타나며,
-        다른 사람에게도 보이게 하려면 아래 <b>JSON 다운로드</b>로 받아 정식 데이터에 넣으면 됩니다.
+        오픈 시 적용). 등록한 매물은 <b>공용 DB에 저장</b>되어 메인 지도와 매물 목록에 바로 나타나고,{" "}
+        <b>모든 방문자·기기에서 공유</b>됩니다. (DB 응답이 없을 때만 이 브라우저에 임시 저장됩니다.)
       </div>
 
       {/* ── 등록 완료 카드 ── */}
@@ -248,6 +272,9 @@ export default function RegisterPage() {
             <span aria-hidden className="text-lg leading-none">✅</span>
             <b className="text-sm text-emerald-900">등록 완료 — {saved.zoneName}</b>
             <Badge tone="green">지도·목록에 반영됨</Badge>
+            {saving && <Badge tone="blue">공용 DB에 올리는 중…</Badge>}
+            {!saving && shared === true && <Badge tone="green">DB 저장 — 모든 방문자에게 공유</Badge>}
+            {!saving && shared === false && <Badge tone="amber">DB 저장 실패 — 이 브라우저에만</Badge>}
             {saveFailed && <Badge tone="red">브라우저 저장 실패 — JSON 으로 보관하세요</Badge>}
           </div>
           <p className="mt-1 text-[12px] text-emerald-900/90">
@@ -291,6 +318,11 @@ export default function RegisterPage() {
               새 매물 등록
             </button>
           </div>
+          {shareError && (
+            <p className="mt-1 text-[11px] text-amber-800">
+              공용 DB에 올리지 못했습니다 — {shareError} 지금은 이 브라우저에만 보입니다.
+            </p>
+          )}
           {copyMsg && <p className="mt-1 text-[11px] text-emerald-800">{copyMsg}</p>}
         </div>
       )}
@@ -604,12 +636,12 @@ export default function RegisterPage() {
 
         <button
           type="button"
-          onClick={submit}
-          disabled={!canSave}
+          onClick={() => void submit()}
+          disabled={!canSave || saving}
           data-testid="register-submit"
           className="mt-3 w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {canSave ? "베타 무료로 등록하기" : "구역·매매가·중개사무소를 입력하세요"}
+          {saving ? "공용 DB에 저장하는 중…" : canSave ? "베타 무료로 등록하기" : "구역·매매가·중개사무소를 입력하세요"}
         </button>
         <p className="mt-1.5 text-[11px] text-slate-400">
           등록하면 메인 지도에 <b>🏠 매물</b> 배지가, 이 구역 상세 패널과 <Link href="/listings" className="underline">매물 목록</Link>에
@@ -621,7 +653,9 @@ export default function RegisterPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <b className="text-sm text-slate-800">내가 등록한 매물 {mine.length}건</b>
-          <span className="text-[11px] text-slate-500">이 브라우저에만 저장됩니다</span>
+          <span className="text-[11px] text-slate-500">
+            공용 DB에 저장된 매물은 모든 방문자·기기에서 보입니다
+          </span>
           <div className="ml-auto flex gap-1.5">
             <button
               type="button"
@@ -660,6 +694,7 @@ export default function RegisterPage() {
                 </span>
                 <span className="flex flex-wrap items-center gap-1">
                   <ListingConditionBadges listing={l} />
+                  {sharedIds.includes(l.id) ? <Badge tone="green">공유됨</Badge> : <Badge tone="amber">이 브라우저만</Badge>}
                 </span>
                 <Link
                   href={`/?zone=${encodeURIComponent(l.zoneId)}`}
