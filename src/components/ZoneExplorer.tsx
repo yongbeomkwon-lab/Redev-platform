@@ -318,12 +318,17 @@ export default function ZoneExplorer() {
   //   · hiddenByDefault 구역(예: 여의대방2역세권에 포함·통합 추진되는 여의대방 가로주택정비사업)은
   //     지도에서만 빠진다 — 구역이 겹쳐 두 색으로 보이지 않게.
   const mapSeoulZones = useMemo(
-    () =>
-      (typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter))
-        .filter((z) => !z.hiddenByDefault)
+    () => {
+      const base = (typeFilter === "전체" ? visibleSeoulZones : visibleSeoulZones.filter((z) => z.type === typeFilter))
         // ‘매물 있는 구역’ 필터 — 매물이 없는 구역은 지도에서 뺀다
-        .filter((z) => !listingsOnly || listingZoneIds.has(z.id)),
-    [visibleSeoulZones, typeFilter, listingsOnly, listingZoneIds]
+        .filter((z) => !listingsOnly || listingZoneIds.has(z.id));
+      // 기본 숨김 구역이라도 **검색해 고른 구역**은 지도에 그린다 —
+      // 안 그러면 상세 패널만 열리고 지도에서는 사라져 위치를 찾을 수 없다(예: 사당21구역).
+      const picked = selectedId ? seoulZones.find((z) => z.id === selectedId) : undefined;
+      const rest = base.filter((z) => !z.hiddenByDefault || z.id === selectedId);
+      return picked && !rest.some((z) => z.id === picked.id) ? [...rest, picked] : rest;
+    },
+    [visibleSeoulZones, typeFilter, listingsOnly, listingZoneIds, selectedId, seoulZones]
   );
 
   /** 매물이 있는 구역 수 — 필터 칩에 병기(준공 숨김·유형 필터 반영) */
@@ -1606,7 +1611,7 @@ export default function ZoneExplorer() {
             </div>
             <p className="text-[10px] leading-snug text-slate-500">
               경계·면적·단계: 서울시 도시계획사업(서울플랜+)·의제처리구역(UQ181) 실데이터 ·{" "}
-              <b>점</b>은 구역계 미고시 후보지(예: 사당21구역) · <b>점선</b>은 준공·입주 완료 구역
+              <b>점</b>은 구역계 미고시 후보지(예: 신길16-1·방배16구역) · <b>점선</b>은 준공·입주 완료 구역
             </p>
             <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["역세권"] }}>역세권</b> = 역세권활성화·청년안심주택 ·{" "}
