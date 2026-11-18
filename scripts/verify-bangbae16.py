@@ -15,6 +15,7 @@ JIJEOK = os.environ.get("JIJEOK", "1") == "1"
 LAT = float(os.environ.get("LAT", "37.49315"))
 LNG = float(os.environ.get("LNG", "126.98489"))
 LEVEL = int(os.environ.get("LEVEL", "3"))
+ZOOMS = int(os.environ.get("ZOOMS", "2"))
 
 with sync_playwright() as p:
     b = p.chromium.launch(args=["--no-sandbox"])
@@ -59,23 +60,14 @@ with sync_playwright() as p:
 
     page.evaluate("() => window.__redevDiag.draw && window.__redevDiag.draw()")
     time.sleep(2)
-    # 선택한 구역에 맞춰 확대 (draw() 뒤에 해야 재-fitBounds 에 덮이지 않는다)
-    page.evaluate(
-        """([lat, lng, level]) => {
-          const d = window.__redevDiag, k = window.kakao;
-          const m = d.map();
-          m.setCenter(new k.maps.LatLng(lat, lng));
-          m.setLevel(level);
-        }""",
-        [LAT, LNG, LEVEL],
-    )
-    last = None
-    for _ in range(16):
-        time.sleep(0.7)
-        cur = page.evaluate("() => window.__redevDiag.map().getLevel()")
-        if cur == last:
+    # 지도 확대 — 구역계가 지적 경계와 맞는지 눈으로 볼 수 있게 (UI 확대 버튼 = 사람이 누르는 것과 같은 동작)
+    for _ in range(ZOOMS):
+        try:
+            page.locator("button:has-text('+')").last.click(timeout=3000)
+        except Exception as e:
+            print("확대 버튼 실패:", e)
             break
-        last = cur
+        time.sleep(1.8)
     time.sleep(2.5)
 
     # 지도 중심/레벨 확인
