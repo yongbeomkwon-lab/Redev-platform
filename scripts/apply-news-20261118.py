@@ -30,6 +30,7 @@ DPNEWS_NAEBANG1 = "https://www.dpnews.co.kr/news/articleView.html?idxno=2794"
 DPNEWS_JEUNGSAN = "https://www.dpnews.co.kr/news/articleView.html?idxno=2791"
 NEWSIS_MOA = "https://www.newsis.com/view/NISX20261118_0003872984"
 NEWSIS_YONGDU = "https://www.newsis.com/view/NISX20261118_0003873381"
+DDM_YONGDU = ("https://www.ddm.go.kr/www/selectBbsNttView.do?bbsNo=38&key=904&nttNo=156889")
 
 
 def circle_ring(lat: float, lng: float, radius_m: float, points: int = 96):
@@ -159,17 +160,21 @@ def main() -> int:
         "2026-09 재신청·2026-11-13 후보지 선정. 2026-11-18 동대문구가 서울시 신속통합기획 주택재개발 "
         "후보지 최종 선정을 공식 발표했습니다(가칭 용두7구역). 2025-04·2026-03 신청 때는 주민 반대로 "
         "탈락했으나 주민 동의율 70% 이상을 확보해 선정됐고, 인근 용두3구역(2026-03 정비구역 지정, 조합설립 "
-        "준비)·용두8구역(역세권 장기전세)과 연계해 추진됩니다. 구역면적 75,408㎡(민간 정리값)."
+        "준비)·용두8구역(역세권 장기전세)과 연계해 추진됩니다. 구역면적 75,408㎡(민간 정리값). "
+        "구역계는 동대문구 구역공개 안내문(2024-11-04, 동의양식 제2호) 구역도에서 옮긴 폴리곤"
+        "(geom=공고도면)으로 반영했습니다 — 동쪽은 왕산로 서편 필지까지 포함합니다."
     )
-    srcs = p.get("sources") or []
-    if isinstance(srcs, list):
-        srcs.append(
-            {
-                "label": "뉴시스 — 동대문구 용두동 39번지, 신통기획 재개발 후보지 선정(2026-11-18)",
-                "url": NEWSIS_YONGDU,
-            }
-        )
-    p["sources"] = srcs
+    # 출처는 화면(ZoneOfficialPanel)이 {label,url} 로 읽는다 — 앞 단계가 넣은 문자열 출처를 정리해 덮어쓴다(멱등).
+    p["sources"] = [
+        {
+            "label": "동대문구 「신속통합기획 관련 동의양식 번호부여 및 구역공개(용두동 39번지 일대)」 안내문·구역도(2024-11-04, 동의양식 제2호)",
+            "url": DDM_YONGDU,
+        },
+        {
+            "label": "뉴시스 — 동대문구 용두동 39번지, 신통기획 재개발 후보지 선정(2026-11-18)",
+            "url": NEWSIS_YONGDU,
+        },
+    ]
     p["sourceId"] = "2026-11-18 동대문구 발표"
 
     # ── 4) 민간도심복합(주거중심형) 추진준비 2곳 ──────────────────────
