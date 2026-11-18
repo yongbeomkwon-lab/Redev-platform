@@ -2571,10 +2571,11 @@ function fitLatLngSpan(
   const hPx = Math.max(Math.abs(ne.y - sw.y), 0.5);
   const fit = Math.min((cw - pad * 2) / wPx, (ch - pad * 2) / hPx);
   // 기본은 2배 단위(floor) — 구역 경계가 잘리지 않게. fill 이면 반올림해 화면을 꽉 채운다.
-  //   · 축소는 한 번에 **1단계까지만**. 예전에는 큰 구역을 고르면 한 번에 2~3단계씩 멀어져
-  //     “화면이 갑자기 작아진다”는 느낌을 줬다. 이미 화면에 들어와 있으면(0.8~1.6배) 그대로 둔다.
+  //   · step > 0 = 확대(작은 구역), step < 0 = 축소(큰 구역).
+  //   · **축소는 한 번에 1단계까지만** — 예전에는 화면 밖 큰 구역을 고르면 한 번에 2~3단계씩
+  //     멀어져 “화면이 갑자기 작아진다”는 느낌을 줬다. 확대는 제한하지 않는다.
   const rawStep = fill ? Math.round(Math.log2(Math.max(fit, 0.01))) : Math.floor(Math.log2(Math.max(fit, 0.01)));
-  const step = fill ? rawStep : Math.min(rawStep, 1);
+  const step = fill ? rawStep : Math.max(rawStep, -1);
   const level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, map.getLevel() - step));
   map.jump(new k.maps.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2), level, {
     animate: { duration: 350 },
