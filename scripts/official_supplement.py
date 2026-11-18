@@ -38,6 +38,8 @@ UPDATES_PATH = os.path.join(HERE, "data", "official-updates.json")
 SANGDO23_PATH = os.path.join(HERE, "data", "official-sangdo23.json")
 # 「상도동 182-13」(동작센트럴자이) — UQ120 일반화 도형 남측 경계를 상도23구역에 맞닿도록 보정한 구역계
 SANGDO182_PATH = os.path.join(HERE, "data", "official-sangdo182.json")
+# 「자양동 10번지 일원」 — 대표님이 관리자 그리기 도구로 직접 그린 경계(민간도심복합·성장거점형, 추진준비)
+JAYANG10_PATH = os.path.join(HERE, "data", "official-jayang10.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -88,6 +90,13 @@ def load_sangdo23(path=SANGDO23_PATH):
 
 
 def load_sangdo182(path=SANGDO182_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_jayang10(path=JAYANG10_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -225,10 +234,13 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 7) 기존 구역의 단계·분류 정정 / 기본 지도 숨김 (공식 공고·고시) ────────
     stats_upd = apply_updates(fc, seoul_zones)
 
-    # ── 8) 상도23구역 — 동작구 공고 제2026-1857호 정비구역 결정도 구역계로 교체 ─────
+    # ── 8) 자양동 10번지 일원 — 관리자 그리기 도구로 그린 경계(민간도심복합·성장거점형) ─────
+    stats_jay = apply_jayang10(fc, seoul_zones)
+
+    # ── 9) 상도23구역 — 동작구 공고 제2026-1857호 정비구역 결정도 구역계로 교체 ─────
     stats_sd23 = apply_sangdo23(fc, seoul_zones)
 
-    # ── 9) 상도동 182-13(동작센트럴자이) — 남측 경계를 상도23구역 북측 경계에 맞닿도록 보정 ─
+    # ── 10) 상도동 182-13(동작센트럴자이) — 남측 경계를 상도23구역 북측 경계에 맞닿도록 보정 ─
     stats_sd182 = apply_sangdo182(fc, seoul_zones)
 
     meta["count"] = len(features)
@@ -273,6 +285,15 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         }
         stats["addedSy"] = stats_sy["_new"]
         stats["aliasedSy"] = stats_sy["_aliased"]
+    if stats_jay:
+        meta["jayang10"] = {
+            "asOf": stats_jay["asOf"],
+            "additions": stats_jay["additions"],
+            "polygons": stats_jay["polygons"],
+            "points": stats_jay["points"],
+            "note": "광진구 자양동 10번지 일원 — 성장거점형 민간도심복합개발 검토 단계. 구역계 고시 전이라 대표님이 리디브 관리자 그리기 도구(?admin=1)로 지도에 직접 그린 경계(6점, 57,277㎡ · 17,326평)를 geom=\"가상경계\"로 표시해 넣었다. 사업지 선정·구역 지정 전이므로 실제 사업 경계와 다를 수 있다.",
+        }
+        stats["addedJayang"] = stats_jay["_new"]
     if stats_sd23:
         meta["sangdo23"] = {
             "asOf": stats_sd23["asOf"],
@@ -491,6 +512,98 @@ def apply_ydp(fc, seoul_zones):
         if rings:
             if rings and isinstance(rings[0][0], (int, float)):
                 rings = [rings]
+            out_rings = []
+            for ring in rings:
+                coords = [[lng, lat] for lat, lng in ring]
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                out_rings.append(coords)
+            geometry = ({"type": "Polygon", "coordinates": [out_rings[0]]}
+                        if len(out_rings) == 1 else
+                        {"type": "MultiPolygon", "coordinates": [[r] for r in out_rings]})
+
+        existing = by_feature_id.get(a["id"])
+        if existing is not None:
+            existing["properties"] = props
+            existing["geometry"] = geometry
+            zone = by_id.get(a["id"])
+            if zone is not None:
+                zone.update({k: v for k, v in props.items() if k != "sourceId"})
+                zone["sid"] = props["sourceId"]
+                zone["asOf"] = doc.get("asOf")
+                if rings:
+                    zone["polygon"] = [list(p) for p in rings[0]]
+                    if len(rings) > 1:
+                        zone["parts"] = [list(p) for p in rings[1:]]
+        else:
+            features.append({"type": "Feature", "id": a["id"], "properties": props, "geometry": geometry})
+            by_feature_id[a["id"]] = features[-1]
+            zone = {k: v for k, v in props.items() if k != "sourceId"}
+            zone["sid"] = props["sourceId"]
+            zone["asOf"] = doc.get("asOf")
+            if rings:
+                zone["polygon"] = [list(p) for p in rings[0]]
+                if len(rings) > 1:
+                    zone["parts"] = [list(p) for p in rings[1:]]
+            seoul_zones.append(zone)
+            by_id[a["id"]] = zone
+
+        stats["_new"] += 1
+
+    return stats
+
+
+def apply_jayang10(fc, seoul_zones):
+    """자양동 10번지 일원(성장거점형 민간도심복합개발) 적용(멱등).
+
+    · 법적 구역계가 아직 없다 — 대표님이 리디브 관리자 그리기 도구(?admin=1)로 지도 위에서
+      직접 그린 6점 경계를 **가상경계**로 넣고 geom="가상경계"로 표시한다(확정 전임을 화면에서도 알린다).
+    · 사용자가 내보낸 관리자 GeoJSON(attachments/2026-11-18/TalkFile_custom-zones-20261118-0907-….json)의
+      ringLatLng 6점을 그대로 쓴다 — 좌표를 다시 그리지 않는다.
+    · 민간 서비스(재개발닷컴·재개발뷰 등)의 폴리곤 좌표는 쓰지 않았다.
+    """
+    doc = load_jayang10()
+    if not doc:
+        return None
+    srcs = doc.get("sources", {})
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    stats = {"asOf": doc.get("asOf"),
+             "additions": len(doc.get("additions", [])),
+             "polygons": sum(1 for a in doc.get("additions", []) if a.get("polygon")),
+             "points": sum(1 for a in doc.get("additions", []) if not a.get("polygon")),
+             "aliases": len(doc.get("aliases", [])),
+             "_new": 0, "_aliased": 0}
+
+    for a in doc.get("additions", []):
+        sources = [srcs[k] for k in (a.get("sources") or []) if k in srcs]
+        rings = a.get("polygon")
+        if rings and isinstance(rings[0][0], (int, float)):
+            rings = [rings]
+        geom_kind = a.get("boundary") or ("가상경계" if rings else "미고시")
+        props = {
+            "id": a["id"],
+            "name": a["name"],
+            "alias": list(a.get("alias") or []),
+            "type": a.get("type", "민간도심복합(성장거점형)"),
+            "kind": a.get("kind", "민간도심복합개발(성장거점형)"),
+            "stage": a.get("stage", "추진준비"),
+            "gu": a["gu"],
+            "area": a.get("area", 0),
+            "featured": False,
+            "sourceId": a.get("sourceId") or doc.get("asOf"),
+            "geom": geom_kind,
+            "center": list(a["center"]),
+        }
+        for key in ("selectedAt", "centerLabel", "locationMap", "note", "areaNote", "boundaryNote"):
+            if a.get(key):
+                props[key] = a[key]
+        if sources:
+            props["sources"] = sources
+
+        geometry = None
+        if rings:
             out_rings = []
             for ring in rings:
                 coords = [[lng, lat] for lat, lng in ring]
