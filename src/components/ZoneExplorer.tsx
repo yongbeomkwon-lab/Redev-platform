@@ -313,7 +313,7 @@ export default function ZoneExplorer() {
   }, [selectedId]);
   // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
   const selectedListings = listings.filter((l) =>
-    listingMatchesZone(l, selectedId, selectedSeoul?.name ?? selected?.name)
+    listingMatchesZone(l, selectedId, selectedSeoul?.name ?? selected?.name, selectedSeoul?.alias)
   );
 
   // ── 매물 조건 필터 ────────────────────────────────────────────────────────
@@ -427,8 +427,26 @@ export default function ZoneExplorer() {
     if (!term) return empty;
     const flat = term.replace(/\s+/g, "");
     const hit = (s?: string) => !!s && s.replace(/\s+/g, "").includes(flat);
+    const exact = (s?: string) => !!s && s.replace(/\s+/g, "") === flat;
+    const starts = (s?: string) => !!s && s.replace(/\s+/g, "").startsWith(flat);
+    // 정확 일치를 먼저 본다 — '용두동 39'로 찾을 때 '용두동 39-24 역세시프'(다른 구역)보다
+    // '용두동 39'(가칭 용두7구역)가 먼저 나와야 한다(2026-11-18 제보).
     const rank = (z: SeoulZone) =>
-      hit(z.name) ? 0 : (z.alias ?? []).some(hit) ? 1 : hit(z.kind) || hit(z.type) ? 2 : 3;
+      exact(z.name)
+        ? 0
+        : (z.alias ?? []).some(exact)
+          ? 1
+          : starts(z.name)
+            ? 2
+            : (z.alias ?? []).some(starts)
+              ? 3
+              : hit(z.name)
+                ? 4
+                : (z.alias ?? []).some(hit)
+                  ? 5
+                  : hit(z.kind) || hit(z.type)
+                    ? 6
+                    : 7;
     const matches = (list: SeoulZone[]) =>
       list.filter((z) => hit(z.name) || hit(z.kind) || hit(z.type) || z.gu.includes(term) || (z.alias ?? []).some(hit));
     const sortFn = (a: SeoulZone, b: SeoulZone) =>
@@ -963,6 +981,8 @@ export default function ZoneExplorer() {
         id: z.id,
         name: z.name,
         type: z.type,
+        stage: z.stage,
+        gu: z.gu,
         color: customZoneColor(z.type),
         ring: z.ring,
         replaces: !!z.replacesZoneId,

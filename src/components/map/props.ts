@@ -164,6 +164,10 @@ export type AdminZoneShape = {
   id: string;
   name: string;
   type: string;
+  /** 추진단계 — 지도 이름표에 [유형 · 단계] 뱃지로 쓴다(관리자 구역은 서울시 데이터에 없다) */
+  stage?: string;
+  /** 자치구 — 툴팁·이름표 보조 표기 */
+  gu?: string;
   color: string;
   ring: [number, number][];
   /** 공식 구역 도형을 대체하는 경계 보정인지(점선으로 구분) */

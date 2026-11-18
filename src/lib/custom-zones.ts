@@ -39,9 +39,10 @@ export type CustomZoneType = MapZoneType | "기타";
  */
 export const CUSTOM_TYPE_KIND: Partial<Record<CustomZoneType, string>> = ZONE_TYPE_KIND;
 
-/** 추진단계 — 서울시 데이터(서울플랜+)의 단계 이름 + 추진준비(구역지정 전) */
+/** 추진단계 — 서울시 데이터(서울플랜+)의 단계 이름 + 추진준비·정비예정(구역지정 전) */
 export const CUSTOM_ZONE_STAGES = [
   "추진준비",
+  "정비예정",
   "구역지정",
   "추진위원회",
   "사업시행인가",
@@ -80,6 +81,13 @@ export const SEOUL_GU = [
   "송파구",
   "강동구",
 ] as const;
+
+/**
+ * 자치구 가나다순 목록 — 관리자 그리기 패널의 자치구 선택(네이티브 select)에 쓴다.
+ *   · 원본 SEOUL_GU 는 행정구역 순서라 화면에서 찾기 어렵고,
+ *     datalist 로는 아이패드 사파리에서 목록이 잘려 25개 구가 다 안 보였다(2026-11-18 제보).
+ */
+export const SEOUL_GU_SORTED: readonly string[] = [...SEOUL_GU].sort((a, b) => a.localeCompare(b, "ko"));
 
 /** 지도에 그린 구역 한 건 */
 export type CustomZone = Omit<ZoneRecord, "type"> & {

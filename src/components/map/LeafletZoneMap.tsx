@@ -485,14 +485,16 @@ export default function LeafletZoneMap({
   // 지하철 노선·역명 레이어 — 재개발 상담에서 “역세권인지”가 첫 질문이라 기본 ON
   const [showSubway, setShowSubway] = useState(true);
 
-  // 선택 구역 — 대표 구역(상세 데이터) → 전수 구역 순. 경계 미고시 후보지는 polygon이 없다.
+  // 선택 구역 — 대표 구역(상세 데이터) → 전수 구역 → 관리자 직접 그린 구역. 경계 미고시 후보지는 polygon이 없다.
   const selected = useMemo(() => {
     const f = zones.find((z) => z.id === selectedZoneId);
     if (f) return { ring: f.polygon, point: undefined as [number, number] | undefined };
     const s = seoulZones.find((z) => z.id === selectedZoneId);
-    if (!s) return { ring: undefined, point: undefined };
-    return { ring: s.polygon, point: s.polygon ? undefined : s.center };
-  }, [zones, seoulZones, selectedZoneId]);
+    if (s) return { ring: s.polygon, point: s.polygon ? undefined : s.center };
+    const c = admin?.zones?.find((z) => z.id === selectedZoneId);
+    if (c && c.ring.length >= 3) return { ring: c.ring, point: undefined as [number, number] | undefined };
+    return { ring: undefined, point: undefined };
+  }, [zones, seoulZones, selectedZoneId, admin?.zones]);
 
   // 구역계가 아직 고시되지 않은 후보지(예: 사당21구역) — 폴리곤 대신 점으로 표시
   const pointZones = useMemo(() => seoulZones.filter((z) => !z.featured && !z.polygon), [seoulZones]);

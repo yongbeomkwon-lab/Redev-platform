@@ -13,7 +13,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import {
   CUSTOM_ZONE_STAGES,
   CUSTOM_ZONE_TYPES,
-  SEOUL_GU,
+  SEOUL_GU_SORTED,
   formatArea,
   ringAreaSqm,
   type CustomZone,
@@ -291,19 +291,21 @@ export function AdminZonePanel(props: AdminPanelProps) {
             </label>
             <label className="block text-[10px] font-semibold text-slate-500">
               자치구
-              <input
+              {/* datalist 는 아이패드 사파리에서 목록이 잘려 25개 구가 다 안 보였다(2026-11-18 제보) — 네이티브 select 로 바꿔
+                  사업유형·추진단계와 같은 방식으로 고른다. */}
+              <select
                 data-testid="admin-zone-gu"
-                list={`${listId}-gu`}
                 value={meta.gu}
                 onChange={(e) => props.onMetaChange({ gu: e.target.value })}
-                placeholder="예: 관악구"
-                className="mt-0.5 w-full rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-900 focus:border-sky-500 focus:outline-none"
-              />
-              <datalist id={`${listId}-gu`}>
-                {SEOUL_GU.map((g) => (
-                  <option key={g} value={g} />
+                className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-xs font-medium text-slate-900 focus:border-sky-500 focus:outline-none"
+              >
+                <option value="">선택</option>
+                {SEOUL_GU_SORTED.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </label>
           </div>
           <label className="mt-1.5 block text-[10px] font-semibold text-slate-500">

@@ -1641,22 +1641,25 @@ export default function KakaoZoneMap({
     if (!selectedZoneId) return "";
     const seoul = seoulZones.find((z) => z.id === selectedZoneId);
     const featured = zones.find((z) => z.id === selectedZoneId);
-    const name = seoul?.name ?? featured?.name;
+    // 관리자 모드에서 직접 그려 저장한 구역도 이름표를 보여준다 — 예전에는 서울시 데이터·대표 구역만
+    // 찾아서 관리자 구역을 고르면 뱃지가 아예 안 떴다(2026-11-18 제보).
+    const custom = admin?.zones?.find((z) => z.id === selectedZoneId);
+    const name = seoul?.name ?? featured?.name ?? custom?.name;
     if (!name) return "";
-    const type = seoul?.type ?? featured?.type;
-    const stage = seoul?.stage ?? featured?.stage;
+    const type = seoul?.type ?? featured?.type ?? custom?.type;
+    const stage = seoul?.stage ?? featured?.stage ?? custom?.stage;
     const parcel = (seoul?.alias ?? []).find((a) => /\d+-\d+/.test(a));
     const typeLabel = shortZoneType(type);
     const stageLabel = shortStage(stage);
     const badgeText = [typeLabel, stageLabel].filter(Boolean).join(" · ");
-    const typeColor = type ? TYPE_COLORS[type] ?? "#64748b" : "#64748b";
+    const typeColor = type ? (TYPE_COLORS as Record<string, string>)[type] ?? "#64748b" : "#64748b";
     const badge = badgeText
       ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(badgeText)}</span>`
       : "";
     return `${badge}<b>${escapeHtml(name)}</b>${
       parcel ? `<span class="zone-name-sub"> · ${escapeHtml(parcel)}</span>` : ""
     }`;
-  }, [selectedZoneId, seoulZones, zones]);
+  }, [selectedZoneId, seoulZones, zones, admin?.zones]);
 
   useEffect(() => {
     const k = sdkRef.current;
@@ -1668,10 +1671,19 @@ export default function KakaoZoneMap({
     }
     const seoul = seoulZones.find((z) => z.id === selectedZoneId);
     const featured = zones.find((z) => z.id === selectedZoneId);
+    // 관리자 구역은 서울시 데이터에 없으므로 링 중심(평균)을 이름표 위치로 쓴다
+    const custom = admin?.zones?.find((z) => z.id === selectedZoneId);
     const zoneChanged = lastLabelZoneRef.current !== selectedZoneId;
     lastLabelZoneRef.current = selectedZoneId;
-    const lat = seoul ? seoul.center[0] : featured?.polygon?.[0]?.[0];
-    const lng = seoul ? seoul.center[1] : featured?.polygon?.[0]?.[1];
+    const customCenter =
+      custom && custom.ring.length >= 3
+        ? [
+            custom.ring.reduce((s, p) => s + p[0], 0) / custom.ring.length,
+            custom.ring.reduce((s, p) => s + p[1], 0) / custom.ring.length,
+          ]
+        : undefined;
+    const lat = seoul ? seoul.center[0] : featured?.polygon?.[0]?.[0] ?? customCenter?.[0];
+    const lng = seoul ? seoul.center[1] : featured?.polygon?.[0]?.[1] ?? customCenter?.[1];
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
     labelAtRef.current = { lat, lng };
 
@@ -1690,12 +1702,21 @@ export default function KakaoZoneMap({
     // 경계가 있으면 경계에 맞춰, 후보지는 점으로 이동
     if (seoul?.polygon && seoul.polygon.length >= 3) {
       fitBounds(k, map, seoul, mapElRef.current);
+    } else if (custom && custom.ring.length >= 3) {
+      let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+      for (const [la, ln] of custom.ring) {
+        if (la < minLat) minLat = la;
+        if (la > maxLat) maxLat = la;
+        if (ln < minLng) minLng = ln;
+        if (ln > maxLng) maxLng = ln;
+      }
+      fitLatLngSpan(k, map, minLat, minLng, maxLat, maxLng, mapElRef.current);
     } else if (seoul) {
       map.jump(new k.maps.LatLng(seoul.center[0], seoul.center[1]), 5, { animate: { duration: 350 } });
     }
     draw();
     settleView();
-  }, [selectedZoneId, seoulZones, zones, addressPin, draw, settleView]);
+  }, [selectedZoneId, seoulZones, zones, addressPin, draw, settleView, admin?.zones]);
 
   // ── ‘구역 전체 보기’ 요청 — 주소 핀 화면에서 구역 경계 전체로 넓힌다 ─────────
   //   요청 토큰이 **바뀐 순간에만** 움직인다(다른 구역을 골랐을 때 다시 맞추지 않도록).
@@ -1707,7 +1728,8 @@ export default function KakaoZoneMap({
     lastFitReqRef.current = zoneFitRequest;
     const seoul = seoulZones.find((z) => z.id === selectedZoneId);
     const featured = zones.find((z) => z.id === selectedZoneId);
-    const ring = seoul?.polygon ?? featured?.polygon;
+    const custom = admin?.zones?.find((z) => z.id === selectedZoneId);
+    const ring = seoul?.polygon ?? featured?.polygon ?? custom?.ring;
     if (ring && ring.length >= 3) {
       let minLat = Infinity;
       let maxLat = -Infinity;
@@ -1724,7 +1746,7 @@ export default function KakaoZoneMap({
       fitLatLngSpan(k, map, minLat, minLng, maxLat, maxLng, mapElRef.current);
       settleView();
     }
-  }, [zoneFitRequest, selectedZoneId, seoulZones, zones, settleView]);
+  }, [zoneFitRequest, selectedZoneId, seoulZones, zones, settleView, admin?.zones]);
 
   // ── ‘서울 전체 보기’ 요청 ─────────────────────────────────────────────────────
   //   「내 매물만 보기」를 켜면 서울 전체 매물 핀이 한 화면에 들어오도록 넓힌다.

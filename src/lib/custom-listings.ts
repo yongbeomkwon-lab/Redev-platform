@@ -243,11 +243,17 @@ export async function allListingsWithDb(): Promise<Listing[]> {
 // ─── 구역 매칭 · 집계 ────────────────────────────────────────────────────────
 
 /** 매물이 이 구역의 것인지 — zoneId 우선, 없으면 구역명으로 맞춘다(옛 저장분·직접 입력) */
-export function listingMatchesZone(l: Listing, zoneId?: string, zoneName?: string): boolean {
+export function listingMatchesZone(l: Listing, zoneId?: string, zoneName?: string, zoneAliases?: string[]): boolean {
   if (zoneId && l.zoneId === zoneId) return true;
   // 구역 id 는 데이터 개편(중복 병합·공식명 전환)으로 바뀔 수 있다 — 그때도 매물이 사라지지 않도록
   // 이름(공백 무시)으로 한 번 더 본다. 같은 이름의 구역은 데이터에서 하나로 합쳐져 있다.
-  if (zoneName && l.zoneName) return l.zoneName.replace(/\s+/g, "") === zoneName.replace(/\s+/g, "");
+  // 별칭도 함께 본다 — 매물 설명에 현장 호칭('양재5구역'·'신정5구역')이 적혀 등록된 매물이
+  // 정식 구역명('신정동 1152번지 일대')과 이어지게 한다(2026-11-18).
+  const norm = (s: string) => s.replace(/\s+/g, "");
+  const want = new Set<string>();
+  if (zoneName) want.add(norm(zoneName));
+  for (const a of zoneAliases ?? []) want.add(norm(a));
+  if (l.zoneName && want.has(norm(l.zoneName))) return true;
   return false;
 }
 
