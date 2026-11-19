@@ -7,7 +7,7 @@
 
   확인 항목
     1) 구역 안 주소 → 핀 + 소속 구역(CustomOverlay 말풍선) + 오른쪽 상세 패널 + 스크린샷
-    2) 구역 밖 주소 → '정비구역 밖' 안내 + 최단거리 구역 1~3곳 + 클릭 이동 + 스크린샷
+    2) 구역 밖 주소 → 판정 문구 없이 지점 핀(주소 한 줄)만 + 가까운 구역 1~3곳 + 클릭 이동 + 스크린샷
     3) 준공 구역 주소 → '준공 완료된 ○○구역 내 주소' 안내 + 준공 토글 자동 ON
     4) 경계 미고시 후보지 인근 주소 → '경계 미고시 후보지 인근' 안내
     5) 핀 지우기 버튼 → 핀·카드 제거
@@ -22,6 +22,7 @@ from playwright.sync_api import sync_playwright
 URL = os.environ.get("TARGET_URL", "http://localhost:3100/?diag=1")
 SHOT_INSIDE = "/workspace/downloads/redev-address-inside.png"
 SHOT_OUTSIDE = "/workspace/downloads/redev-address-outside.png"
+SHOT_OUTSIDE_PIN = "/workspace/downloads/redev-addr-outside-pin.png"
 
 INSIDE_Q = "신림동 362-32"       # 서울 관악구 신림동 362-32 — 신림1구역 내부
 OUTSIDE_Q = "테헤란로 152"       # 서울 강남구 테헤란로 152 (강남파이낸스센터) — 구역 밖
@@ -92,16 +93,21 @@ def run() -> int:
         search(page, OUTSIDE_Q)
         page.wait_for_selector("[data-testid=address-candidate]", timeout=15000)
         page.get_by_test_id("zone-search-input").press("Enter")
-        wait_card(page)
-        headline = page.get_by_test_id("address-status-headline").inner_text()
-        check("② 구역 밖 주소 — 안내 문구", "정비구역 밖" in headline, headline)
+        card = wait_card(page)
+        check("② 구역 밖 — 판정 배너 없음", page.query_selector("[data-testid=address-status]") is None)
+        check("② 구역 밖 — '정비구역 밖' 문구 없음", "정비구역 밖" not in card, card.replace("\n", " | ")[:160])
+        pin_el = page.query_selector("[data-testid=address-pin]")
+        check("② 구역 밖 — 지점 핀 표시", pin_el is not None)
+        pin_text = pin_el.inner_text().replace("\n", " | ") if pin_el else ""
+        check("② 핀에 주소만", ("테헤란로 152" in pin_text) and ("정비구역 밖" not in pin_text), pin_text)
         nearest = page.query_selector_all("[data-testid=nearest-zone]")
         check("② 최단거리 구역 1~3곳", 1 <= len(nearest) <= 3, f"{len(nearest)}곳")
         nearest_text = nearest[0].inner_text().replace("\n", " ") if nearest else ""
         check("② 최단거리 표기(m/km)", ("m" in nearest_text), nearest_text)
         time.sleep(1.8)
         page.screenshot(path=SHOT_OUTSIDE)
-        print("   스크린샷:", SHOT_OUTSIDE)
+        page.screenshot(path=SHOT_OUTSIDE_PIN)
+        print("   스크린샷:", SHOT_OUTSIDE, "/", SHOT_OUTSIDE_PIN)
         # 최단거리 구역 클릭 → 그 구역으로 이동/상세
         if nearest:
             first_name = nearest_text.split(" ")[0]

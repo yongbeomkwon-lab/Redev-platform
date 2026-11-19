@@ -543,7 +543,8 @@ export default function ZoneExplorer() {
       pickZone(v.completedHits[0].zone.id);
     } else {
       // 구역 밖·후보지 인근 — 엉뚱한 구역이 선택된 채로 남아 오해하지 않게 선택을 풀고,
-      // 가까운 구역 목록(카드)만 보여준다. 목록에서 고르면 그때 상세가 열린다.
+      // 지도는 그 지점으로만 이동한다(구역 밖이면 판정 배너 없이 핀만). 카드의 가까운 구역
+      // 목록에서 고르면 그때 상세가 열린다.
       setSelectedId(undefined);
       setPanelOpen(true);
     }
@@ -1389,7 +1390,8 @@ export default function ZoneExplorer() {
               </button>
             </div>
 
-            {/* 결론 — 판정 종류별 색 */}
+            {/* 결론 — 판정 종류별 색. 구역 밖은 판정 배너를 띄우지 않고 지점만 보여준다. */}
+            {addrVerdict.status !== "outside" && (
             <div
               data-testid="address-status"
               className={
@@ -1505,6 +1507,7 @@ export default function ZoneExplorer() {
                 </>
               )}
             </div>
+            )}
 
             {/* 구역 밖·후보지 인근 — 가장 가까운 정비구역 1~3곳(클릭하면 그 구역으로 이동) */}
             {(addrVerdict.status === "outside" || addrVerdict.status === "near-candidate") &&

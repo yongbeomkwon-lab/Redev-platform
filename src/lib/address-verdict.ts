@@ -75,7 +75,7 @@ export function judgeAddress(
   return { address, inside, completedHits, nearCandidates, nearest, status };
 }
 
-/** 말풍선·카드에 쓰는 한 줄 판정 문구 */
+/** 말풍선·카드에 쓰는 한 줄 판정 문구 — 구역 밖은 빈 문자열(문구 없이 지점만) */
 export function verdictHeadline(v: AddressVerdict): string {
   switch (v.status) {
     case "inside": {
@@ -91,7 +91,9 @@ export function verdictHeadline(v: AddressVerdict): string {
       return `⚠️ 경계 미고시 후보지(${z.name}) 인근 주소`;
     }
     default:
-      return "정비구역 밖 주소입니다";
+      // 구역 밖 — 판정 문구를 싣지 않는다(핀은 주소만, 카드는 가까운 구역 목록만).
+      // ‘정비구역 밖 주소입니다’는 찾은 위치를 부정하는 것처럼 읽혀 걷어냈다.
+      return "";
   }
 }
 

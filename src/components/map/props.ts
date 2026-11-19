@@ -182,7 +182,7 @@ export type AddressPin = {
   label: string;
   /** 판정 종류 — 핀·말풍선 색을 가른다 */
   status: "inside" | "completed" | "near-candidate" | "outside";
-  /** 말풍선 한 줄: ✅ 신림1구역 포함 / 정비구역 밖 주소입니다 … */
+  /** 말풍선 한 줄: ✅ 신림1구역 포함 / ⚠️ 경계 미고시 후보지 인근 … (구역 밖은 빈 문자열 — 주소만 찍는다) */
   message: string;
   /** 이 주소가 속한 구역 — 있으면 선택 구역과 핀이 같은 곳이다(핀 화면을 유지한다) */
   zoneId?: string;

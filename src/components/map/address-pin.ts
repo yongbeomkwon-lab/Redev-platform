@@ -22,7 +22,8 @@ const TONES: Record<AddressPin["status"], Tone> = {
   inside: { color: "#059669", text: "#065f46" }, // 신림1구역 포함
   completed: { color: "#d97706", text: "#92400e" }, // 준공 완료 구역
   "near-candidate": { color: "#7c3aed", text: "#5b21b6" }, // 경계 미고시 후보지 인근
-  outside: { color: "#e11d48", text: "#9f1239" }, // 정비구역 밖
+  // 정비구역 밖 = 경고가 아니라 ‘찾은 지점’이다 → 붉은색 대신 무채색 슬레이트
+  outside: { color: "#334155", text: "#1e293b" },
 };
 
 function esc(s: string): string {
@@ -34,9 +35,29 @@ function esc(s: string): string {
  *  · 카드 배경은 `#ffffff`(불투명) + 2px 테두리 + 진한 그림자 — 폴리곤 채움 위에서도 또렷하다.
  *  · 핀은 흰 테두리 3px 드롭핀(24×32) — 지도 배경(항공사진·지적편도)에서도 눈에 띈다.
  *  · 바깥 div 는 `transform: translate(-50%,-100%)` 로 **핀 끝이 좌표에 닿게** 놓는다.
+ *  · 구역 밖(outside)은 판정 문구를 싣지 않는 한 줄짜리 조용한 핀이다 — 아래 분기 참고.
  */
 export function addressPinHtml(pin: AddressPin): string {
   const tone = TONES[pin.status] ?? TONES.outside;
+
+  // 구역 밖 주소 — 판정 문구 없이 **지점 + 주소 한 줄**만. ‘정비구역 밖 주소입니다’ 같은
+  // 경고 카드는 사용자가 찾은 위치를 부정하는 것처럼 보여, 그 자리는 조용한 슬레이트 핀으로 둔다.
+  if (pin.status === "outside") {
+    return `
+  <div style="transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;pointer-events:none;">
+    <div style="max-width:250px;border-radius:12px;border:1.5px solid #e2e8f0;background:#ffffff;padding:6px 11px;text-align:center;box-shadow:0 8px 22px rgba(15,23,42,.30),0 1px 3px rgba(15,23,42,.22);">
+      <div style="font-size:12px;font-weight:700;line-height:1.2;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:226px;">${esc(
+        pin.label
+      )}</div>
+    </div>
+    <div style="width:0;height:0;margin-top:-1px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid ${tone.color};"></div>
+    <svg width="24" height="32" viewBox="0 0 24 32" aria-hidden="true" style="display:block;margin-top:-1px;filter:drop-shadow(0 2px 3px rgba(15,23,42,.45));">
+      <path d="M12 31C12 31 1 18.6 1 11.2A11 11 0 0 1 23 11.2C23 18.6 12 31 12 31Z" fill="${tone.color}" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="12" cy="11" r="3.8" fill="#ffffff"/>
+    </svg>
+  </div>`;
+  }
+
   return `
   <div style="transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;pointer-events:none;">
     <div style="max-width:250px;border-radius:12px;border:2px solid ${tone.color};background:#ffffff;padding:5px 10px 6px;text-align:center;box-shadow:0 8px 22px rgba(15,23,42,.38),0 1px 3px rgba(15,23,42,.28);">
