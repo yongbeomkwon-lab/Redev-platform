@@ -48,16 +48,10 @@ export const AGE_MAX_TILES = 40;
 /** WFS 가 한 번에 돌려주는 최대 피처 수(브이월드 상한 — 1,000 초과는 INVALID_RANGE) */
 export const AGE_WFS_MAX_FEATURES = 1000;
 
-/** 한 동(건물) — 서버가 좁혀서 내려주는 모양(클라이언트 페이로드를 줄이려고 키를 짧게) */
+/** 한 동(건물) — 서버가 좁혀서 내려주는 모양(클라이언트 페이로드·메모리를 줄이려고 키를 짧게) */
 export type AgeBuilding = {
   /** 사용승인 연도(YYYY). 연식 미상이면 null */
   y: number | null;
-  /** 건물 이름(아파트·상가 등). 없으면 null */
-  n?: string | null;
-  /** 지상 층수 */
-  f?: number;
-  /** 연면적(㎡) */
-  a?: number;
   /** 외곽 링들 — [lng, lat, lng, lat, …] 평면 배열. 구멍(hole)은 버리고 외곽만 쓴다 */
   r: number[][];
 };
@@ -117,11 +111,6 @@ export function approveYear(value: unknown): number | null {
   return y;
 }
 
-function finiteNum(value: unknown): number | undefined {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
-}
-
 /** WFS 피처 목록 → 지도에 칠할 건물 목록(도형이 없는 피처는 버린다) */
 export function buildingsFromFeatures(features: unknown): AgeBuilding[] {
   if (!Array.isArray(features)) return [];
@@ -131,13 +120,10 @@ export function buildingsFromFeatures(features: unknown): AgeBuilding[] {
     const rings = ringsOf(feature.geometry);
     if (rings.length === 0) continue;
     const props = feature.properties ?? {};
-    const rawName = props.buld_nm;
-    const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : null;
     out.push({
+      // 지금 지도는 연식 색만 칠한다 — 건물명·층수·연면적은 페이로드를 줄이려고 내리지 않는다
+      // (필요해지면 여기서 함께 내리면 된다: props.buld_nm / ground_floor_co / totar)
       y: approveYear(props.use_confm_de),
-      n: name,
-      f: finiteNum(props.ground_floor_co),
-      a: finiteNum(props.totar),
       r: rings,
     });
   }

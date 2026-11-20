@@ -84,30 +84,6 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
 
-  // 진단용 — 브이월드 여러 주소를 한 번에 찔러 상태·본문 앞부분을 돌려준다(?probe=1)
-  if (url.searchParams.get("probe") === "1") {
-    const probes = [
-      `https://www.vworld.kr/`,
-      `https://api.vworld.kr/req/search?service=search&request=search&version=2.0&crs=EPSG:4326&size=1&page=1&type=address&format=json&key=${key}&domain=${domain}`,
-      `https://api.vworld.kr/ned/wfs/getBldgisSpceWFS?SERVICE=WFS&REQUEST=GetFeature&VERSION=1.1.0&TYPENAME=dt_d010&BBOX=126.925,37.471,126.926,37.472&SRSNAME=EPSG:4326&OUTPUT=application/json&MAXFEATURES=1&key=${key}&domain=${domain}`,
-      `http://api.vworld.kr/ned/wfs/getBldgisSpceWFS?SERVICE=WFS&REQUEST=GetFeature&VERSION=1.1.0&TYPENAME=dt_d010&BBOX=126.925,37.471,126.926,37.472&SRSNAME=EPSG:4326&OUTPUT=application/json&MAXFEATURES=1&key=${key}&domain=${domain}`,
-    ];
-    const seen: { url: string; status: number; head: string }[] = [];
-    for (const probe of probes) {
-      try {
-        const res = await getText(probe, 8000, `https://${domain}/`);
-        seen.push({ url: probe.slice(0, 90), status: res.status, head: res.body.slice(0, 160) });
-      } catch (error) {
-        const e = error as { message?: string; cause?: { code?: string } };
-        seen.push({
-          url: probe.slice(0, 90),
-          status: -1,
-          head: `${e?.message ?? "error"} | ${e?.cause?.code ?? ""}`,
-        });
-      }
-    }
-    return NextResponse.json({ ok: false, error: "PROBE", probes: seen });
-  }
 
   const raw = (url.searchParams.get("bbox") ?? "").split(",").map((v) => Number(v.trim()));
   if (raw.length !== 4 || raw.some((v) => !Number.isFinite(v))) {

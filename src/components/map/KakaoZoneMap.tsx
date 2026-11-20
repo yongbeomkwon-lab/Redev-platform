@@ -2052,6 +2052,20 @@ export default function KakaoZoneMap({
     }
     const cx = (tx0 + tx1) / 2;
     const cy = (ty0 + ty1) / 2;
+    // 화면 밖으로 밀려난 타일은 버린다 — 메모리·Path2D 크기를 화면 범위로 묶어 둔다.
+    //   여유 1타일은 남겨, 팬으로 조금 돌아왔을 때 다시 부르지 않게 한다.
+    let pruned = false;
+    for (const key of ageTilesRef.current.keys()) {
+      const [ptx, pty] = key.split(",").map(Number);
+      if (ptx < tx0 - 1 || ptx > tx1 + 1 || pty < ty0 - 1 || pty > ty1 + 1) {
+        ageTilesRef.current.delete(key);
+        pruned = true;
+      }
+    }
+    if (pruned) {
+      ageDirtyRef.current = true;
+      rebuildAgePaths();
+    }
     const wanted: { key: string; d: number }[] = [];
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
@@ -2071,7 +2085,7 @@ export default function KakaoZoneMap({
     for (const w of wanted) ageQueueRef.current.push(w.key);
     patchAgeStats({ tooFar: false });
     void drainAgeQueue();
-  }, [drainAgeQueue, patchAgeStats]);
+  }, [drainAgeQueue, patchAgeStats, rebuildAgePaths]);
 
   // 지도 effect(idle)가 부를 수 있게 함수를 ref 로 넘긴다
   useEffect(() => {
