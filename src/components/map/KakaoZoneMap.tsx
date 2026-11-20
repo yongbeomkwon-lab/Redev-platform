@@ -140,8 +140,18 @@ const unmercator = (m: number) => ((2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 
 const ANCHOR_COLORS = ["rgb(255, 0, 170)", "rgb(0, 170, 255)"] as const;
 /** 기준점 사각형을 화면에서 몇 px 로 그릴지(반폭) — bbox 중심이 곧 좌표다 */
 const ANCHOR_PX = 2.5;
-/** 메르카토르 y 1단위당 각도 비 — 360/(2π) */
+/** 메르카토르 y 1단위당 각도 비 — 360/(2π) (= 180/π) */
 const MERC_PER_DEG = 360 / (2 * Math.PI);
+
+/**
+ * 노후도 건물 Path2D 의 원점(서울 중심 부근).
+ *  · Path2D 좌표를 (경도, 메르카토르y[라디안]) 그대로 넣으면 x축 1도와 y축 1라디안의 화면 배율이
+ *    180/π 배 달라 선 굵기가 세로로 57배(~34px) 늘어난다. → y에 MERC_PER_DEG 를 곱해
+ *    **두 축을 같은 단위(도)** 로 맞추고, setTransform 도 같은 비로 나눠 1:1 등방으로 그린다.
+ *  · 동시에 원점을 빼 두면 Float32 좌표 정밀도 손실(수 m)도 사라져 외곽선이 정확해진다.
+ */
+const AGE_ORIGIN_LNG = 127;
+const AGE_ORIGIN_M = mercator(37.55);
 
 type MapAnchor = {
   poly: KakaoPolygon | null;
@@ -699,7 +709,8 @@ export default function KakaoZoneMap({
     // ── 노후도(건물 연식) — 구역 채움보다 **아래**에 깐다(구역 경계선이 위로 올라오게) ────────
     //   타일에서 받은 건물들을 연식 구간별 Path2D 하나로 미리 합쳐 두었으므로,
     //   여기서는 지도의 아핀 변환을 ctx.setTransform 으로 **그대로** 걸고 구간마다 한 번만 fill 한다.
-    //   (경도 1도 → pxPerLng, 메르카토르 y 1 → pxPerMerc 이므로 Path2D 좌표를 (경도, 메르카토르y)로 둔다.
+    //   Path2D 좌표는 (경도-원점, (메르카토르y-원점)×MERC_PER_DEG) 이므로, y 배율을 같은 비로
+    //   나눠야 두 축의 화면 배율이 1:1 로 맞는다(그러지 않으면 선 굵기가 세로로 57배 늘어난다).
     //    건물이 1만 동이어도 프레임당 fill 은 5번 — 이동·확대 중에도 끊기지 않는다.)
     if (agingRef.current) {
       const ap = agePathsRef.current;
@@ -709,10 +720,11 @@ export default function KakaoZoneMap({
           dpr * pxPerLng,
           0,
           0,
-          dpr * pxPerMerc,
-          dpr * (p0x - lng0 * pxPerLng),
-          dpr * (p0y - m0 * pxPerMerc)
+          dpr * (pxPerMerc / MERC_PER_DEG),
+          dpr * (p0x + (AGE_ORIGIN_LNG - lng0) * pxPerLng),
+          dpr * (p0y + (AGE_ORIGIN_M - m0) * pxPerMerc)
         );
+        // 두 축 배율의 크기가 같으므로(등방) 선 굵기 하나로 x·y 가 같은 두께가 된다
         const lineW = 0.6 / Math.max(1e-9, Math.abs(pxPerLng));
         for (let i = 0; i < ap.paths.length; i++) {
           const path = ap.paths[i];
@@ -1947,7 +1959,7 @@ export default function KakaoZoneMap({
     });
   }, []);
 
-  /** 받은 타일 전부 → 연식 구간별 Path2D (월드좌표: 경도, 메르카토르 y) */
+  /** 받은 타일 전부 → 연식 구간별 Path2D (원점 상대 좌표, 두 축 모두 도 단위) */
   const rebuildAgePaths = useCallback(() => {
     const paths: Path2D[] = AGE_CLASSES.map(() => new Path2D());
     const counts: number[] = AGE_CLASSES.map(() => 0);
@@ -1962,8 +1974,16 @@ export default function KakaoZoneMap({
         let used = false;
         for (const ring of b.r) {
           if (!ring || ring.length < 6) continue;
-          path.moveTo(ring[0], mercator(ring[1]));
-          for (let i = 2; i < ring.length; i += 2) path.lineTo(ring[i], mercator(ring[i + 1]));
+          // 좌표 = (경도 - 원점경도, (메르카토르y - 원점y) × MERC_PER_DEG) — 두 축 모두 '도' 단위
+          path.moveTo(
+            ring[0] - AGE_ORIGIN_LNG,
+            (mercator(ring[1]) - AGE_ORIGIN_M) * MERC_PER_DEG
+          );
+          for (let i = 2; i < ring.length; i += 2)
+            path.lineTo(
+              ring[i] - AGE_ORIGIN_LNG,
+              (mercator(ring[i + 1]) - AGE_ORIGIN_M) * MERC_PER_DEG
+            );
           path.closePath();
           used = true;
         }
