@@ -199,7 +199,28 @@ ZoneMap.tsx
 - 검색은 이름·별칭·자치구에 더해 **서울시 사업유형(kind)·지도 분류(type)** 도 본다 — 이름이 지번뿐인
   구역도 `청년안심`·`미리내집`·`장기전세`·`역세권활성화` 로 찾힌다(이름·별칭 일치가 더 위 순위).
 
-## 4. 브이월드(UD602) 연동 상태 — 2026-11
+## 4. 브이월드(VWorld) 연동 상태 — 2026-11
+
+### 4-1. 건물 연식(노후도) WFS — **2026-11-20 연동 완료**
+
+| 항목 | 값 |
+|---|---|
+| 인증키 | `339B86BB-6986-4CE3-9707-06F51C3B4788` (`재개발플랫폼 노후도지도`, 2026-11-20 발급, 2027-05-20 만료) |
+| 키 설정 | **WMS/WFS API · 2D데이터 API · 국가중점 API · 지오코더 API · 검색 API** 체크, 서비스URL `https://redev-platform-iota.vercel.app` |
+| 엔드포인트 | `https://api.vworld.kr/ned/wfs/getBldgisSpceWFS` + `TYPENAME=dt_d010` (GIS건물통합정보) |
+| 좌표계 | `SRSNAME=EPSG:4326` → GeoJSON `[경도, 위도]` |
+| 주요 속성 | `use_confm_de`(사용승인일) · `ground_floor_co`(지상층수) · `totar`(연면적) · `buld_nm`(건물명) · `pnu` |
+| 한도 | `MAXFEATURES` **최대 1000** (`1001` 이상은 `InvalidParameterValue`), 0.01°×0.01° 상자에 서울 도심 기준 약 **2,300동** |
+| 응답 시간 | 1,000동 요청 ≈ 1.0초 (2026-11-20 실측) |
+
+- 인증키에 **WMS/WFS·국가중점 API 가 켜져 있지 않으면 `INCORRECT_KEY`** 를 돌려준다 — 예전 키(`FC966AD8…`)가
+  그래서 `/req/data`·`/req/wfs` 가 막혔다(검색 API 만 켜둔 상태였다). 이번에 새 키를 발급했다.
+- `domain` 파라미터는 인증키의 서비스URL 과 같아야 한다 → `VWORLD_DOMAIN=redev-platform-iota.vercel.app`.
+- 로컬(이 작업 환경)은 프록시가 `api.vworld.kr` 를 막아(HTTP 502) 서버 라우트를 로컬에서 실행해도 건물을 못 받는다.
+  **운영(Vercel)에서는 정상** — `/api/building-age?bbox=…` 가 바로 확인 수단이다.
+- 오류는 XML(`ServiceException`)로 온다 — 라우트가 `code`·메시지를 그대로 JSON 에 올린다.
+
+### 4-2. UD602(건물 높이) 다운로드
 
 - 파일 다운로드: `https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?svcCde=MK&dsId=30335`
   → 「LSMD_CONT_UD602_서울.zip」 클릭 시 **「로그인 후 이용해주세요」** (vworld.kr 계정 필요).

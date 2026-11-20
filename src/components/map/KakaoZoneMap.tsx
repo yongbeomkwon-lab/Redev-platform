@@ -24,6 +24,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SeoulZone } from "@/lib/seoul-zones";
+import {
+  AGE_CLASSES,
+  AGE_MAX_LEVEL,
+  AGE_MAX_TILES,
+  AGE_TILE_DEG,
+  ageClassIndex,
+  type AgeBuilding,
+  type BuildingAgeResponse,
+} from "@/lib/building-age";
 import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
@@ -233,6 +242,18 @@ function labelLine(z: { name: string; kind: string; stage: string; area: number;
   return `${z.name} · ${z.kind} · ${z.stage} · ${area}${z.gu ? ` (${z.gu})` : ""}`;
 }
 
+/** 노후도 범례가 보여 주는 상태 */
+type AgeStats = {
+  /** 지금 지도에 칠해진 건물 수 */
+  buildings: number;
+  /** 연식 구간별 건물 수 (AGE_CLASSES 순서) */
+  counts: number[];
+  /** 지도가 너무 멀리 보여 건물을 그리지 않는 상태(더 확대하라는 안내) */
+  tooFar: boolean;
+  /** 응답을 기다리는 타일 수 */
+  loading: number;
+};
+
 export default function KakaoZoneMap({
   zones,
   seoulZones,
@@ -318,6 +339,24 @@ export default function KakaoZoneMap({
   const hoverRef = useRef<string | null>(null);
   /** 스카이뷰(항공사진) 중인지 — 위성 위에서는 구역 채움을 옅게 해 실제 모습이 보이게 한다 */
   const skyviewRef = useRef(false);
+  /** 노후도 오버레이가 켜져 있는지 — draw 가 매 프레임 읽는다 */
+  const agingRef = useRef(false);
+  /** 노후도 타일 캐시 — 타일 키 `tx,ty` → 그 타일에서 받은 건물들(세션 동안 유지) */
+  const ageTilesRef = useRef<Map<string, { buildings: AgeBuilding[] }>>(new Map());
+  /** 응답을 기다리는 타일 키 — 같은 타일을 두 번 부르지 않는다 */
+  const agePendingRef = useRef<Set<string>>(new Set());
+  /** 타일별 실패 횟수 — 두 번 실패한 타일은 이번 방문에서 다시 부르지 않는다(장애 때 요청 폭주 방지) */
+  const ageTriesRef = useRef<Map<string, number>>(new Map());
+  /** 아직 받지 않은 타일 대기열(화면 중심부터) */
+  const ageQueueRef = useRef<string[]>([]);
+  /** 타일 받기 루프가 도는 중인지 — 동시에 두 개가 돌지 않게 */
+  const ageRunningRef = useRef(false);
+  /** 받은 타일을 합쳐 만든 연식 구간별 Path2D (월드좌표: 경도, 메르카토르 y) */
+  const agePathsRef = useRef<{ paths: Path2D[]; counts: number[] } | null>(null);
+  /** 새 타일이 도착했는지 — 다음 차례에 Path2D 를 다시 합친다 */
+  const ageDirtyRef = useRef(false);
+  /** 지도 effect(idle)에서 노후도 타일을 다시 계산하도록 넘겨주는 함수 */
+  const ensureAgeTilesRef = useRef<(() => void) | null>(null);
   const selectedRef = useRef<string | undefined>(selectedZoneId);
   const moveRafRef = useRef(0);
   const drawRafRef = useRef(0);
@@ -370,6 +409,10 @@ export default function KakaoZoneMap({
 
   const [skyview, setSkyview] = useState(false);
   const [district, setDistrict] = useState(false);
+  /** 노후도(건물 연식) 오버레이 — 지도 아래 툴바의 `노후도` 토글 */
+  const [aging, setAging] = useState(false);
+  /** 노후도 범례에 보여 줄 상태(받은 건물 수·구간별 수·확대 안내·불러오는 타일 수) */
+  const [ageStats, setAgeStats] = useState<AgeStats>({ buildings: 0, counts: [], tooFar: false, loading: 0 });
   const [ready, setReady] = useState(false);
 
   // ── 그리기 ──────────────────────────────────────────────────────────────────
@@ -652,6 +695,39 @@ export default function KakaoZoneMap({
     ctx.clearRect(0, 0, cw, ch);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
+
+    // ── 노후도(건물 연식) — 구역 채움보다 **아래**에 깐다(구역 경계선이 위로 올라오게) ────────
+    //   타일에서 받은 건물들을 연식 구간별 Path2D 하나로 미리 합쳐 두었으므로,
+    //   여기서는 지도의 아핀 변환을 ctx.setTransform 으로 **그대로** 걸고 구간마다 한 번만 fill 한다.
+    //   (경도 1도 → pxPerLng, 메르카토르 y 1 → pxPerMerc 이므로 Path2D 좌표를 (경도, 메르카토르y)로 둔다.
+    //    건물이 1만 동이어도 프레임당 fill 은 5번 — 이동·확대 중에도 끊기지 않는다.)
+    if (agingRef.current) {
+      const ap = agePathsRef.current;
+      if (ap) {
+        ctx.save();
+        ctx.setTransform(
+          dpr * pxPerLng,
+          0,
+          0,
+          dpr * pxPerMerc,
+          dpr * (p0x - lng0 * pxPerLng),
+          dpr * (p0y - m0 * pxPerMerc)
+        );
+        const lineW = 0.6 / Math.max(1e-9, Math.abs(pxPerLng));
+        for (let i = 0; i < ap.paths.length; i++) {
+          const path = ap.paths[i];
+          const cls = AGE_CLASSES[i];
+          if (!path || !cls) continue;
+          ctx.fillStyle = rgba(cls.color, 0.55);
+          ctx.fill(path);
+          ctx.strokeStyle = rgba(cls.color, 0.9);
+          ctx.lineWidth = lineW;
+          ctx.stroke(path);
+        }
+        ctx.restore();
+      }
+    }
+
     const zoomProxy = ZOOM_BASE - map.getLevel();
     viewRef.current = { p0x, p0y, cLat, cLng: lng0, pxPerMerc, pxPerLng, m0, W: cw, H: ch };
 
@@ -686,6 +762,8 @@ export default function KakaoZoneMap({
       const st = zoneStyle(z.type, isSel || isHover, z.featured, zoomProxy, pz.completed, pz.approx);
       // 스카이뷰에서는 항공사진이 보이도록 채움을 옅게 (테두리는 그대로)
       if (skyviewRef.current) st.fillOpacity = Math.min(st.fillOpacity, isSel || isHover ? 0.3 : 0.16);
+      // 노후도가 켜져 있으면 구역 채움을 거의 걷어낸다 — 건물 연식 색이 묻히지 않게(경계선은 그대로)
+      if (agingRef.current) st.fillOpacity = Math.min(st.fillOpacity, isSel || isHover ? 0.2 : 0.05);
       const dash = pz.completed ? [4, 3] : pz.approx ? [7, 5] : null;
 
       let target: Path2D;
@@ -1138,6 +1216,8 @@ export default function KakaoZoneMap({
     };
 
     const onIdle = () => {
+      // 노후도가 켜져 있으면 지금 화면에 필요한 건물 타일을 확인한다(없으면 받아 온다)
+      if (agingRef.current) ensureAgeTilesRef.current?.();
       // 타일이 아직 도착 전이면(k≠1) 한동안 더 그려 제자리를 찾게 한다
       loopUntilRef.current = Math.max(loopUntilRef.current, performance.now() + 60);
       // 기준점을 다시 놓아야 하는 경우:
@@ -1848,6 +1928,165 @@ export default function KakaoZoneMap({
     settleView();
   }, [stationPin, draw, settleView]);
 
+  // ── 노후도(건물 연식) 오버레이 ────────────────────────────────────────────────
+  //   VWorld 국가중점 WFS(GIS건물통합정보 `dt_d010`)를 우리 서버 라우트(`/api/building-age`)로 받아
+  //   **건물별 사용승인 연도**로 색을 칠한다(인증키는 서버에만 있다).
+  //   · 화면을 0.005° 격자 타일로 나눠 필요한 타일만 부른다 — 한 타일이 600동 남짓이라
+  //     WFS 의 1,000동 상한에 걸리지 않고, 같은 타일은 세션·CDN 캐시로 다시 부르지 않는다.
+  //   · 받은 타일은 연식 구간(5)별 Path2D 로 합쳐 두고, draw 는 그 Path2D 만 채운다.
+  const patchAgeStats = useCallback((patch: Partial<AgeStats>) => {
+    setAgeStats((prev) => {
+      const next = { ...prev, ...patch };
+      const same =
+        prev.buildings === next.buildings &&
+        prev.tooFar === next.tooFar &&
+        prev.loading === next.loading &&
+        prev.counts.length === next.counts.length &&
+        prev.counts.every((v, i) => v === next.counts[i]);
+      return same ? prev : next;
+    });
+  }, []);
+
+  /** 받은 타일 전부 → 연식 구간별 Path2D (월드좌표: 경도, 메르카토르 y) */
+  const rebuildAgePaths = useCallback(() => {
+    const paths: Path2D[] = AGE_CLASSES.map(() => new Path2D());
+    const counts: number[] = AGE_CLASSES.map(() => 0);
+    const nowYear = new Date().getFullYear();
+    for (const tile of ageTilesRef.current.values()) {
+      for (const b of tile.buildings) {
+        const ci = ageClassIndex(b.y, nowYear);
+        const path = paths[ci];
+        if (!path) continue;
+        let used = false;
+        for (const ring of b.r) {
+          if (!ring || ring.length < 6) continue;
+          path.moveTo(ring[0], mercator(ring[1]));
+          for (let i = 2; i < ring.length; i += 2) path.lineTo(ring[i], mercator(ring[i + 1]));
+          path.closePath();
+          used = true;
+        }
+        if (used) counts[ci] += 1;
+      }
+    }
+    agePathsRef.current = { paths, counts };
+    ageDirtyRef.current = false;
+    patchAgeStats({ buildings: counts.reduce((a, b) => a + b, 0), counts });
+    draw();
+  }, [draw, patchAgeStats]);
+
+  /** 타일 대기열을 4개씩 받아 온다(받는 대로 화면에 붙인다) */
+  const drainAgeQueue = useCallback(async () => {
+    if (ageRunningRef.current) return;
+    ageRunningRef.current = true;
+    try {
+      while (agingRef.current && ageQueueRef.current.length > 0) {
+        const batch = ageQueueRef.current
+          .splice(0, 4)
+          .filter((key) => !ageTilesRef.current.has(key) && !agePendingRef.current.has(key));
+        if (batch.length === 0) break;
+        for (const key of batch) agePendingRef.current.add(key);
+        patchAgeStats({ loading: agePendingRef.current.size });
+        await Promise.all(
+          batch.map(async (key) => {
+            const [tx, ty] = key.split(",").map(Number);
+            const bbox = [
+              tx * AGE_TILE_DEG,
+              ty * AGE_TILE_DEG,
+              (tx + 1) * AGE_TILE_DEG,
+              (ty + 1) * AGE_TILE_DEG,
+            ]
+              .map((v) => v.toFixed(6))
+              .join(",");
+            try {
+              const res = await fetch(
+                `/api/building-age?bbox=${bbox}&tile=${encodeURIComponent(key)}`
+              );
+              const data = (await res.json()) as BuildingAgeResponse;
+              if (data.ok) {
+                ageTilesRef.current.set(key, { buildings: data.buildings });
+                ageDirtyRef.current = true;
+                // 캐시 상한 — 오래된 타일부터 버린다(장시간 둘러봐도 메모리가 계속 늘지 않게)
+                if (ageTilesRef.current.size > 120) {
+                  for (const old of ageTilesRef.current.keys()) {
+                    if (ageTilesRef.current.size <= 120) break;
+                    ageTilesRef.current.delete(old);
+                  }
+                }
+              }
+            } catch {
+              // 한 타일이 실패해도 나머지는 그린다 — 다음 idle 에서 한 번 더 시도한다
+            } finally {
+              if (!ageTilesRef.current.has(key)) {
+                ageTriesRef.current.set(key, (ageTriesRef.current.get(key) ?? 0) + 1);
+              }
+              agePendingRef.current.delete(key);
+            }
+          })
+        );
+        patchAgeStats({ loading: agePendingRef.current.size });
+        if (ageDirtyRef.current) rebuildAgePaths();
+      }
+    } finally {
+      ageRunningRef.current = false;
+    }
+  }, [patchAgeStats, rebuildAgePaths]);
+
+  /** 지금 화면이 걸치는 타일 중 아직 없는 것만 대기열에 넣는다(중심에서 가까운 타일부터) */
+  const ensureAgeTiles = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !agingRef.current) return;
+    if (map.getLevel() > AGE_MAX_LEVEL) {
+      patchAgeStats({ tooFar: true });
+      return;
+    }
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    const tx0 = Math.floor(sw.getLng() / AGE_TILE_DEG);
+    const tx1 = Math.floor(ne.getLng() / AGE_TILE_DEG);
+    const ty0 = Math.floor(sw.getLat() / AGE_TILE_DEG);
+    const ty1 = Math.floor(ne.getLat() / AGE_TILE_DEG);
+    if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > AGE_MAX_TILES) {
+      patchAgeStats({ tooFar: true });
+      return;
+    }
+    const cx = (tx0 + tx1) / 2;
+    const cy = (ty0 + ty1) / 2;
+    const wanted: { key: string; d: number }[] = [];
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const key = `${tx},${ty}`;
+        if (
+          ageTilesRef.current.has(key) ||
+          agePendingRef.current.has(key) ||
+          ageQueueRef.current.includes(key) ||
+          (ageTriesRef.current.get(key) ?? 0) >= 2
+        ) {
+          continue;
+        }
+        wanted.push({ key, d: Math.abs(tx - cx) + Math.abs(ty - cy) });
+      }
+    }
+    wanted.sort((a, b) => a.d - b.d);
+    for (const w of wanted) ageQueueRef.current.push(w.key);
+    patchAgeStats({ tooFar: false });
+    void drainAgeQueue();
+  }, [drainAgeQueue, patchAgeStats]);
+
+  // 지도 effect(idle)가 부를 수 있게 함수를 ref 로 넘긴다
+  useEffect(() => {
+    ensureAgeTilesRef.current = ensureAgeTiles;
+  }, [ensureAgeTiles]);
+
+  const toggleAging = useCallback(() => {
+    const next = !aging;
+    agingRef.current = next;
+    setAging(next);
+    if (next) ensureAgeTiles();
+    else patchAgeStats({ tooFar: false });
+    draw();
+  }, [aging, draw, ensureAgeTiles, patchAgeStats]);
+
   // ── 지도 타입 토글 ──────────────────────────────────────────────────────────
   const toggleSkyview = useCallback(() => {
     const k = sdkRef.current;
@@ -2367,6 +2606,21 @@ export default function KakaoZoneMap({
           <span aria-hidden>📐</span>
           <span className="hidden md:inline">지적편집도</span>
         </button>
+        <button
+          type="button"
+          onClick={toggleAging}
+          aria-pressed={aging}
+          data-testid="aging-toggle"
+          title="노후도 — 건물별 사용승인 연도로 색칠 (30년 이상 / 20~30년 / 10~20년 / 10년 미만). 확대해서 보세요"
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+            aging
+              ? "border-rose-400 bg-rose-50 text-rose-900"
+              : "border-slate-300 bg-white text-slate-700 hover:text-slate-900"
+          }`}
+        >
+          <span aria-hidden>🏚</span>
+          <span className="hidden md:inline">노후도</span>
+        </button>
         {onToggleTxPins && txPins.length > 0 && (
           <button
             type="button"
@@ -2403,6 +2657,36 @@ export default function KakaoZoneMap({
           </button>
         )}
       </div>
+
+      {/* ── 노후도 범례 — 켜져 있을 때만. 건물 연식 구간과 지금 칠해진 동수 ── */}
+      {aging && (
+        <div
+          data-testid="aging-legend"
+          className="pointer-events-none absolute bottom-2 left-1/2 z-[600] w-max max-w-[min(94vw,520px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur"
+        >
+          <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[11px] text-slate-600">
+            <b className="text-slate-800">노후도</b>
+            {AGE_CLASSES.map((cls, i) => (
+              <span key={cls.key} className="inline-flex items-center gap-1">
+                <i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: cls.color }} />
+                {cls.label}
+                {ageStats.counts.length > 0 && (
+                  <b className="font-semibold text-slate-800">
+                    {(ageStats.counts[i] ?? 0).toLocaleString()}
+                  </b>
+                )}
+              </span>
+            ))}
+          </div>
+          <p className="mt-0.5 text-center text-[10px] leading-tight text-slate-500">
+            {ageStats.tooFar
+              ? "지도를 더 확대하면 건물별 연식이 칠해집니다 (건물 동수가 많은 배율)"
+              : ageStats.loading > 0
+                ? `건물 연식 불러오는 중… (${ageStats.loading}타일 남음)`
+                : `건물 ${ageStats.buildings.toLocaleString()}동 · 국토부 GIS건물통합정보(사용승인일) 기준`}
+          </p>
+        </div>
+      )}
 
       {/* ── 관리자 모드: 꼭짓점 핸들 + 변 가운데 + 핸들(Ipad 터치 44px) ── */}
       {adminDraft && adminDraft.length > 0 && (
