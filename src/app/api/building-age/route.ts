@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { request as httpsRequest } from "node:https";
 import {
   AGE_WFS_MAX_FEATURES,
   buildingsFromFeatures,
@@ -19,12 +20,55 @@ import {
  */
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const ENDPOINT = "https://api.vworld.kr/ned/wfs/getBldgisSpceWFS";
 /** WFS 응답 대기 상한(ms) — 브이월드가 느릴 때 라우트가 매달리지 않게 */
 const TIMEOUT_MS = 9000;
 /** 한 요청의 bbox 상한(도) — 이보다 크면 타일을 쪼개서 부르라는 뜻으로 거절한다 */
 const MAX_SPAN_DEG = 0.02;
+
+/**
+ * 브이월드는 **undici(fetch)의 HTTP/2 스트림을 거절**한다 — 서버 액션에서는 늘
+ * `NGHTTP2_REFUSED_STREAM` 으로 떨어졌다(2026-11-20, Vercel·로컬 공동 확인).
+ * 그래서 node:https(HTTP/1.1) 으로 직접 부르고, 일반 브라우저와 같은 헤더(UA·Referer)를 붙인다.
+ */
+function getText(
+  url: string,
+  timeoutMs: number,
+  referer: string
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      url,
+      {
+        method: "GET",
+        headers: {
+          accept: "application/json, text/plain, */*",
+          "accept-language": "ko-KR,ko;q=0.9,en;q=0.8",
+          "user-agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+          referer,
+        },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk as Buffer));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+          })
+        );
+        res.on("error", reject);
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error(`timeout ${timeoutMs}ms`)));
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 function fail(error: string, status: number, detail?: string) {
   const payload: BuildingAgeResponse = detail ? { ok: false, error, detail } : { ok: false, error };
@@ -68,13 +112,13 @@ export async function GET(request: Request) {
     domain,
   });
 
-  let upstream: Response;
+  let upstream: { status: number; body: string };
   try {
-    upstream = await fetch(`${ENDPOINT}?${params.toString()}`, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      cache: "no-store",
-    });
+    upstream = await getText(
+      `${ENDPOINT}?${params.toString()}`,
+      TIMEOUT_MS,
+      `https://${domain}/`
+    );
   } catch (error) {
     // 원인을 최대한 남긴다 — 이 라우트는 Vercel(해외 리전)에서 도는 경우가 있어
     //   DNS/방화벽/타임아웃 중 무엇인지 구분되어야 한다.
@@ -89,8 +133,8 @@ export async function GET(request: Request) {
     return fail("VWORLD_UNREACHABLE", 502, detail || String(error));
   }
 
-  const text = await upstream.text();
-  if (!upstream.ok) {
+  const text = upstream.body;
+  if (upstream.status < 200 || upstream.status >= 300) {
     return fail("VWORLD_HTTP_ERROR", 502, `HTTP ${upstream.status} ${text.slice(0, 300)}`);
   }
   // 브이월드는 오류를 XML(ServiceException)로 돌려준다 — JSON 이 아니면 사유를 그대로 올린다
