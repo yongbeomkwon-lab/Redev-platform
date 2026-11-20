@@ -76,8 +76,17 @@ export async function GET(request: Request) {
       cache: "no-store",
     });
   } catch (error) {
-    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    return fail("VWORLD_UNREACHABLE", 502, detail);
+    // 원인을 최대한 남긴다 — 이 라우트는 Vercel(해외 리전)에서 도는 경우가 있어
+    //   DNS/방화벽/타임아웃 중 무엇인지 구분되어야 한다.
+    const e = error as {
+      name?: string;
+      message?: string;
+      cause?: { code?: string; message?: string; errno?: number };
+    };
+    const detail = [e?.name, e?.message, e?.cause?.code, e?.cause?.message]
+      .filter(Boolean)
+      .join(" | ");
+    return fail("VWORLD_UNREACHABLE", 502, detail || String(error));
   }
 
   const text = await upstream.text();
