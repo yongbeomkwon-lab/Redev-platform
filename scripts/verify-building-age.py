@@ -26,7 +26,10 @@ import time
 from playwright.sync_api import sync_playwright
 
 URL = os.environ.get("TARGET_URL", "http://localhost:3100")
-SHOT = "/workspace/downloads/redev-aging-sinrim1.png"
+ZONE_ID = os.environ.get("ZONE_ID", "")
+if ZONE_ID:
+    URL = f"{URL.rstrip('/')}/?zone={ZONE_ID}"
+SHOT = os.environ.get("SHOT", "/workspace/downloads/redev-aging-sinrim1.png")
 ZONE = os.environ.get("ZONE_NAME", "신림1구역")
 
 # src/lib/building-age.ts 의 AGE_CLASSES 색과 같아야 한다

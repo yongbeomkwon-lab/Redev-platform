@@ -49,16 +49,23 @@ async function fetchJson(url, tries = 5) {
 }
 
 async function main() {
-  const targets = process.argv.slice(2).length ? process.argv.slice(2) : SEOUL;
-  for (const sg of targets) {
-    if (store.done.includes(sg)) {
+  const targets = process.argv.slice(2).filter((a) => /^\d{5}$/.test(a));
+  const only = process.argv.slice(2).filter((a) => /^\d{5}$/.test(a));
+  const start = Number(process.env.RANGE_START ?? 10000);
+  const end = Number(process.env.RANGE_END ?? 15600);
+  void only;
+  const list = targets.length ? targets : SEOUL;
+  for (const sg of list) {
+    if (store.done.includes(sg) && !process.env.RANGE_START) {
       console.log(`${sg} — 이미 완료, 건너뜀`);
       continue;
     }
     let found = 0;
+    const known = new Set(store.dongs.filter((d) => d.sigungu === sg).map((d) => d.cd));
     const started = Date.now();
-    for (let code = 10000; code <= 15600; code += 100) {
+    for (let code = start; code <= end; code += 100) {
       const bjd = String(sg) + String(code).padStart(5, "0");
+      if (known.has(bjd)) continue;
       let body;
       try {
         body = await fetchJson(
@@ -79,7 +86,7 @@ async function main() {
     store.done.push(sg);
     store.generatedAt = new Date().toISOString();
     fs.writeFileSync(OUT, JSON.stringify(store, null, 0));
-    console.log(`${sg} — 법정동 ${found}곳 (${((Date.now() - started) / 1000).toFixed(0)}s)`);
+    console.log(`${sg} — 새 법정동 ${found}곳 (${((Date.now() - started) / 1000).toFixed(0)}s)`);
   }
   const tot = store.dongs.reduce((a, d) => a + d.total, 0);
   console.log(`\n법정동 ${store.dongs.length}곳 · 표제부 ${tot.toLocaleString()}행`);
