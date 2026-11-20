@@ -730,9 +730,10 @@ export default function KakaoZoneMap({
           const path = ap.paths[i];
           const cls = AGE_CLASSES[i];
           if (!path || !cls) continue;
-          ctx.fillStyle = rgba(cls.color, 0.55);
+          // 연식 미상은 옅게 — 범례 칩과 같은 회색이되 알파를 낮춰 노후도로 읽히지 않게
+          ctx.fillStyle = rgba(cls.color, cls.fill);
           ctx.fill(path);
-          ctx.strokeStyle = rgba(cls.color, 0.9);
+          ctx.strokeStyle = rgba(cls.color, cls.stroke);
           ctx.lineWidth = lineW;
           ctx.stroke(path);
         }
@@ -2724,7 +2725,10 @@ export default function KakaoZoneMap({
               ? "지도를 더 확대하면 건물별 연식이 칠해집니다 (건물 동수가 많은 배율)"
               : ageStats.loading > 0
                 ? `건물 연식 불러오는 중… (${ageStats.loading}타일 남음)`
-                : `건물 ${ageStats.buildings.toLocaleString()}동 · 국토부 GIS건물통합정보(사용승인일) 기준`}
+                : `건물 ${ageStats.buildings.toLocaleString()}동 · 국토부 건축물대장·GIS건물통합정보(사용승인일) 기준`}
+          </p>
+          <p className="mt-0.5 text-center text-[10px] leading-tight text-slate-400">
+            연식 미상은 옅은 회색 — 대장에 사용승인일이 없거나 건물대장과 이어지지 않은 건물
           </p>
         </div>
       )}

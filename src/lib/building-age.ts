@@ -11,13 +11,15 @@
  *   진한 빨강(30년↑) → 주황 → 노랑 → 초록(10년 미만) 순으로 둔다.
  */
 
-/** 지도에 칠하는 연식 구간 — 순서를 바꾸면 범례·색인도 함께 바뀐다 */
+/** 지도에 칠하는 연식 구간 — 순서를 바꾸면 범례·색인도 함께 바뀐다
+ *  · `fill`/`stroke` 는 캔버스 알파. **연식 미상은 옅게** 칠한다 — 건물이 있다는 사실은
+ *    보이되 연식 색(노후도)으로 읽히지 않게, 범례 칩과 같은 회색을 낮은 알파로 쓴다. */
 export const AGE_CLASSES = [
-  { key: "over30", label: "30년 이상", minYear: 30, color: "#b91c1c" },
-  { key: "20s", label: "20~30년", minYear: 20, color: "#ea580c" },
-  { key: "10s", label: "10~20년", minYear: 10, color: "#eab308" },
-  { key: "under10", label: "10년 미만", minYear: 0, color: "#16a34a" },
-  { key: "unknown", label: "연식 미상", minYear: -1, color: "#94a3b8" },
+  { key: "over30", label: "30년 이상", minYear: 30, color: "#b91c1c", fill: 0.55, stroke: 0.9 },
+  { key: "20s", label: "20~30년", minYear: 20, color: "#ea580c", fill: 0.55, stroke: 0.9 },
+  { key: "10s", label: "10~20년", minYear: 10, color: "#eab308", fill: 0.55, stroke: 0.9 },
+  { key: "under10", label: "10년 미만", minYear: 0, color: "#16a34a", fill: 0.55, stroke: 0.9 },
+  { key: "unknown", label: "연식 미상", minYear: -1, color: "#94a3b8", fill: 0.22, stroke: 0.45 },
 ] as const;
 
 export type AgeClassKey = (typeof AGE_CLASSES)[number]["key"];
@@ -65,6 +67,8 @@ export type BuildingAgeResponse =
       total: number;
       /** MAXFEATURES 상한에 걸려 잘렸는지 */
       truncated: boolean;
+      /** 건축물대장 색인으로 연도를 채운 건물 수(진단용) */
+      patched?: number;
       buildings: AgeBuilding[];
     }
   | { ok: false; error: string; detail?: string };
@@ -111,8 +115,14 @@ export function approveYear(value: unknown): number | null {
   return y;
 }
 
-/** WFS 피처 목록 → 지도에 칠할 건물 목록(도형이 없는 피처는 버린다) */
-export function buildingsFromFeatures(features: unknown): AgeBuilding[] {
+/** WFS 피처 목록 → 지도에 칠할 건물 목록(도형이 없는 피처는 버린다)
+ *
+ *  `resolveYear` 를 주면 사용승인 연도를 그 함수로 바꾼다 — 라우트가 건축물대장 색인
+ *  (`building-age-index.ts`)을 붙여 **지역에 따라 낡은 브이월드 속성을 덮어쓸** 때 쓴다. */
+export function buildingsFromFeatures(
+  features: unknown,
+  resolveYear?: (pnu: unknown, area: unknown, base: number | null) => number | null
+): AgeBuilding[] {
   if (!Array.isArray(features)) return [];
   const out: AgeBuilding[] = [];
   for (const raw of features) {
@@ -120,10 +130,11 @@ export function buildingsFromFeatures(features: unknown): AgeBuilding[] {
     const rings = ringsOf(feature.geometry);
     if (rings.length === 0) continue;
     const props = feature.properties ?? {};
+    const base = approveYear(props.use_confm_de);
     out.push({
       // 지금 지도는 연식 색만 칠한다 — 건물명·층수·연면적은 페이로드를 줄이려고 내리지 않는다
       // (필요해지면 여기서 함께 내리면 된다: props.buld_nm / ground_floor_co / totar)
-      y: approveYear(props.use_confm_de),
+      y: resolveYear ? resolveYear(props.pnu, props.totar, base) : base,
       r: rings,
     });
   }

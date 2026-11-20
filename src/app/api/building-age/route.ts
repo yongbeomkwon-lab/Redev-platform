@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { request as httpsRequest } from "node:https";
 import {
   AGE_WFS_MAX_FEATURES,
+  approveYear,
   buildingsFromFeatures,
   type BuildingAgeResponse,
 } from "@/lib/building-age";
+import { yearResolverFor } from "@/lib/building-age-index";
 
 /**
  * 건물 연식(노후도) — 브이월드 국가중점 WFS 프록시
@@ -153,13 +155,29 @@ export async function GET(request: Request) {
     return fail("VWORLD_BAD_JSON", 502, text.slice(0, 200));
   }
 
-  const buildings = buildingsFromFeatures(parsed.features);
+  // ── 사용승인일 보강 ────────────────────────────────────────────────────────
+  //   브이월드 dt_d010 의 `use_confm_de` 는 동네에 따라 세움터 조인이 낡아 신축이
+  //   비어 있다(2026-11-20: 신림동 2003년·흑석동 2019년 이후 누락). 건축물대장 표제부로
+  //   만들어 둔 PNU 색인(`public/data/age-index/<법정동>.json`)이 있으면 그 값으로 덮어쓴다.
+  const resolver = await yearResolverFor(parsed.features);
+  const buildings = buildingsFromFeatures(parsed.features, resolver);
+  let patched = 0;
+  if (Array.isArray(parsed.features)) {
+    for (const raw of parsed.features) {
+      const props = (raw as { properties?: Record<string, unknown> | null })?.properties;
+      if (!props) continue;
+      const base = approveYear(props.use_confm_de);
+      const y = resolver(props.pnu, props.totar, base);
+      if (y != null && y !== base) patched++;
+    }
+  }
   const matched = typeof parsed.numberMatched === "number" ? parsed.numberMatched : buildings.length;
   const payload: BuildingAgeResponse = {
     ok: true,
     tile: url.searchParams.get("tile") ?? "",
     total: buildings.length,
     truncated: matched > buildings.length,
+    patched,
     buildings,
   };
 

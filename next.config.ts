@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
   // 클릭을 가로챘다. 배포 빌드에는 원래 나오지 않는다.
   devIndicators: false,
   env: { NEXT_PUBLIC_BUILD_ID: buildId },
+  // ── 함수 번들에 정적 색인 파일 포함 ─────────────────────────────────────────
+  //   `/api/building-age` 는 `public/data/age-index/<법정동>.json`(건축물대장 사용승인일)을
+  //   fs 로 읽어 브이월드의 낡은 연도를 덮어쓴다. Next 는 public/ 을 자동 추적하지 않으므로
+  //   이 라우트에 한해 명시적으로 묶어 준다(2026-11-20).
+  outputFileTracingIncludes: {
+    "/api/building-age": ["./public/data/age-index/**"],
+  },
   // 구역 경계 데이터는 배포 직후 항상 최신이어야 한다.
   //   · 프론트엔드도 `?v=<빌드ID>` + cache:'no-store' 로 요청하지만,
   //   · 아이패드 Safari 처럼 정적 자산을 오래 물고 있는 브라우저를 위해 응답 헤더로도 막는다.
