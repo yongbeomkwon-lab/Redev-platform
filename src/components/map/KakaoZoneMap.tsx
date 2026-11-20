@@ -342,7 +342,7 @@ export default function KakaoZoneMap({
   /** 노후도 오버레이가 켜져 있는지 — draw 가 매 프레임 읽는다 */
   const agingRef = useRef(false);
   /** 노후도 타일 캐시 — 타일 키 `tx,ty` → 그 타일에서 받은 건물들(세션 동안 유지) */
-  const ageTilesRef = useRef<Map<string, { buildings: AgeBuilding[] }>>(new Map());
+  const ageTilesRef = useRef<Map<string, { buildings: AgeBuilding[]; visible: boolean }>>(new Map());
   /** 응답을 기다리는 타일 키 — 같은 타일을 두 번 부르지 않는다 */
   const agePendingRef = useRef<Set<string>>(new Set());
   /** 타일별 실패 횟수 — 두 번 실패한 타일은 이번 방문에서 다시 부르지 않는다(장애 때 요청 폭주 방지) */
@@ -1953,6 +1953,8 @@ export default function KakaoZoneMap({
     const counts: number[] = AGE_CLASSES.map(() => 0);
     const nowYear = new Date().getFullYear();
     for (const tile of ageTilesRef.current.values()) {
+      // 화면 밖(캐시 여유분)은 그리지 않는다 — 다시 그리는 비용을 ‘보이는 건물’로 묶어 둔다
+      if (!tile.visible) continue;
       for (const b of tile.buildings) {
         const ci = ageClassIndex(b.y, nowYear);
         const path = paths[ci];
@@ -2003,7 +2005,7 @@ export default function KakaoZoneMap({
               );
               const data = (await res.json()) as BuildingAgeResponse;
               if (data.ok) {
-                ageTilesRef.current.set(key, { buildings: data.buildings });
+                ageTilesRef.current.set(key, { buildings: data.buildings, visible: true });
                 ageDirtyRef.current = true;
                 // 캐시 상한 — 오래된 타일부터 버린다(장시간 둘러봐도 메모리가 계속 늘지 않게)
                 if (ageTilesRef.current.size > 120) {
@@ -2052,17 +2054,22 @@ export default function KakaoZoneMap({
     }
     const cx = (tx0 + tx1) / 2;
     const cy = (ty0 + ty1) / 2;
-    // 화면 밖으로 밀려난 타일은 버린다 — 메모리·Path2D 크기를 화면 범위로 묶어 둔다.
-    //   여유 1타일은 남겨, 팬으로 조금 돌아왔을 때 다시 부르지 않게 한다.
-    let pruned = false;
-    for (const key of ageTilesRef.current.keys()) {
+    // 화면 안 타일만 Path2D 에 넣는다(다시 그리는 비용 = 화면에 보이는 건물만).
+    //   여유 2타일은 캐시에 남겨 팬으로 조금 돌아오면 다시 부르지 않고, 그보다 멀면 버린다(메모리 상한).
+    let changed = false;
+    for (const [key, tile] of ageTilesRef.current) {
       const [ptx, pty] = key.split(",").map(Number);
-      if (ptx < tx0 - 1 || ptx > tx1 + 1 || pty < ty0 - 1 || pty > ty1 + 1) {
+      const inView = ptx >= tx0 && ptx <= tx1 && pty >= ty0 && pty <= ty1;
+      if (tile.visible !== inView) {
+        tile.visible = inView;
+        changed = true;
+      }
+      if (ptx < tx0 - 2 || ptx > tx1 + 2 || pty < ty0 - 2 || pty > ty1 + 2) {
         ageTilesRef.current.delete(key);
-        pruned = true;
+        changed = true;
       }
     }
-    if (pruned) {
+    if (changed) {
       ageDirtyRef.current = true;
       rebuildAgePaths();
     }
