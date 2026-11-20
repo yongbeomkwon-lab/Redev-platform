@@ -3,6 +3,9 @@
 
   사용:
     TARGET_URL=https://redev-platform-iota.vercel.app python3 scripts/verify-building-age.py
+
+  ※ 로컬(`TARGET_URL=http://localhost:3100`)로는 건물이 칠해지지 않는다 — 이 작업 환경의
+    프록시가 api.vworld.kr 를 막기 때문이다(서버 라우트가 VWORLD_UNREACHABLE). 검증은 운영 도메인으로 한다.
     TARGET_URL=http://localhost:3100 python3 scripts/verify-building-age.py
 
   확인 항목

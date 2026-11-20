@@ -216,8 +216,13 @@ ZoneMap.tsx
 - 인증키에 **WMS/WFS·국가중점 API 가 켜져 있지 않으면 `INCORRECT_KEY`** 를 돌려준다 — 예전 키(`FC966AD8…`)가
   그래서 `/req/data`·`/req/wfs` 가 막혔다(검색 API 만 켜둔 상태였다). 이번에 새 키를 발급했다.
 - `domain` 파라미터는 인증키의 서비스URL 과 같아야 한다 → `VWORLD_DOMAIN=redev-platform-iota.vercel.app`.
+- ⚠️ **Vercel 함수 리전은 `icn1`(서울) 이어야 한다.** 브이월드는 해외·데이터센터 IP 에 **502 Bad Gateway** 를
+  돌려준다 — 2026-11-20 실측: `iad1`(워싱턴)에서 `www.vworld.kr`·`api.vworld.kr` **모두 502**, 서울(icn1)로 바꾸자 200.
+  (Settings → Functions → Function Region. Hobby 는 리전 1개만 고를 수 있어 iad1 을 해제하고 icn1 을 골랐다.)
+- ⚠️ Node `fetch`(undici)는 브이월드에서 **HTTP/2 스트림을 거절당한다**(`NGHTTP2_REFUSED_STREAM`).
+  그래서 `/api/building-age` 는 `node:https`(HTTP/1.1) + 브라우저 같은 헤더(UA·Referer)로 부른다.
 - 로컬(이 작업 환경)은 프록시가 `api.vworld.kr` 를 막아(HTTP 502) 서버 라우트를 로컬에서 실행해도 건물을 못 받는다.
-  **운영(Vercel)에서는 정상** — `/api/building-age?bbox=…` 가 바로 확인 수단이다.
+  **운영(Vercel icn1)에서는 정상** — `/api/building-age?bbox=…` 가 바로 확인 수단이다.
 - 오류는 XML(`ServiceException`)로 온다 — 라우트가 `code`·메시지를 그대로 JSON 에 올린다.
 
 ### 4-2. UD602(건물 높이) 다운로드
