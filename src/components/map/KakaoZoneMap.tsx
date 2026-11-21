@@ -33,7 +33,7 @@ import {
   type AgeBuilding,
   type BuildingAgeResponse,
 } from "@/lib/building-age";
-import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
+import { TYPE_COLORS, shortStage, zoneStyle } from "./colors";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
@@ -743,11 +743,12 @@ export default function KakaoZoneMap({
 
       const placedTag: { x0: number; y0: number; x1: number; y1: number }[] = [];
       // 선택 구역의 큰 이름표 자리도 비워 둔다(기본 이름표가 그 위에 겹치지 않게)
+      //   · 이름표는 이제 기본 이름표와 같은 흰 칩을 앵커(구역 중심)에 **가운데** 놓는다 — 그 자리만 비운다.
       const lbl = labelAtRef.current;
       if (Number.isFinite(lbl.lat) && Number.isFinite(lbl.lng)) {
         const lx = p0x + (lbl.lng - lng0) * pxPerLng;
         const ly = p0y + (mercator(lbl.lat) - m0) * pxPerMerc;
-        placedTag.push({ x0: lx - 90, y0: ly - 34, x1: lx + 90, y1: ly + 4 });
+        placedTag.push({ x0: lx - 110, y0: ly - 12, x1: lx + 110, y1: ly + 12 });
       }
       const chosen: TagCand[] = [];
       // 좁은 화면(폰)에서는 개수를 줄인다 — 지도가 작아 이름표가 화면을 다 덮었다
@@ -827,6 +828,11 @@ export default function KakaoZoneMap({
           node.style.visibility = "visible";
         }
         tagBoxRef.current.set(c.id, { h: TAG_H });
+      }
+      // 선택 구역의 큰 이름표도 같은 자리를 차지한다 — 매물 배지가 이름표 위로 비켜 놓게
+      const lblAt = labelAtRef.current;
+      if (selTag && Number.isFinite(lblAt.lat) && Number.isFinite(lblAt.lng) && !tagBoxRef.current.has(selTag)) {
+        tagBoxRef.current.set(selTag, { h: TAG_H });
       }
       tagMsRef.current = performance.now() - tagT0;
     }
@@ -2025,15 +2031,19 @@ export default function KakaoZoneMap({
     const type = seoul?.type ?? featured?.type ?? custom?.type;
     const stage = seoul?.stage ?? featured?.stage ?? custom?.stage;
     const parcel = (seoul?.alias ?? []).find((a) => /\d+-\d+/.test(a));
-    const typeLabel = shortZoneType(type);
+    // 사업유형 칩은 **기본 이름표와 같은 문구·색**(tagTypeText + TYPE_COLORS)을 쓴다.
+    //   · 예전에는 ‘유형 · 단계’를 한 칩에 넣고 이름표 전체를 진한 남색 판으로 그렸고,
+    //     그 탓에 이름표를 누르면 뱃지 바탕색이 바뀐 것처럼 보였다(사용자 요청으로 흰 칩 유지).
+    //   · 단계·지번은 칩 대신 이름 뒤 회색 글씨로 붙인다 — 뱃지는 그대로, 정보만 늘어난다.
+    const typeText = tagTypeText(type);
     const stageLabel = shortStage(stage);
-    const badgeText = [typeLabel, stageLabel].filter(Boolean).join(" · ");
     const typeColor = type ? (TYPE_COLORS as Record<string, string>)[type] ?? "#64748b" : "#64748b";
-    const badge = badgeText
-      ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(badgeText)}</span>`
+    const badge = typeText
+      ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(typeText)}</span>`
       : "";
+    const sub = [stageLabel, parcel].filter(Boolean).join(" · ");
     return `${badge}<b>${escapeHtml(name)}</b>${
-      parcel ? `<span class="zone-name-sub"> · ${escapeHtml(parcel)}</span>` : ""
+      sub ? `<span class="zone-name-sub"> · ${escapeHtml(sub)}</span>` : ""
     }`;
   }, [labelZoneId, seoulZones, zones, admin?.zones]);
 
@@ -2448,7 +2458,8 @@ export default function KakaoZoneMap({
               bottom: 0,
               // 0×0 레이어 안의 절대배치 박스는 폭이 0 으로 잡혀 글자가 잘린다 → 내용 폭을 명시한다
               width: "max-content",
-              transform: "translate(-50%,-6px)",
+              // 기본 이름표(.zone-tag)와 같은 자리(앵커 가운데)에 놓는다 — 누를 때 뱃지가 튀지 않게
+              transform: "translate(-50%, 50%)",
             }}
             dangerouslySetInnerHTML={{ __html: labelHtml }}
           />

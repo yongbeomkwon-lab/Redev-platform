@@ -430,16 +430,18 @@ function SeoulZoneLayer({
       if (!p) return;
       if (p.id === selectedId) {
         // 선택 구역 이름표 — 지번 별칭(예: 사당동 419-1)도 함께 적어 지도에서 바로 대조되게 한다.
-        // 앞에는 사업유형 뱃지(카카오맵과 같은 규칙: 신통기획 → ‘신속통합기획’).
+        // 앞의 사업유형 칩은 카카오 지도 기본 이름표와 같은 짧은 문구(신통기획 → ‘신속통합기획’).
+        //   이름표는 카카오와 같이 흰 칩이고, 단계·지번은 이름 뒤 회색 글씨로 붙인다(선택해도 뱃지 색 그대로).
         const parcel = (p.alias ?? []).find((a) => /\d+-\d+/.test(a));
-        const badgeText = [shortZoneType(p.type), shortStage(p.stage)].filter(Boolean).join(" · ");
+        const typeLabel = shortZoneType(p.type);
         const typeColor = TYPE_COLORS[p.type as MapZoneType] ?? "#64748b";
-        const badge = badgeText
-          ? `<span class="zone-type-badge" style="background:${typeColor}">${badgeText}</span>`
+        const badge = typeLabel
+          ? `<span class="zone-type-badge" style="background:${typeColor}">${typeLabel}</span>`
           : "";
+        const sub = [shortStage(p.stage), parcel].filter(Boolean).join(" · ");
         path.unbindTooltip();
         path.bindTooltip(
-          parcel ? `${badge}<b>${p.name}</b><span class="zone-name-sub"> · ${parcel}</span>` : `${badge}<b>${p.name}</b>`,
+          `${badge}<b>${p.name}</b>${sub ? `<span class="zone-name-sub"> · ${sub}</span>` : ""}`,
           {
             permanent: true,
             direction: "center",
