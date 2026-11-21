@@ -409,3 +409,70 @@ textarea {
 .ui-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ── 지도 실거래 핀 강조 (5년 이력 창을 연 단지) ─────────────────────────────────
+   오레오 블루 테두리 + 바깥으로 퍼지는 물결. 창을 닫으면 클래스가 빠지며 원래대로 돌아온다. */
+@keyframes redev-tx-pin-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 84, 166, 0.55), 0 6px 14px -8px rgba(0, 84, 166, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(0, 84, 166, 0), 0 6px 14px -8px rgba(0, 84, 166, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 84, 166, 0), 0 6px 14px -8px rgba(0, 84, 166, 0.35);
+  }
+}
+.tx-price-pin.is-active {
+  transform: scale(1.08);
+  transform-origin: 50% 100%;
+  position: relative;
+  z-index: 4;
+  animation: redev-tx-pin-pulse 1.9s ease-out infinite;
+}
+
+/* ── 지번 찍기 핀 (📍) — 오레오 블루 물결 핀 ────────────────────────────────────
+   · 점은 찍은 자리에 정확히 놓이고, 물결 두 겹이 번갈아 퍼진다.
+   · 카카오맵·Leaflet 모두 같은 DOM/클래스를 쓴다. */
+.jibun-drop-pin {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.jibun-drop-pin-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #0054a6;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 84, 166, 0.55);
+  z-index: 2;
+}
+.jibun-drop-pin-ripple {
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 84, 166, 0.6);
+  animation: jibun-drop-ripple 1.8s ease-out infinite;
+}
+.jibun-drop-pin-ripple-late {
+  animation-delay: 0.9s;
+}
+@keyframes jibun-drop-ripple {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-price-pin.is-active,
+  .jibun-drop-pin-ripple {
+    animation: none;
+  }
+}

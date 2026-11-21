@@ -36,7 +36,8 @@ import {
 import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
-import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import JibunPinCard from "./JibunPinCard";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -412,6 +413,16 @@ export default function KakaoZoneMap({
   txPins = [],
   txPinsOn = true,
   onToggleTxPins,
+  onSelectTxPin,
+  activeTxPin,
+  jibunPickOn = false,
+  onToggleJibunPick,
+  onPickJibun,
+  jibunPin,
+  onCloseJibunPin,
+  onOpenJibunHistory,
+  onOpenJibunZone,
+  jibunHistoryLoading = false,
   myPins = [],
   myPinsOn = false,
   onToggleMyPins,
@@ -461,6 +472,21 @@ export default function KakaoZoneMap({
   const txLayerRef = useRef<HTMLDivElement | null>(null);
   const txElsRef = useRef<Map<string, HTMLElement>>(new Map());
   const txAtRef = useRef<TxMapPin[]>([]);
+  /** 5년 이력 창에서 보고 있는 단지·지번 키 — 그 핀을 강조하고 겹침에서도 살린다 */
+  const activeTxKeyRef = useRef<string>("");
+  const activeTxKey = activeTxPin ? txPinKey(activeTxPin.umdNm, activeTxPin.jibun) : "";
+  activeTxKeyRef.current = activeTxKey;
+  /** 「지번 찍기」로 꽂은 핀 레이어·요소 — draw 가 매 프레임 좌표를 맞춘다 */
+  const jibunLayerRef = useRef<HTMLDivElement | null>(null);
+  const jibunElRef = useRef<HTMLDivElement | null>(null);
+  const jibunPinRef = useRef<JibunPin | null>(null);
+  jibunPinRef.current = jibunPin ?? null;
+  /** 지도 클릭·우클릭이 읽는 지번 찍기 상태 — draw 클로저보다 최신 값이 필요하다 */
+  const pickRef = useRef<{ on: boolean; pick: ((lat: number, lng: number) => void) | null }>({
+    on: false,
+    pick: null,
+  });
+  pickRef.current = { on: jibunPickOn, pick: onPickJibun ?? null };
   /** 지금 펼쳐 둔 핀 상세 카드(거래 id) — 하나만 열린다 */
   const [openPinId, setOpenPinId] = useState<string | null>(null);
   /** draw() 가 읽는 ‘펼쳐 둔 핀’ — 클로저 대신 ref 로 넘긴다 */
@@ -1047,9 +1073,13 @@ export default function KakaoZoneMap({
     if (txLayerRef.current) {
       const placedPins: { x: number; y: number }[] = [];
       const openId = openPinRef.current;
-      const ordered = openId
-        ? [...txAtRef.current.filter((p) => p.id === openId), ...txAtRef.current.filter((p) => p.id !== openId)]
-        : txAtRef.current;
+      const activeKey = activeTxKeyRef.current;
+      const isActivePin = (p: TxMapPin) => !!activeKey && txPinKey(p.umdNm, p.jibun) === activeKey;
+      // 5년 이력 창에서 보고 있는 핀은 언제나 맨 앞에서 자리를 잡는다(겹침으로 숨지 않게)
+      const ordered = [...txAtRef.current].sort((a, b) => {
+        const rank = (p: TxMapPin) => (isActivePin(p) ? 0 : p.id === openId ? 1 : 2);
+        return rank(a) - rank(b);
+      });
       for (const p of ordered) {
         const node = txElsRef.current.get(p.id);
         if (!node) continue;
@@ -1066,13 +1096,31 @@ export default function KakaoZoneMap({
             break;
           }
         }
-        if (clash && p.id !== openId) {
+        if (clash && p.id !== openId && !isActivePin(p)) {
           node.style.visibility = "hidden";
           continue;
         }
         placedPins.push({ x, y });
         node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-100%)`;
         node.style.visibility = "visible";
+      }
+    }
+
+    // 지번 핀 — 찍은 자리에 오레오 블루 펄스 핀(카드 포함). 지도 밖이면 숨긴다.
+    if (jibunLayerRef.current) {
+      const jp = jibunPinRef.current;
+      const node = jibunElRef.current;
+      if (!jp || !node) {
+        if (node) node.style.visibility = "hidden";
+      } else {
+        const x = p0x + (jp.lng - lng0) * pxPerLng;
+        const y = p0y + (mercator(jp.lat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -150 || x > cw + 150 || y < -150 || y > ch + 150) {
+          node.style.visibility = "hidden";
+        } else {
+          node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+          node.style.visibility = "visible";
+        }
       }
     }
 
@@ -1858,6 +1906,13 @@ export default function KakaoZoneMap({
         }
       }
       const data = prepRef.current;
+      // ── 지번 찍기 모드: 구역 선택 대신 클릭한 자리에 지번 핀을 꽂는다 ──
+      const pick = pickRef.current;
+      if (pick.on && pick.pick) {
+        hideTip();
+        pick.pick(lat, lng);
+        return;
+      }
       let hit: SeoulZone | undefined = hitTestZones(data, lat, lng);
       const view = viewRef.current;
       const pt = e.point;
@@ -1878,6 +1933,12 @@ export default function KakaoZoneMap({
         // 지도에서 직접 누른 선택 — 선택 효과에서 줌·이동을 하지 않도록 표시해 둔다.
         mapClickZoneRef.current = { id: hit.id, t: Date.now() };
         onSelectRef.current(hit.id);
+        return;
+      }
+      // 구역 밖을 눌렀다 — 기본 모드에서도 그 자리의 지번을 찍어 준다(편의)
+      if (pick.pick) {
+        hideTip();
+        pick.pick(lat, lng);
       }
     };
 
@@ -1917,13 +1978,40 @@ export default function KakaoZoneMap({
       finishInPlaceSoon();
     };
     const onMapContextMenu = (ev: MouseEvent) => {
-      if (!drawingNow()) return;
-      // 꼭짓점 핸들 위 우클릭은 ‘점 삭제’가 맡는다(핸들이 직접 처리)
+      if (drawingNow()) {
+        // 꼭짓점 핸들 위 우클릭은 ‘점 삭제’가 맡는다(핸들이 직접 처리)
+        const t0 = ev.target as HTMLElement | null;
+        if (t0?.closest?.("[data-vx],[data-mid]")) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        finishInPlaceSoon();
+        return;
+      }
+      // 그리는 중이 아니면 우클릭 = 지번 찍기(브라우저 기본 메뉴는 막는다)
+      const pick = pickRef.current;
+      if (!pick.pick) return;
       const t = ev.target as HTMLElement | null;
-      if (t?.closest?.("[data-vx],[data-mid]")) return;
+      if (t?.closest?.("[data-testid='jibun-pin-card'],[data-testid='tx-pin-card']")) return;
       ev.preventDefault();
       ev.stopPropagation();
-      finishInPlaceSoon();
+      // 마지막 마우스 위치 → 없으면(터치 롱프레스) 이벤트 좌표를 컨테이너 기준으로 변환
+      let at = adminCursorRef.current;
+      if (!at) {
+        try {
+          const map0 = mapRef.current;
+          const rect = el.getBoundingClientRect();
+          if (map0) {
+            const ll = map0
+              .getProjection()
+              .coordsFromContainerPoint(new k.maps.Point(ev.clientX - rect.left, ev.clientY - rect.top));
+            if (ll) at = [ll.getLat(), ll.getLng()];
+          }
+        } catch {
+          /* 좌표를 못 구하면 이번 우클릭은 건너뛴다 */
+        }
+      }
+      if (!at) return;
+      pick.pick(at[0], at[1]);
     };
     // 더블클릭·우클릭은 **래퍼**에서 받는다:
     //   첫 클릭이 찍은 꼭짓점 핸들(지도 위에 얹힌 다른 DOM)이 두 번째 클릭을 받아도,
@@ -2167,6 +2255,27 @@ export default function KakaoZoneMap({
     if (!txLayerRef.current) return;
     draw();
   }, [visibleTxPins, openPinId, draw]);
+
+  // 5년 이력 창에서 단지를 고르면 그 실거래 핀으로 지도를 부드럽게 옮긴다(강조는 draw 가 한다)
+  useEffect(() => {
+    if (!activeTxKey) return;
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    if (!k || !map) return;
+    const pin = visibleTxPins.find((p) => txPinKey(p.umdNm, p.jibun) === activeTxKey);
+    if (!pin) return;
+    try {
+      map.panTo(new k.maps.LatLng(pin.lat, pin.lng));
+    } catch {
+      /* 지도가 아직 준비 전이면 다음 렌더에서 다시 시도한다 */
+    }
+  }, [activeTxKey, visibleTxPins]);
+
+  // 지번 핀을 찍거나 지우면 자리를 다시 그린다
+  useEffect(() => {
+    if (!jibunLayerRef.current) return;
+    draw();
+  }, [jibunPin, draw]);
 
   // 매물이 늘거나 줄면 배지 자리를 다시 그린다(등록 직후 새로고침 없이 반영)
   useEffect(() => {
@@ -2710,6 +2819,8 @@ export default function KakaoZoneMap({
         {visibleTxPins.map((p) => {
           const accent = TX_PIN_COLORS[p.kind] ?? "#334155";
           const open = openPinId === p.id;
+          // 5년 이력 창에서 보고 있는 단지·지번 — 오레오 블루로 강조하고 바깥으로 펄스를 퍼뜨린다
+          const active = !!activeTxKey && txPinKey(p.umdNm, p.jibun) === activeTxKey;
           return (
             <div
               key={p.id}
@@ -2724,31 +2835,53 @@ export default function KakaoZoneMap({
                 data-testid="tx-price-pin"
                 data-tx-id={p.id}
                 data-tx-name={p.name}
+                data-active={active ? "1" : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
+                  // 5년 이력 창을 여는 쪽이 있으면 그걸로 — 핀을 누르면 그 단지의 5년 흐름이 바로 열린다
+                  if (onSelectTxPin) {
+                    setOpenPinId(null);
+                    onSelectTxPin(p);
+                    return;
+                  }
                   setOpenPinId((v) => (v === p.id ? null : p.id));
                 }}
-                title={`${p.name} · ${p.dealDate} · ${p.areaLabel} · ${p.priceLabel}`}
+                title={
+                  active
+                    ? `${p.name} · 최근 5년 실거래 이력 보기`
+                    : `${p.name} · ${p.dealDate} · ${p.areaLabel} · ${p.priceLabel}`
+                }
+                className={active ? "tx-price-pin is-active" : "tx-price-pin"}
                 style={{
                   display: "block",
                   pointerEvents: "auto",
-                  border: `1px solid ${accent}33`,
-                  borderLeft: `3px solid ${accent}`,
-                  background: open ? "#F7F9FB" : "#ffffff",
+                  border: active ? "1px solid #0054a6" : `1px solid ${accent}33`,
+                  borderLeft: `3px solid ${active ? "#0054a6" : accent}`,
+                  background: active ? "#f1f7fb" : open ? "#F7F9FB" : "#ffffff",
                   borderRadius: "5px",
                   padding: "2px 5px",
-                  boxShadow: "0 1px 2px rgba(16,24,40,.10), 0 6px 14px -8px rgba(16,24,40,.35)",
+                  boxShadow: active
+                    ? "0 0 0 2px rgba(0,84,166,.18), 0 6px 14px -8px rgba(0,84,166,.55)"
+                    : "0 1px 2px rgba(16,24,40,.10), 0 6px 14px -8px rgba(16,24,40,.35)",
                   cursor: "pointer",
                   textAlign: "center",
                   whiteSpace: "nowrap",
                   lineHeight: 1.15,
                 }}
               >
-                <span style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#1A1A1A", letterSpacing: "-0.02em" }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: active ? "12px" : "11px",
+                    fontWeight: 800,
+                    color: active ? "#0054a6" : "#1A1A1A",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
                   {p.priceLabel}
                 </span>
-                <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#5B6472", letterSpacing: "-0.01em" }}>
-                  {p.areaLabel || p.kind}
+                <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: active ? "#2b6b9e" : "#5B6472", letterSpacing: "-0.01em" }}>
+                  {active ? `${p.name}` : p.areaLabel || p.kind}
                 </span>
               </button>
 
@@ -2811,6 +2944,40 @@ export default function KakaoZoneMap({
           );
         })}
       </div>
+
+      {/* ── 지번 핀 — 「📍 지번 찍기」/우클릭/구역 밖 클릭으로 찍은 자리 (z-index 97) ── */}
+      {jibunPin && (
+        <div ref={jibunLayerRef} style={{ ...TX_PIN_LAYER_STYLE, zIndex: 97 }} data-testid="jibun-pin-layer">
+          <div
+            ref={jibunElRef}
+            style={{ position: "absolute", left: 0, top: 0, width: "max-content", visibility: "hidden" }}
+          >
+            {/* 오레오 블루 물결 핀 — 카드가 위로 붙는다 */}
+            <div className="jibun-drop-pin" aria-hidden>
+              <span className="jibun-drop-pin-dot" />
+              <span className="jibun-drop-pin-ripple" />
+              <span className="jibun-drop-pin-ripple jibun-drop-pin-ripple-late" />
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                left: "50%",
+                bottom: "calc(100% + 10px)",
+                transform: "translateX(-50%)",
+                pointerEvents: "auto",
+              }}
+            >
+              <JibunPinCard
+                pin={jibunPin}
+                onClose={onCloseJibunPin}
+                onOpenHistory={onOpenJibunHistory}
+                onOpenZone={onOpenJibunZone}
+                historyLoading={jibunHistoryLoading}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 내 매물 핀 — `매 7.3억 / 다세대 · 전 52.88㎡` (z-index 96) ── */}
       <div ref={myLayerRef} style={MY_PIN_LAYER_STYLE} data-testid="my-pin-layer">
@@ -3136,6 +3303,23 @@ export default function KakaoZoneMap({
           <Icon name="building" size={13} />
           <span className="hidden md:inline">노후도</span>
         </button>
+        {onToggleJibunPick && (
+          <button
+            type="button"
+            onClick={onToggleJibunPick}
+            aria-pressed={jibunPickOn}
+            data-testid="jibun-pick-toggle"
+            title="지번 찍기 — 지도를 누르면 그 자리의 지번·구역·실거래를 보여 줍니다 (아이패드·터치용)"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+              jibunPickOn
+                ? "border-brand bg-brand text-white"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+            }`}
+          >
+            <span aria-hidden className="text-[12px] leading-none">◉</span>
+            <span className="hidden md:inline">지번 찍기</span>
+          </button>
+        )}
         {onToggleTxPins && txPins.length > 0 && (
           <button
             type="button"

@@ -137,6 +137,89 @@ export type MolitResponse = {
   fetchedAt?: string;
 };
 
+// ── 단지·건물 5년 이력(건물 상세) ─────────────────────────────────────────────
+
+/** 5년 이력 조회 대상 — 공동주택(아파트·연립·다세대)만 건물 단위로 볼 수 있다 */
+export type BuildingTradeKind = "아파트" | "연립·다세대";
+
+export const BUILDING_TRADE_KINDS: BuildingTradeKind[] = ["아파트", "연립·다세대"];
+
+/** 화면이 지도 핀·목록 행에서 넘기는 단지·건물 식별자 */
+export type BuildingTradeTarget = {
+  /** 자치구 — LAWD_CD 매핑 */
+  gu: string;
+  /** 법정동(umdNm) */
+  dong: string;
+  /** 지번 (예: 209-12) */
+  jibun: string;
+  kind: BuildingTradeKind;
+  /** 단지명(아파트 aptNm) / 건물명(연립 mhouseNm) */
+  name: string;
+};
+
+export type BuildingHistoryQuery = {
+  gu: string;
+  lawdCd: string;
+  dong: string;
+  jibun: string;
+  kind: BuildingTradeKind;
+  name: string;
+  /** 이번 호출에서 조회한 개월 수 */
+  months: number;
+  /** 최근 몇 개월을 건너뛰었는지 (나눠 부를 때) */
+  offset: number;
+  from: string; // YYYYMM
+  to: string; // YYYYMM
+};
+
+export type BuildingHistorySummary = {
+  /** 해제 거래를 뺀 건수 */
+  count: number;
+  canceled: number;
+  min: number | null;
+  max: number | null;
+  /** 가장 최근 거래(해제 제외) */
+  latest: { price: number; dealDate: string; areaSqm: number | null; floor: number | null } | null;
+  /** 평균 전용 평당가(만원/평) */
+  avgPyeongPrice: number | null;
+  /** 평균 지분·대지 평당가(만원/평) — 연립·다세대 대지권면적 기준 */
+  avgLandPyeongPrice: number | null;
+};
+
+export type BuildingHistoryResponse = {
+  ok: boolean;
+  reason?: "gu_not_found" | "key_missing" | "upstream_failed" | "bad_request";
+  message?: string;
+  query?: BuildingHistoryQuery;
+  coverage?: MolitCoverage;
+  transactions?: MolitTransaction[];
+  summary?: BuildingHistorySummary;
+  /** 요청한 개월 중 일부 달이 실패해 결과가 불완전한지 */
+  partial?: boolean;
+  /** 서버 캐시에서 바로 준 응답인지 */
+  cached?: boolean;
+  fetchedAt?: string;
+};
+
+/** 지번 문자열을 비교 가능한 형태로 — `0209-00` · `209` · `209-0` 을 모두 `209` 로 */
+export function normalizeJibun(raw: string): string {
+  const s = (raw ?? "").trim();
+  const m = s.match(/^(\d{1,4})(?:\s*-\s*(\d{1,4}))?$/);
+  if (!m) return s.replace(/\s+/g, "");
+  const bonbun = Number(m[1]);
+  const bubun = m[2] ? Number(m[2]) : 0;
+  if (!Number.isFinite(bonbun) || bonbun <= 0) return s.replace(/\s+/g, "");
+  return bubun > 0 ? `${bonbun}-${bubun}` : String(bonbun);
+}
+
+/** 단지·건물명 비교 키 — 공백·가운뎃점·괄호·대소문자 무시 */
+export function normalizeBuildingName(raw: string): string {
+  return (raw ?? "")
+    .replace(/\s+/g, "")
+    .replace(/[·.,()\[\]{}'"`]/g, "")
+    .toLowerCase();
+}
+
 export const PYEONG = 3.305785;
 
 /** 만원 → "19억 3,000만원" (0이면 "3억") */

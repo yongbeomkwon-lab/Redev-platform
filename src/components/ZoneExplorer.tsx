@@ -7,7 +7,7 @@
 //  · 갈타맵 스타일: 구역 상세(사업개요·추진경과 타임라인·실거래 배수 분석·매물 비교)
 //  · 재개발뷰 스타일: 실거주 의무/토허제 뱃지, 예상 입주 구간
 // ─────────────────────────────────────────────────────────────────────────────
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Listing, MapZoneType, Transaction, Zone, ZoneStage } from "@/lib/types";
 import { STAGE_ORDER, calcInitialInvestment, calcMultiple } from "@/lib/types";
 import {
@@ -37,7 +37,10 @@ import {
   verdictHeadline,
   type AddressVerdict,
 } from "@/lib/address-verdict";
-import type { AddressPin, AdminMapConfig, AdminZoneShape, StationPin, TxMapPin } from "@/components/map/props";
+import type { AddressPin, AdminMapConfig, AdminZoneShape, JibunPin, StationPin, TxMapPin } from "@/components/map/props";
+import BuildingTradeHistory from "@/components/BuildingTradeHistory";
+import type { BuildingHistoryResponse, BuildingTradeKind, BuildingTradeTarget } from "@/lib/molit";
+import { reverseGeocode } from "@/lib/kakao-address";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
@@ -159,6 +162,17 @@ export default function ZoneExplorer() {
   //     넘겨 준다. 표시 상태(ON/OFF)는 지도 위 토글이 바꾸도록 여기서 갖는다.
   const [txPins, setTxPins] = useState<TxMapPin[]>([]);
   const [txPinsOn, setTxPinsOn] = useState(true);
+  // ── 단지·건물 5년 실거래 이력 창 ─────────────────────────────────────
+  //   · 지도 실거래 핀 또는 실거래 목록의 아파트·연립다세대 행을 누르면 그 단지의 5년 흐름이 열린다.
+  //   · 열려 있는 동안 지도의 그 지번 핀을 강조(activeTxPin)하고 지도를 그쪽으로 옮긴다.
+  const [buildingTarget, setBuildingTarget] = useState<BuildingTradeTarget | null>(null);
+  // ── 「📍 지번 찍기」 ─────────────────────────────────────────────────
+  //   · 켜면 지도 클릭이 구역 선택 대신 그 자리의 지번 핀을 꽂는다(아이패드·터치에서 필요).
+  //   · 기본 모드에서도 우클릭·구역 밖 클릭은 지번 핀으로 간다.
+  const [jibunPickOn, setJibunPickOn] = useState(false);
+  const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
+  const [jibunProbing, setJibunProbing] = useState(false);
+  const jibunSeqRef = useRef(0);
 
   // ── 관리자 모드(?admin=1) ────────────────────────────────────────────────
   //   일반 방문자는 이 상태가 모두 비어 있어 화면이 기존과 똑같다.
@@ -503,6 +517,93 @@ export default function ZoneExplorer() {
   //   준공 구역도 "주소가 속한 곳"을 말할 때는 빠지면 안 된다 — 표시 여부(visibleSeoulZones)와
   //   무관하게 전체(진행 중 1,822 + 준공 357)에 대고 판정하고, 숨겨졌으면 안내문으로 알린다.
   const allPrep = useMemo(() => prepareAllZones(seoulZones), [seoulZones]);
+
+  // ── 지도에서 찍은 지번 ────────────────────────────────────────────────
+  //   · 즉시 핀을 꽂고(로딩 상태) 역지오코딩으로 법정동·지번을 채운다.
+  //   · 그 지점이 속한 정비구역은 경계 판정(judgeAddress)으로 찾는다 — 카드에 바로가기로 붙는다.
+  async function pickJibun(lat: number, lng: number) {
+    const seq = ++jibunSeqRef.current;
+    setJibunPin({ lat, lng, gu: "", dong: "", jibun: "", jibunAddress: "", zones: [], state: "loading" });
+    const rev = await reverseGeocode(lat, lng);
+    if (jibunSeqRef.current !== seq) return;
+    if (!rev) {
+      setJibunPin((p) =>
+        p ? { ...p, state: "error", note: "이 지점의 주소를 확인하지 못했습니다(카카오 주소 서비스 응답 없음)." } : p
+      );
+      return;
+    }
+    const v = judgeAddress(
+      {
+        key: `pick:${lat},${lng}`,
+        label: rev.jibunAddress ?? rev.roadAddress ?? "",
+        kind: "지번",
+        lat,
+        lng,
+        gu: rev.gu ?? undefined,
+        dong: rev.dong ?? undefined,
+      },
+      seoulZones,
+      allPrep
+    );
+    const hits = [...v.inside, ...v.completedHits].map((h) => ({
+      id: h.zone.id,
+      name: h.zone.name,
+      stage: h.zone.stage,
+      type: h.zone.type,
+      completed: h.completed,
+    }));
+    setJibunPin({
+      lat,
+      lng,
+      gu: rev.gu ?? "",
+      dong: rev.dong ?? "",
+      jibun: rev.jibun ?? "",
+      jibunAddress: rev.jibunAddress ?? "",
+      roadAddress: rev.roadAddress,
+      buildingName: rev.buildingName,
+      zones: hits,
+      state: "ready",
+      note: rev.jibun ? null : "지번이 없는 주소(도로명만) — 이 지점은 단지 이력을 열 수 없습니다.",
+    });
+  }
+
+  /**
+   * 찍은 지번의 공동주택 5년 이력 — 아파트를 먼저 보고, 없으면 연립·다세대로 찾는다.
+   *   · 지도에서 찍은 지점은 단지명을 모르므로, 최근 1년 거래에서 그 지번의 단지명을 확인한다.
+   */
+  async function openJibunHistory(pin: JibunPin) {
+    if (!pin.jibun || !pin.gu || !pin.dong) {
+      setJibunPin((p) => (p ? { ...p, note: "자치구·법정동·지번을 확인하지 못해 실거래를 조회할 수 없습니다." } : p));
+      return;
+    }
+    setJibunProbing(true);
+    try {
+      for (const kind of ["아파트", "연립·다세대"] as BuildingTradeKind[]) {
+        const qs = new URLSearchParams({
+          gu: pin.gu,
+          dong: pin.dong,
+          jibun: pin.jibun,
+          kind,
+          months: "12",
+          offset: "0",
+        });
+        const res = await fetch(`/api/transactions/building?${qs.toString()}`, { cache: "no-store" });
+        const json = (await res.json()) as BuildingHistoryResponse;
+        const first = json.transactions?.[0];
+        if (json.ok && first) {
+          setBuildingTarget({ gu: pin.gu, dong: pin.dong, jibun: pin.jibun, kind, name: first.name });
+          return;
+        }
+      }
+      setJibunPin((p) =>
+        p ? { ...p, note: "이 지번에는 최근 1년 공동주택(아파트·연립다세대) 신고 거래가 없습니다." } : p
+      );
+    } catch {
+      setJibunPin((p) => (p ? { ...p, note: "실거래를 조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요." } : p));
+    } finally {
+      setJibunProbing(false);
+    }
+  }
 
   // 입력이 주소 형태면 350ms 뒤 카카오 주소 검색 — 구역명 검색 결과와 나란히 보여준다
   useEffect(() => {
@@ -1062,6 +1163,30 @@ export default function ZoneExplorer() {
           txPins={txPins}
           txPinsOn={txPinsOn}
           onToggleTxPins={() => setTxPinsOn((v) => !v)}
+          onSelectTxPin={(pin) =>
+            setBuildingTarget({
+              gu: selected?.district ?? selectedSeoul?.gu ?? "",
+              dong: pin.umdNm,
+              jibun: pin.jibun,
+              kind: (pin.kind === "연립·다세대" ? "연립·다세대" : "아파트") as BuildingTradeKind,
+              name: pin.name,
+            })
+          }
+          activeTxPin={
+            buildingTarget ? { umdNm: buildingTarget.dong, jibun: buildingTarget.jibun } : null
+          }
+          jibunPickOn={jibunPickOn}
+          onToggleJibunPick={() => setJibunPickOn((v) => !v)}
+          onPickJibun={(lat, lng) => {
+            void pickJibun(lat, lng);
+          }}
+          jibunPin={jibunPin}
+          onCloseJibunPin={() => setJibunPin(null)}
+          onOpenJibunHistory={(pin) => {
+            void openJibunHistory(pin);
+          }}
+          onOpenJibunZone={(id) => pickZone(id)}
+          jibunHistoryLoading={jibunProbing}
         />
       </div>
 
@@ -1916,6 +2041,7 @@ export default function ZoneExplorer() {
                   polygon={selected.polygon}
                   parts={selected.parts}
                   onTxPins={setTxPins}
+                  onOpenBuilding={setBuildingTarget}
                 />
 
                 <div>
@@ -2011,6 +2137,7 @@ export default function ZoneExplorer() {
                 zone={selectedSeoul}
                 listings={selectedListings}
                 onTxPins={setTxPins}
+                onOpenBuilding={setBuildingTarget}
                 meta={
                   seoulMeta ?? {
                     source: "서울 열린데이터광장 OA-22712 서울시 도시계획사업 현황(서울플랜+)",
@@ -2083,6 +2210,10 @@ export default function ZoneExplorer() {
         >
           구역 정보 ▲
         </button>
+      )}
+
+      {buildingTarget && (
+        <BuildingTradeHistory target={buildingTarget} onClose={() => setBuildingTarget(null)} />
       )}
 
       {unlockTarget && (

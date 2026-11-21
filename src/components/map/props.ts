@@ -57,6 +57,34 @@ export type ZoneMapProps = {
   /** 지도 위 「실거래 핀」 토글 */
   onToggleTxPins?: () => void;
   /**
+   * 실거래 핀을 눌렀을 때 — 그 단지·건물의 최근 5년 이력 창(BuildingTradeHistory)을 연다.
+   * 넘기지 않으면 핀은 예전처럼 작은 상세 카드만 펼친다.
+   */
+  onSelectTxPin?: (pin: TxMapPin) => void;
+  /**
+   * 지금 5년 이력 창에서 보고 있는 단지·건물 — 그 지번의 핀을 강조(브랜드 색·펄스·확대)하고
+   * 화면을 그 핀으로 부드럽게 옮긴다. 창을 닫으면 null 로 돌아온다.
+   */
+  activeTxPin?: { umdNm: string; jibun: string } | null;
+  /**
+   * 「📍 지번 찍기」 모드 — 켜면 지도 클릭이 구역 선택 대신 **그 자리의 지번 핀**을 꽂는다.
+   *   · 아이패드(터치)에서는 이 토글이 있어야 구역 안을 찍을 수 있다.
+   *   · 기본 모드에서도 우클릭·구역 밖 클릭은 지번 핀으로 간다(편의).
+   */
+  jibunPickOn?: boolean;
+  onToggleJibunPick?: () => void;
+  /** 지도에서 찍은 좌표 — 호출성(ZoneExplorer)이 역지오코딩해 jibunPin 을 만든다 */
+  onPickJibun?: (lat: number, lng: number) => void;
+  /** 찍은 지번 핀(주소·소속 구역·실거래 열기 버튼) */
+  jibunPin?: JibunPin | null;
+  onCloseJibunPin?: () => void;
+  /** 지번 카드의 「이 지번 실거래 5년 보기」 */
+  onOpenJibunHistory?: (pin: JibunPin) => void;
+  /** 그 지번이 속한 구역을 연다 */
+  onOpenJibunZone?: (zoneId: string) => void;
+  /** 지번 카드의 실거래 조회가 도는 중인지 */
+  jibunHistoryLoading?: boolean;
+  /**
    * 내 매물 핀 — 부동산포스에 올린 권용범 대표 매물(정비구역 안 + 밖 모두).
    * 「내 매물만 보기」를 켜면 이 핀들이 지도에 찍힌다(상태는 ZoneExplorer가 갖는다).
    */
@@ -135,6 +163,41 @@ export type TxMapPin = {
   /** 지분(대지) 평당가(만원/평) — 연립·다세대는 대지권면적, 없으면 null */
   landPyeongPrice?: number | null;
 };
+
+/**
+ * 지도에 찍은 지번 핀 — 「📍 지번 찍기」/우클릭/구역 밖 클릭으로 꽂힌다.
+ *   좌표를 역지오코딩해 법정동·지번과 소속 정비구역을 채운다.
+ */
+export type JibunPin = {
+  lat: number;
+  lng: number;
+  /** 자치구 (예: 동작구) */
+  gu: string;
+  /** 법정동 (예: 상도동) */
+  dong: string;
+  /** 지번 (예: 209-12) — 없으면 빈 문자열 */
+  jibun: string;
+  /** 지번 주소 전체 */
+  jibunAddress: string;
+  /** 도로명 주소(있으면) */
+  roadAddress?: string | null;
+  /** 건물명(있으면) */
+  buildingName?: string | null;
+  /** 이 지점이 속한 정비구역 — 경계 안(inside)을 먼저 */
+  zones: { id: string; name: string; stage?: string; type?: string; completed?: boolean }[];
+  /** 주소 확인 상태 */
+  state: "loading" | "ready" | "error";
+  /** 안내 문구(실거래 없음·주소 확인 실패 등) */
+  note?: string | null;
+};
+
+/** 실거래 핀을 단지·지번으로 알아보는 키 — 지번 표기(`209`/`209-0`) 차이를 무시한다 */
+export function txPinKey(umdNm: string, jibun: string): string {
+  const s = (jibun ?? "").trim();
+  const m = s.match(/^(\d{1,4})(?:\s*-\s*(\d{1,4}))?$/);
+  const norm = m ? (Number(m[2] || 0) > 0 ? `${Number(m[1])}-${Number(m[2])}` : String(Number(m[1]))) : s;
+  return `${umdNm}|${norm}`;
+}
 
 /** 관리자 모드가 지도에 넘기는 값 — 저장된 구역(그리기) + 지금 그리는 초안 */
 export type AdminMapConfig = {

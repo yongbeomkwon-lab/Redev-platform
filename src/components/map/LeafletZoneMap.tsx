@@ -34,7 +34,8 @@ import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import SubwayLayer from "./SubwayLayer";
-import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import { SEOUL_BOUNDS, txPinKey, type AddressPin, type JibunPin, type StationPin, type LeafletZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import JibunPinCard from "./JibunPinCard";
 import { addressPinHtml, stationPinHtml } from "./address-pin";
 
 export { TYPE_COLORS };
@@ -191,22 +192,33 @@ function ListingBadges({
  * Leaflet 에서는 divIcon 마커로 폴리곤 캔버스(400)·매물 배지(700) 사이 pane(690)에 얹는다.
  * 마우스를 올리면 단지명·거래일·면적·평당가가 툴팁으로 뜬다.
  */
-function TxPricePins({ pins }: { pins: TxMapPin[] }) {
+function TxPricePins({
+  pins,
+  activeKey,
+  onSelect,
+}: {
+  pins: TxMapPin[];
+  activeKey: string;
+  onSelect?: (p: TxMapPin) => void;
+}) {
   if (pins.length === 0) return null;
   return (
     <Pane name="redevTxPins" style={{ zIndex: 690 }}>
       {pins.map((p) => {
-        const accent = p.kind === "연립·다세대" ? "#7c3aed" : "#1d4ed8";
+        const active = !!activeKey && txPinKey(p.umdNm, p.jibun) === activeKey;
+        const accent = active ? "#0054a6" : p.kind === "연립·다세대" ? "#7c3aed" : "#1d4ed8";
         const name = p.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const area = (p.areaLabel || p.kind).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        const bg = active ? "#f1f7fb" : "#fff";
         return (
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
             keyboard={false}
+            eventHandlers={{ click: () => onSelect?.(p) }}
             icon={L.divIcon({
               className: "redev-tx-pin",
-              html: `<div style="transform:translate(-50%,-100%);display:block;text-align:center;border:1.5px solid ${accent};border-left:4px solid ${accent};background:#fff;border-radius:6px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:#0f172a;">${p.priceLabel}</span><span style="display:block;font-size:9px;font-weight:600;color:#475569;">${area}</span></div>`,
+              html: `<div class="${active ? "tx-price-pin is-active" : ""}" style="transform:translate(-50%,-100%);display:block;text-align:center;border:1.5px solid ${accent};border-left:4px solid ${accent};background:${bg};border-radius:6px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:${active ? 12 : 11}px;font-weight:800;color:${active ? "#0054a6" : "#0f172a"};">${p.priceLabel}</span><span style="display:block;font-size:9px;font-weight:600;color:#475569;">${active ? name : area}</span></div>`,
               iconSize: [0, 0],
               iconAnchor: [0, 0],
             })}
@@ -221,6 +233,111 @@ function TxPricePins({ pins }: { pins: TxMapPin[] }) {
           </Marker>
         );
       })}
+    </Pane>
+  );
+}
+
+/** 5년 이력 창에서 고른 단지·지번으로 지도를 부드럽게 옮긴다 */
+function PanToActiveTxPin({ pins, activeKey }: { pins: TxMapPin[]; activeKey: string }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!activeKey) return;
+    const p = pins.find((x) => txPinKey(x.umdNm, x.jibun) === activeKey);
+    if (p) map.panTo([p.lat, p.lng], { animate: true });
+  }, [activeKey, pins, map]);
+  return null;
+}
+
+/**
+ * 지번 찍기 — 「📍 지번 찍기」 모드에서는 지도 클릭이 지번 핀으로 가고,
+ * 기본 모드에서도 우클릭(컨텍스트 메뉴 막음)이 그 자리를 찍는다.
+ */
+function JibunPicker({
+  on,
+  onPick,
+}: {
+  on: boolean;
+  onPick?: (lat: number, lng: number) => void;
+}) {
+  const map = useMap();
+  const onRef = useRef(on);
+  const pickRef = useRef(onPick);
+  onRef.current = on;
+  pickRef.current = onPick;
+  useEffect(() => {
+    const onMapClick = (e: L.LeafletMouseEvent) => {
+      if (!onRef.current) return;
+      L.DomEvent.stopPropagation(e);
+      pickRef.current?.(e.latlng.lat, e.latlng.lng);
+    };
+    const onContext = (e: L.LeafletMouseEvent) => {
+      pickRef.current?.(e.latlng.lat, e.latlng.lng);
+    };
+    const blockMenu = (ev: MouseEvent) => {
+      if (pickRef.current) ev.preventDefault();
+    };
+    const el = map.getContainer();
+    map.on("click", onMapClick);
+    map.on("contextmenu", onContext);
+    el.addEventListener("contextmenu", blockMenu);
+    return () => {
+      map.off("click", onMapClick);
+      map.off("contextmenu", onContext);
+      el.removeEventListener("contextmenu", blockMenu);
+    };
+  }, [map]);
+  return null;
+}
+
+/** 찍은 지번 핀 — 오레오 블루 물결 핀 + 지번 카드 팝업 (카카오맵과 같은 DOM·클래스) */
+function JibunPinLayer({
+  pin,
+  onClose,
+  onOpenHistory,
+  onOpenZone,
+  historyLoading,
+}: {
+  pin: JibunPin | null;
+  onClose?: () => void;
+  onOpenHistory?: (pin: JibunPin) => void;
+  onOpenZone?: (zoneId: string) => void;
+  historyLoading?: boolean;
+}) {
+  const map = useMap();
+  const markerRef = useRef<L.Marker | null>(null);
+  const lat = pin?.lat;
+  const lng = pin?.lng;
+  useEffect(() => {
+    if (lat === undefined || lng === undefined) return;
+    map.panTo([lat, lng], { animate: true });
+    // 카드를 바로 펼친다 — 찍었는데 아무것도 안 보이면 실패처럼 느껴진다
+    const t = window.setTimeout(() => markerRef.current?.openPopup(), 90);
+    return () => window.clearTimeout(t);
+  }, [lat, lng, map]);
+  if (!pin) return null;
+  return (
+    <Pane name="redevJibunPin" style={{ zIndex: 697 }}>
+      <Marker
+        ref={markerRef}
+        position={[pin.lat, pin.lng]}
+        keyboard={false}
+        icon={L.divIcon({
+          className: "redev-jibun-pin",
+          html: `<div style="transform:translate(-50%,-50%)"><div class="jibun-drop-pin"><span class="jibun-drop-pin-dot"></span><span class="jibun-drop-pin-ripple"></span><span class="jibun-drop-pin-ripple jibun-drop-pin-ripple-late"></span></div></div>`,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        })}
+      >
+        <Popup maxWidth={280} autoPan>
+          <JibunPinCard
+            pin={pin}
+            onClose={onClose}
+            onOpenHistory={onOpenHistory}
+            onOpenZone={onOpenZone}
+            historyLoading={historyLoading}
+          />
+        </Popup>
+      </Marker>
     </Pane>
   );
 }
@@ -478,6 +595,16 @@ export default function LeafletZoneMap({
   txPins = [],
   txPinsOn = true,
   onToggleTxPins,
+  onSelectTxPin,
+  activeTxPin,
+  jibunPickOn = false,
+  onToggleJibunPick,
+  onPickJibun,
+  jibunPin,
+  onCloseJibunPin,
+  onOpenJibunHistory,
+  onOpenJibunZone,
+  jibunHistoryLoading = false,
   myPins = [],
   myPinsOn = false,
   onToggleMyPins,
@@ -575,7 +702,25 @@ export default function LeafletZoneMap({
       <ListingBadges zones={seoulZones} counts={listingCounts} onSelect={onSelectZone} />
 
       {/* ── 실거래 가격 핀 — 구역 상세의 ‘구역 내’ 거래 ── */}
-      <TxPricePins pins={txPinsOn ? txPins : []} />
+      <TxPricePins
+        pins={txPinsOn ? txPins : []}
+        activeKey={activeTxPin ? txPinKey(activeTxPin.umdNm, activeTxPin.jibun) : ""}
+        onSelect={onSelectTxPin}
+      />
+      <PanToActiveTxPin
+        pins={txPinsOn ? txPins : []}
+        activeKey={activeTxPin ? txPinKey(activeTxPin.umdNm, activeTxPin.jibun) : ""}
+      />
+
+      {/* ── 지번 찍기 — 클릭/우클릭으로 찍은 자리에 오레오 블루 물결 핀 ── */}
+      <JibunPicker on={jibunPickOn} onPick={onPickJibun} />
+      <JibunPinLayer
+        pin={jibunPin ?? null}
+        onClose={onCloseJibunPin}
+        onOpenHistory={onOpenJibunHistory}
+        onOpenZone={onOpenJibunZone}
+        historyLoading={jibunHistoryLoading}
+      />
 
       {/* ── 내 매물 핀 — 「내 매물만 보기」가 켜졌을 때 63건 전체 ── */}
       <MyListingPins pins={myPinsOn ? myPins : []} onSelectZone={onSelectZone} />
@@ -652,6 +797,23 @@ export default function LeafletZoneMap({
           <Icon name="train" size={13} />
           지하철 노선
         </button>
+        {onToggleJibunPick && (
+          <button
+            type="button"
+            onClick={onToggleJibunPick}
+            aria-pressed={jibunPickOn}
+            data-testid="jibun-pick-toggle"
+            title="지번 찍기 — 지도를 누르면 그 자리의 지번·구역·실거래를 보여 줍니다"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+              jibunPickOn
+                ? "border-brand bg-brand text-white"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+            }`}
+          >
+            <span aria-hidden className="text-[12px] leading-none">◉</span>
+            지번 찍기
+          </button>
+        )}
         {onToggleTxPins && txPins.length > 0 && (
           <button
             type="button"

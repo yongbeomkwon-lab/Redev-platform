@@ -19,6 +19,7 @@ import ZoneTransactions from "./ZoneTransactions";
 import { ZoneListingCards } from "./ZoneListingCards";
 import LandPermitNotice from "./LandPermitNotice";
 import type { TxMapPin } from "./map/props";
+import type { BuildingTradeTarget } from "@/lib/molit";
 
 const PYEONG = 3.305785;
 
@@ -28,6 +29,7 @@ export default function ZoneOfficialPanel({
   onClose,
   listings = [],
   onTxPins,
+  onOpenBuilding,
 }: {
   zone: SeoulZone;
   meta: SeoulZonesMeta;
@@ -36,6 +38,8 @@ export default function ZoneOfficialPanel({
   listings?: Listing[];
   /** 실거래 좌표를 지도 가격 핀으로 넘긴다 */
   onTxPins?: (pins: TxMapPin[]) => void;
+  /** 실거래 행을 누를 때 그 단지·건물의 5년 이력을 연다 */
+  onOpenBuilding?: (target: BuildingTradeTarget) => void;
 }) {
   const color = TYPE_COLORS[zone.type] ?? "#64748b";
   const pyeong = Math.round(zone.area / PYEONG);
@@ -205,6 +209,7 @@ export default function ZoneOfficialPanel({
         parts={zone.parts}
         holes={zone.holes}
         onTxPins={onTxPins}
+        onOpenBuilding={onOpenBuilding}
       />
 
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-slate-600">

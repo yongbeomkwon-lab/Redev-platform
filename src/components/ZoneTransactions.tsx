@@ -23,6 +23,8 @@ import {
   legalDongInText,
   toPyeong,
   zoneJibunInText,
+  type BuildingTradeKind,
+  type BuildingTradeTarget,
   type MolitResponse,
   type MolitTransaction,
   type MolitTransactionKind,
@@ -74,6 +76,7 @@ export default function ZoneTransactions({
   parts,
   holes,
   onTxPins,
+  onOpenBuilding,
 }: {
   gu: string;
   /** 구역 이름·별칭 — 법정동·지번을 찾는 근거 */
@@ -92,6 +95,11 @@ export default function ZoneTransactions({
    *   · 구역이 바뀌거나 표시할 거래가 없으면 빈 배열을 넘긴다.
    */
   onTxPins?: (pins: TxMapPin[]) => void;
+  /**
+   * 아파트·연립다세대 행을 누르면 그 단지·건물의 최근 5년 이력 창을 연다.
+   *   (단독·다가구는 지번이 가려져 건물 단위로 묶을 수 없다 — 누를 수 없다)
+   */
+  onOpenBuilding?: (target: BuildingTradeTarget) => void;
 }) {
   const [dongs, setDongs] = useState<string[] | null>(null);
   const [dongNote, setDongNote] = useState<string | null>(null);
@@ -610,7 +618,24 @@ export default function ZoneTransactions({
               className="divide-y divide-blue-100 overflow-hidden rounded-lg border border-blue-100 bg-white"
             >
               {shown.map((t) => (
-                <TxRow key={t.id} t={t} inside={isInside(t)} showBadge={mode === "dong"} />
+                <TxRow
+                  key={t.id}
+                  t={t}
+                  inside={isInside(t)}
+                  showBadge={mode === "dong"}
+                  onOpen={
+                    onOpenBuilding && t.kind !== "단독·다가구" && cleanJibun(t.jibun)
+                      ? () =>
+                          onOpenBuilding({
+                            gu,
+                            dong: t.umdNm,
+                            jibun: t.jibun,
+                            kind: t.kind as BuildingTradeKind,
+                            name: t.name,
+                          })
+                      : undefined
+                  }
+                />
               ))}
             </ul>
           )}
@@ -755,10 +780,13 @@ function TxRow({
   t,
   inside,
   showBadge,
+  onOpen,
 }: {
   t: MolitTransaction;
   inside: boolean;
   showBadge: boolean;
+  /** 있으면 행 전체가 버튼 — 이 단지·건물의 5년 이력이 열린다 */
+  onOpen?: () => void;
 }) {
   const area = t.areaSqm ? `${t.areaSqm.toFixed(t.areaSqm >= 100 ? 0 : 1)}㎡` : null;
   const pyeong = t.areaSqm ? toPyeong(t.areaSqm) : null;
@@ -766,8 +794,8 @@ function TxRow({
   const landSqm = t.plottageSqm && t.plottageSqm > 0 ? t.plottageSqm : null;
   const land = landSqm ? `${landSqm.toFixed(landSqm >= 100 ? 0 : 1)}㎡` : null;
   const landPyeong = landSqm ? toPyeong(landSqm) : null;
-  return (
-    <li className={"flex items-start gap-2 px-2.5 py-1.5 " + (t.canceled ? "bg-rose-50/50" : "")}>
+  const body = (
+    <>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
           <i
@@ -834,6 +862,32 @@ function TxRow({
           </div>
         )}
       </div>
-    </li>
+    </>
+  );
+
+  // 아파트·연립다세대 행은 누를 수 있다 — 그 단지·건물의 최근 5년 이력이 열린다
+  if (onOpen) {
+    return (
+      <li className={t.canceled ? "bg-rose-50/50" : ""}>
+        <button
+          type="button"
+          onClick={onOpen}
+          data-testid="tx-row-open"
+          title={`${t.name} · ${t.umdNm} ${t.jibun} — 최근 5년 실거래 이력 보기`}
+          className="flex w-full items-start gap-2 px-2.5 py-1.5 text-left transition hover:bg-brand-tint/70"
+        >
+          {body}
+          <span
+            aria-hidden
+            className="shrink-0 self-center rounded-full border border-line bg-white px-1.5 py-[1px] text-[9px] font-bold text-brand"
+          >
+            5년 ↗
+          </span>
+        </button>
+      </li>
+    );
+  }
+  return (
+    <li className={"flex items-start gap-2 px-2.5 py-1.5 " + (t.canceled ? "bg-rose-50/50" : "")}>{body}</li>
   );
 }

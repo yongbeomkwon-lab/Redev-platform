@@ -12,6 +12,7 @@
 import {
   loadKakaoServices,
   type KakaoAddressDoc,
+  type KakaoCoordDoc,
   type KakaoKeywordDoc,
   type KakaoRegionDoc,
   type KakaoSDK,
@@ -282,6 +283,67 @@ export async function geocodeJibun(gu: string, dong: string, jibun: string): Pro
 export function hasCachedJibun(gu: string, dong: string, jibun: string): boolean {
   loadSessionCache();
   return jibunCache.has(`${gu}|${dong}|${jibun}`);
+}
+
+// ── 좌표 → 주소 (지도에서 찍은 지번) ─────────────────────────────────────────
+
+export type ReverseAddress = {
+  /** 자치구 (예: 동작구) */
+  gu: string | null;
+  /** 법정동 (예: 상도동) — 국토부 조회의 umdNm */
+  dong: string | null;
+  /** 지번 (예: 209-12). 산(山) 지번은 `산12-3` */
+  jibun: string | null;
+  /** 지번 주소 전체 (예: 서울특별시 동작구 상도동 209-12) */
+  jibunAddress: string | null;
+  /** 도로명 주소 전체 (예: 서울특별시 동작구 장승배기로 1) */
+  roadAddress: string | null;
+  /** 건물명 (예: 상도23구역 다원씨앤아이) */
+  buildingName: string | null;
+};
+
+/**
+ * 좌표 → 지번·도로명 주소 (kakao Geocoder.coord2Address).
+ *   · 지도에서 임의의 지점을 찍었을 때 "어느 동 몇 번지"인지 바로 알려 준다.
+ *   · 좌표 캐시는 두지 않는다 — 클릭한 자리가 매번 다르다.
+ *   · SDK services 가 없거나(키·도메인 문제) 결과가 없으면 null.
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseAddress | null> {
+  const loaded = await loadKakaoServices();
+  if (!loaded.ok || !loaded.sdk.maps.services) return null;
+  const sdk = loaded.sdk;
+  const doc = await new Promise<KakaoCoordDoc | null>((resolve) => {
+    try {
+      const geocoder = new sdk.maps.services!.Geocoder();
+      geocoder.coord2Address(
+        lng,
+        lat,
+        (data, status) => {
+          if (status !== "OK" || !Array.isArray(data) || !data.length) return resolve(null);
+          resolve(data[0] ?? null);
+        }
+      );
+    } catch {
+      resolve(null);
+    }
+  });
+  if (!doc) return null;
+
+  const region = doc.address;
+  const road = doc.road_address;
+  const bonbun = region?.main_address_no?.trim() ?? "";
+  const bubun = region?.sub_address_no?.trim() ?? "";
+  const jibun = bonbun ? (bubun && Number(bubun) > 0 ? `${bonbun}-${bubun}` : bonbun) : null;
+  const dong = (region?.region_3depth_name ?? road?.region_3depth_name ?? "").trim() || null;
+
+  return {
+    gu: (region?.region_2depth_name ?? road?.region_2depth_name ?? "").trim() || null,
+    dong,
+    jibun: jibun ? (region?.mountain_yn === "Y" ? `산${jibun}` : jibun) : null,
+    jibunAddress: region?.address_name?.trim() || null,
+    roadAddress: road?.address_name?.trim() || null,
+    buildingName: road?.building_name?.trim() || null,
+  };
 }
 
 /**

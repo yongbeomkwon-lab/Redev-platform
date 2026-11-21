@@ -135,6 +135,35 @@ export type KakaoGeocoder = {
     y: number,
     callback: (data: KakaoRegionDoc[], status: string) => void
   ): void;
+  /** 좌표 → 지번·도로명 주소 (x=경도, y=위도) — 지도에서 찍은 지점의 지번을 얻는다 */
+  coord2Address(
+    x: number,
+    y: number,
+    callback: (data: KakaoCoordDoc[], status: string) => void
+  ): void;
+};
+
+/** coord2Address 응답 1건 — 지번 주소(address)와 도로명 주소(road_address) */
+export type KakaoCoordDoc = {
+  address: {
+    address_name: string;
+    region_1depth_name?: string;
+    region_2depth_name?: string;
+    region_3depth_name?: string;
+    main_address_no?: string;
+    sub_address_no?: string;
+    mountain_yn?: string;
+  } | null;
+  road_address: {
+    address_name: string;
+    building_name?: string;
+    road_name?: string;
+    region_2depth_name?: string;
+    region_3depth_name?: string;
+    main_building_no?: string;
+    sub_building_no?: string;
+    underground_yn?: string;
+  } | null;
 };
 
 export type KakaoPlaces = {
