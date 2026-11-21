@@ -21,6 +21,7 @@ import {
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
+import { DEV_GRADE_COLOR, loadDevPressure, type DevHotspot, type RecentZone } from "@/lib/dev-pressure";
 import { TYPE_COLORS } from "@/components/map/colors";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
@@ -169,10 +170,39 @@ export default function ZoneExplorer() {
   // ── 「📍 지번 찍기」 ─────────────────────────────────────────────────
   //   · 켜면 지도 클릭이 구역 선택 대신 그 자리의 지번 핀을 꽂는다(아이패드·터치에서 필요).
   //   · 기본 모드에서도 우클릭·구역 밖 클릭은 지번 핀으로 간다.
+  // ── 🔥 개발압력 ─────────────────────────────────────────────────────
+  //   · 지도 위 토글과 첫 화면 패널이 같은 상태를 본다(패널에서 핫스팟을 누르면 자동으로 켜진다).
+  //   · dpFocus 는 '이 핫스팟으로 지도를 옮기고 카드를 열라'는 요청 — token 이 바뀔 때마다 지도가 처리한다.
+  const [devPressureOn, setDevPressureOn] = useState(false);
+  const [dpFocus, setDpFocus] = useState<{ id: string; lat: number; lng: number; token: number } | null>(null);
+  const [dpTop, setDpTop] = useState<DevHotspot[]>([]);
+  /** ⚡ 최근 변동 구역 — public/data/recent-zones.json (scripts/build-recent-zones.py) */
+  const [recentZones, setRecentZones] = useState<RecentZone[]>([]);
   const [jibunPickOn, setJibunPickOn] = useState(false);
   const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
   const [jibunProbing, setJibunProbing] = useState(false);
   const jibunSeqRef = useRef(0);
+
+  // 첫 화면 패널 데이터 — 개발압력 상위 6곳과 최근 반영 구역 6곳
+  useEffect(() => {
+    let alive = true;
+    loadDevPressure()
+      .then((d) => {
+        if (alive) setDpTop(d.hotspots.slice(0, 6));
+      })
+      .catch(() => {});
+    fetch(`/data/recent-zones.json?v=${encodeURIComponent(process.env.NEXT_PUBLIC_BUILD_ID || "dev")}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<{ zones: RecentZone[] }>) : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (alive) setRecentZones((d.zones ?? []).slice(0, 6));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // ── 관리자 모드(?admin=1) ────────────────────────────────────────────────
   //   일반 방문자는 이 상태가 모두 비어 있어 화면이 기존과 똑같다.
@@ -767,6 +797,14 @@ export default function ZoneExplorer() {
     }
   }
 
+  /** 첫 화면 패널의 핫스팟 → 지도를 그 자리로 옮기고 🔥 개발압력 레이어·카드를 연다 */
+  function openDevPressure(h: DevHotspot) {
+    setDevPressureOn(true);
+    setDpFocus({ id: h.id, lat: h.lat, lng: h.lng, token: Date.now() });
+    // 좁은 화면은 패널이 지도 아래를 덮으므로 접어 카드가 보이게 한다
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
+
   /** 역 검색 결과 선택 — 역으로 지도를 옴기고, 역 주변 구역 목록을 띄운다 */
   function pickStation(s: SubwayStation) {
     setStationPick(s);
@@ -1175,6 +1213,9 @@ export default function ZoneExplorer() {
           activeTxPin={
             buildingTarget ? { umdNm: buildingTarget.dong, jibun: buildingTarget.jibun } : null
           }
+          devPressureOn={devPressureOn}
+          onToggleDevPressure={() => setDevPressureOn((v) => !v)}
+          devPressureFocus={dpFocus}
           jibunPickOn={jibunPickOn}
           onToggleJibunPick={() => setJibunPickOn((v) => !v)}
           onPickJibun={(lat, lng) => {
@@ -1873,10 +1914,10 @@ export default function ZoneExplorer() {
         <aside className="absolute z-[610] flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(16,24,40,.05),0_18px_44px_-24px_rgba(16,24,40,.38)] inset-x-2 bottom-2 top-auto max-h-[62dvh] md:inset-x-auto md:left-auto md:right-3 md:top-3 md:bottom-3 md:max-h-none md:w-[400px]">
           <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
             <b className="text-sm font-bold text-slate-900">
-              {selectedCustom ? selectedCustom.name : selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "대표 구역"}
+              {selectedCustom ? selectedCustom.name : selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "리디브 대시보드"}
             </b>
             {!selected && !selectedSeoul && (
-              <span className="text-[11px] text-slate-500">{filtered.length}곳 · 실거래·매물 상세</span>
+              <span className="text-[11px] text-slate-500">개발압력 TOP · 최근 변동</span>
             )}
             <button
               type="button"
@@ -2151,53 +2192,87 @@ export default function ZoneExplorer() {
               />
             )}
 
-            {/* 3) 아무것도 선택되지 않았을 때: 대표 구역 목록 */}
+                        {/* 3) 아무것도 선택되지 않았을 때: 🔥 개발압력 TOP + ⚡ 최근 변동 구역 */}
             {!selected && !selectedSeoul && (
-              <div className="space-y-2">
-                {filtered.map((z) => {
-                  const zListings = listings.filter((l) => listingMatchesZone(l, z.id, z.name));
-                  const lowest = transactions
-                    .filter((t) => t.zoneId === z.id)
-                    .reduce((m, t) => Math.min(m, t.price), Infinity);
-                  const lowestInitial = zListings.length
-                    ? Math.min(...zListings.map((l) => calcInitialInvestment(l)))
-                    : z.lowestInitialInvestment;
-                  return (
-                    <button
-                      key={z.id}
-                      onClick={() => pickZone(z.id)}
-                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
-                    >
-                      <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                        <TypeBadge type={z.type} />
-                        <StageBadge stage={z.stage} stageOrder={STAGE_ORDER[z.stage]} />
-                        {z.toehoApplied && <Badge tone="purple">토허제</Badge>}
-                      </div>
-                      <div className="text-sm font-bold text-slate-900">
-                        {z.name} <span className="text-xs font-normal text-slate-500">{z.district}</span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
-                        <span>
-                          매물 <b className="text-slate-900">{zListings.length}건</b>
-                        </span>
-                        <span>
-                          최저가 <b className="text-slate-900">{isFinite(lowest) ? man(lowest) : "-"}</b>만원
-                        </span>
-                        {lowestInitial !== undefined && (
-                          <span>
-                            초기투자 <b className="text-slate-900">{man(lowestInitial ?? 0)}</b>만원
+              <div className="space-y-3">
+                <section
+                  data-testid="dev-pressure-top"
+                  className="rounded-xl border border-slate-200 bg-white p-2.5"
+                >
+                  <div className="mb-1 flex items-baseline gap-1.5">
+                    <b className="text-[12.5px] font-bold text-slate-900">🔥 개발압력 TOP</b>
+                    <span className="text-[10px] text-slate-500">주변이 정비구역·아파트로 둘러싸인 노후 저층지</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {dpTop.length === 0 && (
+                      <p className="px-1 py-2 text-[11px] text-slate-400">불러오는 중…</p>
+                    )}
+                    {dpTop.map((h, i) => (
+                      <button
+                        key={h.id}
+                        type="button"
+                        onClick={() => openDevPressure(h)}
+                        data-testid="dev-pressure-top-item"
+                        data-hotspot-id={h.id}
+                        title={`${h.reason} — 누르면 지도에서 이 핫스팟을 엽니다`}
+                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-orange-50/70"
+                      >
+                        <span className="w-3 shrink-0 text-center text-[10px] font-bold text-orange-600">{i + 1}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline gap-1">
+                            <b className="truncate text-[12px] font-bold text-slate-900">
+                              {h.gu} {h.dong}
+                            </b>
+                            {h.hjd && h.hjd !== h.dong && (
+                              <span className="shrink-0 text-[9.5px] text-slate-400">{h.hjd}</span>
+                            )}
                           </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-[10px] text-slate-400">예상 입주 {z.moveInEstimate}</div>
-                    </button>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                    조건에 맞는 구역이 없습니다.
-                  </p>
-                )}
+                          <span className="mt-[1px] block truncate text-[10px] text-slate-500">{dpSummary(h)}</span>
+                        </span>
+                        <span
+                          className="shrink-0 rounded-full px-1.5 py-[2px] text-[10px] font-extrabold text-white"
+                          style={{ backgroundColor: DEV_GRADE_COLOR[h.grade] }}
+                        >
+                          {Math.round(h.score)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section data-testid="recent-zones" className="rounded-xl border border-slate-200 bg-white p-2.5">
+                  <div className="mb-1 flex items-baseline gap-1.5">
+                    <b className="text-[12.5px] font-bold text-slate-900">⚡ 최근 변동 구역</b>
+                    <span className="text-[10px] text-slate-500">고시·공람·단계가 새로 반영된 곳</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {recentZones.length === 0 && (
+                      <p className="px-1 py-2 text-[11px] text-slate-400">불러오는 중…</p>
+                    )}
+                    {recentZones.map((z) => (
+                      <button
+                        key={z.id}
+                        type="button"
+                        onClick={() => pickZone(z.id)}
+                        data-testid="recent-zone-item"
+                        data-zone-id={z.id}
+                        title={`${z.name} · ${z.asOf} ${z.label ?? ""} ${z.note ?? ""}`}
+                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-blue-50/60"
+                      >
+                        <span className="w-8 shrink-0 text-center text-[9.5px] font-bold text-slate-400">
+                          {z.asOf.slice(5).replace("-", ".")}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[12px] font-bold text-slate-900">{z.name}</span>
+                          <span className="mt-[1px] block truncate text-[10px] text-slate-500">
+                            {[z.gu, z.label].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-slate-300">›</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               </div>
             )}
           </div>
@@ -2226,6 +2301,13 @@ export default function ZoneExplorer() {
       )}
     </div>
   );
+}
+
+/** 핫스팟 한 줄 요약 — 근거 문구 앞 두 토막(포위·아파트)만 쓴다 */
+function dpSummary(h: DevHotspot): string {
+  const bits = h.reason.split(" · ");
+  const head = bits.slice(0, 2).join(" · ");
+  return `${h.types[0] ?? ""} · ${head}`;
 }
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
