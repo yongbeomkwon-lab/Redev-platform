@@ -33,7 +33,7 @@ import {
   type AgeBuilding,
   type BuildingAgeResponse,
 } from "@/lib/building-age";
-import { TYPE_COLORS, shortStage, zoneStyle } from "./colors";
+import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
@@ -285,10 +285,13 @@ const TAG_H = 17;
 const CARD_LEVEL_MAX = 4;
 /** 캡슐 높이 · 흰 카드 높이 · 캡슐이 카드 위로 걸치는 높이(px) */
 const CARD_PILL_H = 20;
-const CARD_BODY_H = 45;
-const CARD_OVERLAP = 10;
-/** 카드 전체 높이 — 캡슐이 카드 위로 걸친 만큼만 더한다 */
-const CARD_H = CARD_PILL_H + CARD_BODY_H - CARD_OVERLAP;
+const CARD_BODY_H = 50;
+/** 캡슐이 흰 카드 위로 걸치는 높이 — "살짝"만(6px) 걸쳐 구역명을 가리지 않게 한다 */
+const CARD_OVERLAP = 6;
+/** 흰 카드가 시작하는 높이(카드 꼭대기 기준) = 캡슐 높이 − 걸침 */
+const CARD_BODY_TOP = CARD_PILL_H - CARD_OVERLAP;
+/** 카드 전체 높이 — 캡슐이 걸쳐 올라간 만큼까지 포함한다 */
+const CARD_H = CARD_BODY_TOP + CARD_BODY_H;
 /** 카드 좌우 여백 · 캡슐이 카드 왼쪽에서 들어오는 거리(px) */
 const CARD_PAD_X = 10;
 const CARD_PILL_LEFT = 10;
@@ -795,11 +798,12 @@ export default function KakaoZoneMap({
         // 100px짜리 카드를 얹으면 지도가 카드로 덮인다. 그 구역은 더 확대하면 카드로 나타난다.
         const card = cardMode && sw >= CARD_MIN_W && sh >= CARD_MIN_H;
         const name = card ? cardName(z.name) : tagName(z.name);
-        const typeText = tagTypeText(z.type);
+        // 카드 캡슐은 사용자가 쓰는 온전한 사업유형명(신속통합기획·일반재개발·민간도심복합)을 쓴다
+        const typeText = card ? shortZoneType(z.type) : tagTypeText(z.type);
         const stageText = card ? cardStage(z.stage) : "";
         const size = card ? cardSizeOf(name, typeText, stageText) : { w: widthOf(name, typeText), h: TAG_H };
-        // 캡슐이 카드 위로 걸쳐 있어 덩어리 중심이 카드 본문보다 5px 위다 — 본문이 구역 중심에 오게 올린다
-        const dy = card ? (CARD_PILL_H - CARD_OVERLAP) / 2 : 0;
+        // 캡슐이 카드 위로 걸쳐 있어 덩어리 중심이 카드 본문보다 7px 위다 — 본문이 구역 중심에 오게 올린다
+        const dy = card ? CARD_BODY_TOP / 2 : 0;
         cands.push({
           id: z.id,
           x,
@@ -2180,7 +2184,7 @@ export default function KakaoZoneMap({
     //   · 예전에는 ‘유형 · 단계’를 한 칩에 넣고 이름표 전체를 진한 남색 판으로 그렸고,
     //     그 탓에 이름표를 누르면 뱃지 바탕색이 바뀐 것처럼 보였다(사용자 요청으로 흰 칩 유지).
     //   · 단계·지번은 칩 대신 이름 뒤 회색 글씨로 붙인다 — 뱃지는 그대로, 정보만 늘어난다.
-    const typeText = tagTypeText(type);
+    const typeText = cardZoom ? shortZoneType(type) : tagTypeText(type);
     // 카드형(동네 단위 확대)에서는 둘째 줄이 진행단계 문구가 된다 — 기본 카드 뱃지와 같은 말·같은 모양
     const stageLabel = cardZoom ? cardStage(stage) : shortStage(stage);
     const typeColor = type ? (TYPE_COLORS as Record<string, string>)[type] ?? "#64748b" : "#64748b";
@@ -2612,7 +2616,7 @@ export default function KakaoZoneMap({
               width: "max-content",
               // 기본 이름표(.zone-tag)와 같은 자리(앵커 가운데)에 놓는다 — 누를 때 뱃지가 튀지 않게
               //   카드형은 덩어리 중심이 카드 본문보다 5px 위라 그만큼 내려 본문을 가운데에 맞춘다
-              transform: cardZoom ? "translate(-50%, calc(50% - 5px))" : "translate(-50%, 50%)",
+              transform: cardZoom ? "translate(-50%, calc(50% - 7px))" : "translate(-50%, 50%)",
             }}
             dangerouslySetInnerHTML={{ __html: labelHtml }}
           />
