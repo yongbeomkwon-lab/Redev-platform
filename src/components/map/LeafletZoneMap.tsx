@@ -439,7 +439,9 @@ function SeoulZoneLayer({
         const badge = typeLabel
           ? `<span class="zone-type-badge" style="background:${typeColor}">${typeLabel}</span>`
           : "";
-        const sub = [shortStage(p.stage), parcel].filter(Boolean).join(" · ");
+        const sub = [shortStage(p.stage), parcel && !p.name.includes(parcel) ? parcel : null]
+          .filter(Boolean)
+          .join(" · ");
         path.unbindTooltip();
         path.bindTooltip(
           `${badge}<b>${p.name}</b>${sub ? `<span class="zone-name-sub"> · ${sub}</span>` : ""}`,

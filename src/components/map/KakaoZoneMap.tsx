@@ -2065,7 +2065,7 @@ export default function KakaoZoneMap({
     const badge = typeText
       ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(typeText)}</span>`
       : "";
-    const sub = [stageLabel, parcel].filter(Boolean).join(" · ");
+    const sub = [stageLabel, parcel && !name.includes(parcel) ? parcel : null].filter(Boolean).join(" · ");
     return `${badge}<b>${escapeHtml(name)}</b>${
       sub ? `<span class="zone-name-sub"> · ${escapeHtml(sub)}</span>` : ""
     }`;
