@@ -314,6 +314,7 @@ export function recentMonths(count: number, now = new Date()): string[] {
  *     - 아파트: 단지가 여러 지번에 걸칠 수 있어 이름 일치도 같은 단지로 본다.
  *     - 연립·다세대: 건물명이 흔해(‘삼성빌라’ 등) 지번을 알 때는 지번 일치만 인정한다.
  *   · 유형 1종을 이미 알고 있으므로 나머지 2종은 부르지 않는다(3배 빠르다).
+ *   · 실패한 달(failedMonths)을 함께 돌려준다 — 화면이 그 달만 따로 다시 물어볼 수 있게.
  */
 export async function loadBuildingTransactions(params: {
   lawdCd: string;
@@ -328,6 +329,8 @@ export async function loadBuildingTransactions(params: {
   transactions: MolitTransaction[];
   monthsOk: number;
   monthsTotal: number;
+  /** 국토부 호출 한도(429)·오류로 받지 못한 달 (YYYYMM) */
+  failedMonths: string[];
   cached: boolean;
 }> {
   const { lawdCd, kind, months, key, dong } = params;
@@ -388,6 +391,10 @@ export async function loadBuildingTransactions(params: {
     transactions,
     monthsOk: results.filter((r) => r.res.ok).length,
     monthsTotal: months.length,
+    failedMonths: results
+      .filter((r) => !r.res.ok)
+      .map((r) => r.ym)
+      .sort(),
     cached: results.length > 0 && results.every((r) => r.cached),
   };
 }

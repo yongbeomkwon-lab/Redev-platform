@@ -163,6 +163,7 @@ export async function GET(req: Request) {
       ),
     },
     partial: data.monthsOk < data.monthsTotal,
+    failedMonths: data.failedMonths,
     cached: data.cached,
     fetchedAt: new Date().toISOString(),
   };

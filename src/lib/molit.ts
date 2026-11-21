@@ -196,6 +196,8 @@ export type BuildingHistoryResponse = {
   summary?: BuildingHistorySummary;
   /** 요청한 개월 중 일부 달이 실패해 결과가 불완전한지 */
   partial?: boolean;
+  /** 받지 못한 달(YYYYMM) — 화면이 그 달만 따로 다시 물어본다 */
+  failedMonths?: string[];
   /** 서버 캐시에서 바로 준 응답인지 */
   cached?: boolean;
   fetchedAt?: string;

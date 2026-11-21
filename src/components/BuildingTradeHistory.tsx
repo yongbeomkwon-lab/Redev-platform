@@ -55,6 +55,30 @@ function monthsAgoIso(months: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * YYYYMM 이 지금부터 몇 달 전인가 — 서버의 `offset` 과 같은 셈법(0 = 이번 달).
+ *   국토부 호출 한도로 빠진 달을 그 달만 다시 물어볼 때 쓴다.
+ */
+function monthOffsetOf(ym: string): number {
+  const y = Number(ym.slice(0, 4));
+  const m = Number(ym.slice(4, 6));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return -1;
+  const now = new Date();
+  return now.getFullYear() * 12 + now.getMonth() - (y * 12 + (m - 1));
+}
+
+/** 거래 목록 병합 — id 로 중복을 없애고 최신순 유지 */
+function mergeRows(a: MolitTransaction[], b: MolitTransaction[]): MolitTransaction[] {
+  const seen = new Set(a.map((r) => r.id));
+  const out = [...a];
+  for (const r of b) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(r);
+  }
+  return out.sort((x, y) => y.dealDate.localeCompare(x.dealDate) || y.price - x.price);
+}
+
 /** 전용면적 타입 클러스터 — 59.98·59.99 같은 표기는 한 타입으로 묶는다(±3㎡) */
 type AreaGroup = { key: string; center: number; count: number };
 
@@ -126,32 +150,54 @@ export default function BuildingTradeHistory({
     const base = new URLSearchParams({ gu, dong, jibun, kind, name });
     const urlOf = (months: number, offset: number) =>
       `/api/transactions/building?${base.toString()}&months=${months}&offset=${offset}`;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     /**
-     * 한 구간을 받아 온다. 응답이 partial(일부 달 실패)이면 쉬었다 한 번 더 —
-     *   국토부 호출 한도(429)는 잠깐 뒤 대개 풀린다. 그래도 실패하면 받은 것만 쓴다.
+     * 한 구간을 받아 온다.
+     *   ① 응답이 partial 이면(국토부 호출 한도 429) 잠깐 쉬었다 다시
+     *   ② 그래도 비어 있는 달이 있으면 **그 달만** 하나씩 다시 물어본다(콜이 적어 성공률이 높다)
+     *   ③ 끝까지 받지 못한 달이 남을 때만 화면에 ‘일부 달 조회 실패’를 밝힌다
      */
     const loadChunk = async (months: number, offset: number): Promise<MolitTransaction[]> => {
       let rows: MolitTransaction[] = [];
+      let missing: string[] = [];
       for (let attempt = 0; attempt < 2; attempt++) {
         const res = await fetch(urlOf(months, offset), { cache: "no-store", signal: ac.signal });
         const json = (await res.json()) as BuildingHistoryResponse;
         if (!alive) return rows;
         if (!json.ok) {
           if (attempt === 0) {
-            await new Promise((r) => setTimeout(r, 700));
-            if (!alive) return rows;
+            await sleep(700);
             continue;
           }
           if (!rows.length) throw new Error(json.message ?? "실거래 이력을 불러오지 못했습니다.");
           return rows;
         }
-        rows = json.transactions ?? [];
-        if (json.partial) setPartial(true);
-        if (!json.partial) return rows;
-        await new Promise((r) => setTimeout(r, 700));
-        if (!alive) return rows;
+        rows = mergeRows(rows, json.transactions ?? []);
+        missing = json.failedMonths ?? [];
+        if (!missing.length) return rows;
+        await sleep(500);
       }
+
+      // 남은 달만 콕 집어 다시 — 한 달씩이면 호출이 적어 한도에 덜 걸린다
+      const stillMissing: string[] = [];
+      for (const ym of missing) {
+        if (!alive) return rows;
+        const off = monthOffsetOf(ym);
+        if (off < 0 || off >= WINDOW_MONTHS) continue;
+        await sleep(150);
+        try {
+          const res = await fetch(urlOf(1, off), { cache: "no-store", signal: ac.signal });
+          const json = (await res.json()) as BuildingHistoryResponse;
+          if (!alive) return rows;
+          if (json.ok) rows = mergeRows(rows, json.transactions ?? []);
+          else stillMissing.push(ym);
+        } catch {
+          if (!alive) return rows;
+          stillMissing.push(ym);
+        }
+      }
+      if (stillMissing.length) setPartial(true);
       return rows;
     };
 
@@ -166,13 +212,7 @@ export default function BuildingTradeHistory({
         const rest = WINDOW_MONTHS - FIRST_CHUNK;
         const older = await loadChunk(rest, FIRST_CHUNK);
         if (!alive) return;
-        setRows((prev) => {
-          const seen = new Set(prev.map((r) => r.id));
-          const add = older.filter((r) => !seen.has(r.id));
-          return [...prev, ...add].sort(
-            (a, b) => b.dealDate.localeCompare(a.dealDate) || b.price - a.price
-          );
-        });
+        setRows((prev) => mergeRows(prev, older));
         setPhase("done");
       } catch (e) {
         if (!alive || ac.signal.aborted) return;
@@ -433,7 +473,7 @@ export default function BuildingTradeHistory({
                     거래 이력 <span className="font-normal text-slate-400">{shownRows.length}건</span>
                   </h3>
                   <span className="text-[10px] text-slate-400">
-                    최신순{partial ? " · 일부 달 조회 실패" : ""}
+                    최신순{partial ? " · 일부 달은 호출 한도로 빠짐" : ""}
                   </span>
                 </div>
 
