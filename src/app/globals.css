@@ -54,6 +54,63 @@
   box-shadow: none;
 }
 
+/* 선택 구역 이름표도 같은 2단 카드 — 카드 뱃지(.zone-tag.is-card)와 같은 모양·색·글자 크기.
+   카드를 눌러 고른 뒤에도 뱃지 바탕이 바뀌지 않는다(사용자 요청). */
+.zone-name-label.is-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 15px;
+}
+.zone-name-label.is-card .zone-type-badge {
+  position: relative;
+  z-index: 2;
+  margin-left: 10px;
+  margin-bottom: -10px;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.zone-name-label.is-card .zone-name-label-body {
+  align-self: stretch;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 10px 6px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 11px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18), 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+.zone-name-label.is-card .zone-name-label-body b {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 18px;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+.zone-name-label.is-card .zone-name-sub {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 12px;
+  letter-spacing: -0.02em;
+  color: #64748b;
+}
+
 /* 기본 구역 이름표 — 지도에 늘 떠 있는 `구역명 + 사업유형` 칩.
    · 요소는 KakaoZoneMap 의 draw 가 직접 만들고 위치를 맞춘다(지도와 같은 프레임).
    · 폴리곤 색과 같은 유형 칩을 달아 지도 아래 범례와 그대로 읽힌다. */
@@ -98,6 +155,73 @@
   /* 바탕색은 그대로 둔다 — 폰에서 누른 뒤 hover 가 붙어 “색이 바뀐 뱃지”로 남지 않게 */
   border-color: #0f172a;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.42);
+}
+
+/* ── 2단 오버랩 카드형 뱃지 (동네·구역 단위로 확대했을 때) ────────────────────
+   사용자 스케치(2026-11-21): 흰 카드의 **왼쪽 위 테두리에** 사업유형 캡슐이 살짝 걸쳐 앉고,
+   카드 안에 구역명(굵게)과 진행단계(작은 회색)가 두 줄로 들어간다.
+   · 폭·높이는 draw 가 글자 폭을 재어 인라인으로 정한다(캡슐과 본문이 카드 밖으로 나가지 않게).
+   · 바탕색은 누르기 전·후가 같다 — 선택돼도 흰 카드 + 사업유형 색 캡슐 그대로다. */
+.zone-tag.is-card {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.zone-tag.is-card .zone-tag-chip {
+  position: absolute;
+  left: 10px;
+  top: 0;
+  z-index: 2;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.zone-tag.is-card .zone-tag-body {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 100%;
+  height: 45px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 10px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 11px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18), 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+.zone-tag.is-card .zone-tag-body b {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 18px;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+.zone-tag.is-card .zone-tag-stage {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 12px;
+  letter-spacing: -0.02em;
+  color: #64748b;
+}
+/* 카드형 hover — 바탕색은 그대로, 그림자만 아주 살짝 깊어진다 */
+.zone-tag.is-card:hover .zone-tag-body,
+.zone-tag.is-card:focus-visible .zone-tag-body {
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.26), 0 0 0 0.5px rgba(255, 255, 255, 0.7);
 }
 
 /* 멀리서(카카오 레벨 9 이상) 볼 때는 내 매물 핀의 두 번째 줄을 감춘다 — 63개 핀이 서로 덜 가리게 */

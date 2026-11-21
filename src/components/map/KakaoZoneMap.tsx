@@ -275,6 +275,31 @@ const TAG_CHIP_FONT = "800 9px ui-sans-serif, system-ui, -apple-system, sans-ser
 /** 이름표 높이(px) — 11px 글자 + 위아래 여백 2px + 테두리 */
 const TAG_H = 17;
 
+// ── 2단 오버랩 카드형 뱃지 (2026-11-21 사용자 스케치) ────────────────────────
+//   흰 카드 **왼쪽 위 테두리에** 사업유형 캡슐(알약)이 살짝 걸쳐 앉고, 카드 안에는
+//   구역명(굵게)과 진행단계(작은 회색)가 두 줄로 들어간다. 사업유형 색은 지도 폴리곤과
+//   같은 TYPE_COLORS 원색을 캡슐 바탕으로 그대로 쓴다.
+//   · 서울 전체/광역에서는 1줄 칩을 그대로 둔다 — 2,400곳이 카드가 되면 지도가 카드로 덮인다.
+//   · **동네·구역 단위로 확대했을 때만** 카드로 바꾼다(CARD_LEVEL_MAX). 카카오 level 4 ≈ Leaflet
+//     zoom 15 — 구역 경계와 주변 골목이 함께 읽히는 배율이다.
+const CARD_LEVEL_MAX = 4;
+/** 캡슐 높이 · 흰 카드 높이 · 캡슐이 카드 위로 걸치는 높이(px) */
+const CARD_PILL_H = 20;
+const CARD_BODY_H = 45;
+const CARD_OVERLAP = 10;
+/** 카드 전체 높이 — 캡슐이 카드 위로 걸친 만큼만 더한다 */
+const CARD_H = CARD_PILL_H + CARD_BODY_H - CARD_OVERLAP;
+/** 카드 좌우 여백 · 캡슐이 카드 왼쪽에서 들어오는 거리(px) */
+const CARD_PAD_X = 10;
+const CARD_PILL_LEFT = 10;
+/** 카드를 앉히는 데 필요한 구역의 최소 화면 크기(px) — 골목 안 작은 구역은 1줄 칩으로 남긴다 */
+const CARD_MIN_W = 26;
+const CARD_MIN_H = 16;
+/** 카드 안 글자 크기 — 칩(11px)보다 한 단계 크게, 스케치의 비중을 따른다 */
+const CARD_NAME_FONT = "700 15px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
+const CARD_STAGE_FONT = "600 10px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
+const CARD_PILL_FONT = "800 10px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
+
 /**
  * 사업유형 칩 문구 — 좁은 이름표에 들어가도록 짧게.
  *   · 색은 폴리곤과 같은 TYPE_COLORS 를 쓰므로 지도 아래 범례와 그대로 맞는다.
@@ -302,6 +327,30 @@ function tagTypeText(type?: string | null): string {
 function tagName(name: string): string {
   const s = name.trim();
   return s.length > 14 ? `${s.slice(0, 13)}…` : s;
+}
+
+/** 카드형 뱃지의 구역명 — 1줄 칩보다 조금 더 쓸 수 있지만, 카드가 지도를 덮지 않게 12자에서 자른다 */
+function cardName(name: string): string {
+  const s = name.trim();
+  return s.length > 12 ? `${s.slice(0, 11)}…` : s;
+}
+
+/**
+ * 카드형 뱃지 둘째 줄 — 진행단계를 사람이 읽는 말로 다듬는다.
+ *   · 서울시 원자료는 `후보지선정`·`대상지선정(추진중)`처럼 붙여 쓴다 → ‘후보지 선정’처럼 띄어 쓴다
+ *   · 괄호(추진중·일부 등)는 떼고, 긴 단계명은 12자에서 자른다(카드 폭이 지도를 덮지 않게)
+ */
+function cardStage(stage?: string | null): string {
+  const raw = (stage ?? "").replace(/\s*\([^)]*\)\s*/g, " ").trim();
+  if (!raw) return "";
+  const fixed = raw
+    .replace(/^후보지선정$/, "후보지 선정")
+    .replace(/^대상지선정$/, "대상지 선정")
+    .replace(/^관리처분계획인가$/, "관리처분 인가")
+    .replace(/^기획완료$/, "기획 완료")
+    .replace(/^조합설립인가\s*추진중$/, "조합설립 추진중")
+    .replace(/^조합설립추진중$/, "조합설립 추진중");
+  return fixed.length > 12 ? `${fixed.slice(0, 11)}…` : fixed;
 }
 
 /** 툴팁 한 줄: 신림1구역 · 재정비촉진구역 · 사업시행인가 · 22.3만㎡ (관악구) */
@@ -498,6 +547,12 @@ export default function KakaoZoneMap({
   /** 노후도 범례에 보여 줄 상태(받은 건물 수·구간별 수·확대 안내·불러오는 타일 수) */
   const [ageStats, setAgeStats] = useState<AgeStats>({ buildings: 0, counts: [], tooFar: false, loading: 0 });
   const [ready, setReady] = useState(false);
+  /**
+   * 2단 카드형 뱃지 모드(동네 단위 확대) — 선택 구역 이름표도 같은 카드로 그린다.
+   *   draw 가 매 프레임 지도 레벨을 읽어 모드가 **바뀔 때만** setState 한다(리렌더 폭주 방지).
+   */
+  const [cardZoom, setCardZoom] = useState(false);
+  const cardZoomRef = useRef(false);
 
   // ── 그리기 ──────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {
@@ -651,6 +706,12 @@ export default function KakaoZoneMap({
       const tagT0 = performance.now();
       const tagLayer = tagLayerRef.current;
       const selTag = selectedRef.current;
+      // 동네·구역 단위로 확대했는지 — 여기서부터 1줄 칩 대신 2단 카드형 뱃지를 띄운다
+      const cardMode = map.getLevel() <= CARD_LEVEL_MAX;
+      if (cardZoomRef.current !== cardMode) {
+        cardZoomRef.current = cardMode;
+        setCardZoom(cardMode);
+      }
       const tLng0 = lng0 + (0 - p0x) / pxPerLng;
       const tLng1 = lng0 + (cw - p0x) / pxPerLng;
       const tLat0 = unmercator((0 - p0y) / pxPerMerc + m0);
@@ -660,7 +721,7 @@ export default function KakaoZoneMap({
       const tMinLng = Math.min(tLng0, tLng1) - 0.0006;
       const tMaxLng = Math.max(tLng0, tLng1) + 0.0006;
 
-      /** 이름표 전체 폭(px) — 칩 + 이름 + 여백. 같은 글자는 캐시한다. */
+      /** 1줄 칩의 폭(px) — 유형 칩 + 이름 + 여백. 같은 글자는 캐시한다. */
       const widthOf = (name: string, typeText: string) => {
         const key = `${name}|${typeText}`;
         const cached = tagWRef.current.get(key);
@@ -678,18 +739,82 @@ export default function KakaoZoneMap({
         return w;
       };
 
+      /**
+       * 2단 카드형 뱃지의 크기(px) — 캡슐 폭과 흰 카드 폭 중 넓은 쪽이 카드 폭이 된다.
+       *   · 흰 카드 = 구역명(15px 굵게) 또는 단계(10px) 중 넓은 줄 + 좌우 여백
+       *   · 캡슐 = 사업유형(10px) + 좌우 여백 + 카드 왼쪽에서 들어오는 거리
+       *   · 측정 글꼴은 화면과 같은 Gmarket Sans 로 맞춘다(아니면 카드 폭이 어긋나 겹친다)
+       */
+      const cardSizeOf = (name: string, typeText: string, stageText: string) => {
+        const key = `card|${name}|${typeText}|${stageText}`;
+        const cached = tagWRef.current.get(key);
+        if (cached) {
+          return { w: cached, h: CARD_H };
+        }
+        ctx.save();
+        ctx.font = CARD_NAME_FONT;
+        const nw = ctx.measureText(name).width;
+        ctx.font = CARD_STAGE_FONT;
+        const sw2 = stageText ? ctx.measureText(stageText).width : 0;
+        ctx.font = CARD_PILL_FONT;
+        const pw = typeText ? ctx.measureText(typeText).width + 18 : 0;
+        ctx.restore();
+        // 테두리 2 + 안전 여유 4 — 글꼴이 늦게 실려도 글자가 카드 밖으로 넘치지 않게 한다
+        const bodyW = Math.ceil(Math.max(nw, sw2) + CARD_PAD_X * 2 + 6);
+        const pillW = typeText ? Math.ceil(pw + CARD_PILL_LEFT) : 0;
+        const w = Math.max(bodyW, pillW, 54);
+        if (tagWRef.current.size > 5000) tagWRef.current.clear();
+        tagWRef.current.set(key, w);
+        return { w, h: CARD_H };
+      };
+
       type TagCand = {
         id: string;
         x: number;
         y: number;
         w: number;
+        /** 이름표 높이 — 카드형은 캡슐까지 포함한 전체 높이 */
+        h: number;
         area: number;
         name: string;
         typeText: string;
+        /** 카드형 둘째 줄(진행단계) — 1줄 칩에서는 빈 문자열 */
+        stageText: string;
+        /** 2단 카드형으로 그릴지 */
+        card: boolean;
         color: string;
         full: string;
       };
       const cands: TagCand[] = [];
+      /**
+       * 후보 하나 — 1줄 칩으로 둘지 2단 카드로 그릴지 판단하는 곳은 여기 한 군데뿐이다
+       * (폴리곤 구역과 점으로 그리는 미고시 후보지가 같은 규칙으로 그려진다).
+       */
+      const pushCand = (z: SeoulZone, x: number, y: number, sw: number, sh: number) => {
+        // 카드는 구역이 화면에서 카드만큼 자리를 가질 때만 띄운다 — 골목 안 작은 구역에
+        // 100px짜리 카드를 얹으면 지도가 카드로 덮인다. 그 구역은 더 확대하면 카드로 나타난다.
+        const card = cardMode && sw >= CARD_MIN_W && sh >= CARD_MIN_H;
+        const name = card ? cardName(z.name) : tagName(z.name);
+        const typeText = tagTypeText(z.type);
+        const stageText = card ? cardStage(z.stage) : "";
+        const size = card ? cardSizeOf(name, typeText, stageText) : { w: widthOf(name, typeText), h: TAG_H };
+        // 캡슐이 카드 위로 걸쳐 있어 덩어리 중심이 카드 본문보다 5px 위다 — 본문이 구역 중심에 오게 올린다
+        const dy = card ? (CARD_PILL_H - CARD_OVERLAP) / 2 : 0;
+        cands.push({
+          id: z.id,
+          x,
+          y: y - dy,
+          w: size.w,
+          h: size.h,
+          area: z.area || 0,
+          name,
+          typeText,
+          stageText,
+          card,
+          color: TYPE_COLORS[z.type] ?? "#64748b",
+          full: labelLine(z),
+        });
+      };
       for (const pz of prepRef.current.zones) {
         if (pz.maxLat < tMinLat || pz.minLat > tMaxLat || pz.maxLng < tMinLng || pz.minLng > tMaxLng) continue;
         const z = pz.zone;
@@ -705,19 +830,7 @@ export default function KakaoZoneMap({
         const x = p0x + (cLng - lng0) * pxPerLng;
         const y = p0y + (mercator(cLat) - m0) * pxPerMerc;
         if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) continue;
-        const name = tagName(z.name);
-        const typeText = tagTypeText(z.type);
-        cands.push({
-          id: z.id,
-          x,
-          y,
-          w: widthOf(name, typeText),
-          area: z.area || 0,
-          name,
-          typeText,
-          color: TYPE_COLORS[z.type] ?? "#64748b",
-          full: labelLine(z),
-        });
+        pushCand(z, x, y, sw, sh);
       }
       // 경계 미고시 후보지(사당21 등) — 점으로 그려지는 구역도 이름은 늘 보이게
       for (const z of prepRef.current.points) {
@@ -727,19 +840,8 @@ export default function KakaoZoneMap({
         const x = p0x + (z.center[1] - lng0) * pxPerLng;
         const y = p0y + (mercator(z.center[0]) - m0) * pxPerMerc;
         if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) continue;
-        const name = tagName(z.name);
-        const typeText = tagTypeText(z.type);
-        cands.push({
-          id: z.id,
-          x,
-          y,
-          w: widthOf(name, typeText),
-          area: z.area || 0,
-          name,
-          typeText,
-          color: TYPE_COLORS[z.type] ?? "#64748b",
-          full: labelLine(z),
-        });
+        // 경계가 없어 화면 크기를 잴 수 없다 — 점으로 찍는 후보지도 확대했으면 카드로 이름을 보인다
+        pushCand(z, x, y, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
       }
 
       // 큰 구역부터 자리를 잡는다 — 멀리서 볼수록 주요 구역 이름이 먼저 남는다
@@ -752,14 +854,17 @@ export default function KakaoZoneMap({
       if (Number.isFinite(lbl.lat) && Number.isFinite(lbl.lng)) {
         const lx = p0x + (lbl.lng - lng0) * pxPerLng;
         const ly = p0y + (mercator(lbl.lat) - m0) * pxPerMerc;
-        placedTag.push({ x0: lx - 110, y0: ly - 12, x1: lx + 110, y1: ly + 12 });
+        // 카드형 이름표는 카드 폭(최대 150px)·캡슐까지 걸치므로 그만큼 넓게 비운다
+        const rw = cardMode ? 96 : 110;
+        const rh = cardMode ? CARD_H / 2 + 6 : 12;
+        placedTag.push({ x0: lx - rw, y0: ly - rh, x1: lx + rw, y1: ly + rh });
       }
       const chosen: TagCand[] = [];
       // 좁은 화면(폰)에서는 개수를 줄인다 — 지도가 작아 이름표가 화면을 다 덮었다
-      const tagMax = cw < 560 ? 26 : TAG_MAX;
+      const tagMax = cardMode ? (cw < 560 ? 18 : 40) : cw < 560 ? 26 : TAG_MAX;
       for (const c of cands) {
         const hw = c.w / 2 + 3;
-        const hh = TAG_H / 2 + 3;
+        const hh = c.h / 2 + 3;
         const x0 = c.x - hw;
         const x1 = c.x + hw;
         const y0 = c.y - hh;
@@ -823,10 +928,26 @@ export default function KakaoZoneMap({
             });
           }
           node.dataset.zoneId = c.id;
-          node.innerHTML =
-            (c.typeText
-              ? `<span class="zone-tag-chip" style="background:${c.color}">${escapeHtml(c.typeText)}</span>`
-              : "") + `<b>${escapeHtml(c.name)}</b>`;
+          // 1줄 칩 ↔ 2단 카드 — 모드가 바뀌면 클래스·마크업·크기를 함께 갈아 준다
+          const mode = c.card ? "card" : "chip";
+          const key = `${mode}|${c.name}|${c.typeText}|${c.stageText}`;
+          if (node.dataset.mode !== mode || node.dataset.key !== key) {
+            node.dataset.mode = mode;
+            node.dataset.key = key;
+            node.className = c.card ? "zone-tag is-card" : "zone-tag";
+            node.style.width = c.card ? `${c.w}px` : "";
+            node.style.height = c.card ? `${c.h}px` : "";
+            node.innerHTML = c.card
+              ? (c.typeText
+                  ? `<span class="zone-tag-chip" style="background:${c.color}">${escapeHtml(c.typeText)}</span>`
+                  : "") +
+                `<span class="zone-tag-body"><b>${escapeHtml(c.name)}</b>${
+                  c.stageText ? `<span class="zone-tag-stage">${escapeHtml(c.stageText)}</span>` : ""
+                }</span>`
+              : (c.typeText
+                  ? `<span class="zone-tag-chip" style="background:${c.color}">${escapeHtml(c.typeText)}</span>`
+                  : "") + `<b>${escapeHtml(c.name)}</b>`;
+          }
           node.title = c.full;
           node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
           node.style.visibility = "visible";
@@ -836,12 +957,12 @@ export default function KakaoZoneMap({
           node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
           node.style.visibility = "visible";
         }
-        tagBoxRef.current.set(c.id, { h: TAG_H });
+        tagBoxRef.current.set(c.id, { h: c.h });
       }
       // 선택 구역의 큰 이름표도 같은 자리를 차지한다 — 매물 배지가 이름표 위로 비켜 놓게
       const lblAt = labelAtRef.current;
       if (selTag && Number.isFinite(lblAt.lat) && Number.isFinite(lblAt.lng) && !tagBoxRef.current.has(selTag)) {
-        tagBoxRef.current.set(selTag, { h: TAG_H });
+        tagBoxRef.current.set(selTag, { h: cardMode ? CARD_H : TAG_H });
       }
       tagMsRef.current = performance.now() - tagT0;
     }
@@ -2060,16 +2181,23 @@ export default function KakaoZoneMap({
     //     그 탓에 이름표를 누르면 뱃지 바탕색이 바뀐 것처럼 보였다(사용자 요청으로 흰 칩 유지).
     //   · 단계·지번은 칩 대신 이름 뒤 회색 글씨로 붙인다 — 뱃지는 그대로, 정보만 늘어난다.
     const typeText = tagTypeText(type);
-    const stageLabel = shortStage(stage);
+    // 카드형(동네 단위 확대)에서는 둘째 줄이 진행단계 문구가 된다 — 기본 카드 뱃지와 같은 말·같은 모양
+    const stageLabel = cardZoom ? cardStage(stage) : shortStage(stage);
     const typeColor = type ? (TYPE_COLORS as Record<string, string>)[type] ?? "#64748b" : "#64748b";
     const badge = typeText
       ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(typeText)}</span>`
       : "";
     const sub = [stageLabel, parcel && !name.includes(parcel) ? parcel : null].filter(Boolean).join(" · ");
+    // 선택된 구역도 **같은 2단 카드**(흰 카드 + 사업유형 캡슐)로 보인다 — 바탕색은 바뀌지 않는다
+    if (cardZoom) {
+      return `${badge}<span class="zone-name-label-body"><b>${escapeHtml(name)}</b>${
+        sub ? `<span class="zone-name-sub">${escapeHtml(sub)}</span>` : ""
+      }</span>`;
+    }
     return `${badge}<b>${escapeHtml(name)}</b>${
       sub ? `<span class="zone-name-sub"> · ${escapeHtml(sub)}</span>` : ""
     }`;
-  }, [labelZoneId, seoulZones, zones, admin?.zones]);
+  }, [labelZoneId, seoulZones, zones, admin?.zones, cardZoom]);
 
   useEffect(() => {
     const k = sdkRef.current;
@@ -2475,7 +2603,7 @@ export default function KakaoZoneMap({
       <div ref={labelLayerRef} style={{ ...PIN_LAYER_STYLE, zIndex: 101 }} aria-hidden>
         {labelHtml && (
           <div
-            className="zone-name-label"
+            className={cardZoom ? "zone-name-label is-card" : "zone-name-label"}
             style={{
               position: "absolute",
               left: 0,
@@ -2483,7 +2611,8 @@ export default function KakaoZoneMap({
               // 0×0 레이어 안의 절대배치 박스는 폭이 0 으로 잡혀 글자가 잘린다 → 내용 폭을 명시한다
               width: "max-content",
               // 기본 이름표(.zone-tag)와 같은 자리(앵커 가운데)에 놓는다 — 누를 때 뱃지가 튀지 않게
-              transform: "translate(-50%, 50%)",
+              //   카드형은 덩어리 중심이 카드 본문보다 5px 위라 그만큼 내려 본문을 가운데에 맞춘다
+              transform: cardZoom ? "translate(-50%, calc(50% - 5px))" : "translate(-50%, 50%)",
             }}
             dangerouslySetInnerHTML={{ __html: labelHtml }}
           />
