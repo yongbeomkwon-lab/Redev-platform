@@ -115,6 +115,7 @@ export function shortZoneType(type?: string | null): string {
 /**
  * 추진단계 짧은 이름 — 선택 구역 이름표 뱃지.
  *   · ‘연번부여(2026-11-03)’ 같은 긴 단계는 사람이 쓰는 말로 줄인다(연번부여 → 연번동의)
+ *   · ‘사업시행자지정’(지정개발자를 사업시행자로 지정)은 ‘사업시행인가’와 다른 단계라 따로 둔다
  *   · 괄호·날짜는 떼고, 모르는 단계는 8자까지만 남겨 이름표가 길어지지 않게 한다
  */
 export function shortStage(stage?: string | null): string {
@@ -125,6 +126,7 @@ export function shortStage(stage?: string | null): string {
   if (s.includes("조합설립")) return "조합설립";
   if (s.includes("추진위")) return "추진위";
   if (s.includes("주민합의체")) return "주민합의체";
+  if (s.includes("사업시행자")) return "사업시행자지정";
   if (s.includes("사업시행")) return "사업시행인가";
   if (s.includes("구역지정")) return "구역지정";
   if (s.includes("후보지")) return "후보지";
