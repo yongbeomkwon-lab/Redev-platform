@@ -798,7 +798,12 @@ export default function KakaoZoneMap({
               ev.preventDefault();
               ev.stopPropagation();
               const id = node?.dataset.zoneId;
-              if (id) onSelectRef.current(id);
+              if (!id) return;
+              // 지도 위 뱃지도 ‘지도에서 직접 누른 선택’이다 — 보던 줌·위치를 그대로 두고 그린다.
+              //   (검색·목록으로 고를 때만 화면을 맞춘다. 이 표시가 없으면 클릭 뒤 fitBounds 가 돌아
+              //    뱃지가 화면에서 몇 px 튀었다 — 바탕색뿐 아니라 자리도 그대로여야 한다.)
+              mapClickZoneRef.current = { id, t: Date.now() };
+              onSelectRef.current(id);
             });
             node.addEventListener("mouseenter", () => {
               const id = node?.dataset.zoneId;
