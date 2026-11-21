@@ -4,7 +4,7 @@
 //   · 데이터: public/data/dev-pressure.json (scripts/build-dev-pressure.py)
 //   · 좌표는 카카오 `map.getProjection().containerPointFromCoords()` 로 매 이동·확대마다 다시 잡는다.
 //     (구역 폴리곤은 캔버스가 직접 그리지만, 점 핀은 DOM 이 눌러야 해서 이 레이어가 맡는다)
-//   · 멀리 보면 점수 높은 곳만 남긴다 — 서울 전체에서 553개 핀이 지도를 덮지 않게.
+//   · 멀리 보면 점수 높은 곳만 남긴다 — 서울 전체에서 540여 개 핀이 지도를 덮지 않게.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KakaoMap, KakaoSDK } from "./kakao-loader";
 import { DEV_GRADE_COLOR, loadDevPressure, minScoreForLevel, type DevHotspot } from "@/lib/dev-pressure";
@@ -14,8 +14,16 @@ type Mark = { spot: DevHotspot; x: number; y: number };
 
 /** 한 화면에 그릴 핀 상한 — DOM 수를 묶어 이동할 때 끊기지 않게 */
 const MAX_MARKS = 64;
-/** 핀 사이 최소 간격(px) — 겹치면 뒤 핀을 누를 수 없어 점수 높은 쪽만 남긴다 */
-const MIN_GAP_PX = 22;
+/** 핀 사이 최소 간격(px) — 겹치면 뒤 핀을 누를 수 없어 점수 높은 쪽만 남긴다
+ *  (2026-11-22: 숫자만 찍던 원형 핀을 「84점」 알약으로 바꾸면서 폭이 늘어 26px 로 넓혔다) */
+const MIN_GAP_PX = 26;
+
+/** 등급별 알약 크기 — 글자가 잘리지 않게 폭은 글자에 맞춰 늘어난다(고정 height + 좌우 padding) */
+const PIN_SIZE = {
+  최상: { height: 24, padX: 7, fontSize: 11.5 },
+  높음: { height: 22, padX: 6, fontSize: 11 },
+  보통: { height: 20, padX: 5, fontSize: 10 },
+} as const;
 
 export default function DevPressureLayer({
   sdk,
@@ -125,12 +133,12 @@ export default function DevPressureLayer({
 
   return (
     <div ref={wrapRef} className="pointer-events-none absolute inset-0 z-[98]" data-testid="dev-pressure-layer">
-      {/* 핀 — 동그란 글로우 + 점수 */}
+      {/* 핀 — 「84점」 알약. 숫자만으로는 무엇인지 알 수 없어 단위(점)를 붙였다 */}
       {marks.map((m) => {
         const s = m.spot;
         const color = DEV_GRADE_COLOR[s.grade];
         const active = s.id === selId;
-        const size = s.grade === "최상" ? 34 : s.grade === "높음" ? 30 : 26;
+        const pin = PIN_SIZE[s.grade];
         return (
           <button
             key={s.id}
@@ -138,7 +146,7 @@ export default function DevPressureLayer({
             data-testid="dev-pressure-pin"
             data-hotspot-id={s.id}
             data-score={s.score}
-            title={`${s.gu} ${s.dong} · 개발압력 ${Math.round(s.score)} (${s.grade}) — 누르면 근거를 봅니다`}
+            title={`${s.gu} ${s.dong} · 개발압력 ${Math.round(s.score)}점 (${s.grade}) — 누르면 근거를 봅니다`}
             onClick={(e) => {
               e.stopPropagation();
               setSelId((v) => (v === s.id ? null : s.id));
@@ -148,16 +156,19 @@ export default function DevPressureLayer({
               position: "absolute",
               left: m.x,
               top: m.y,
-              width: size,
-              height: size,
+              height: pin.height,
+              minWidth: pin.height,
+              padding: `0 ${pin.padX}px`,
               transform: "translate(-50%, -50%)",
               borderRadius: "999px",
               border: `2px solid ${active ? "#111827" : "#fff"}`,
               background: color,
               color: "#fff",
-              fontSize: s.grade === "최상" ? 11.5 : 10.5,
+              fontSize: pin.fontSize,
               fontWeight: 800,
               lineHeight: 1,
+              letterSpacing: "-0.02em",
+              whiteSpace: "nowrap",
               boxShadow: active
                 ? `0 0 0 4px ${color}44, 0 6px 16px -4px rgba(16,24,40,.6)`
                 : `0 0 0 5px ${color}22, 0 4px 12px -4px rgba(16,24,40,.5)`,
@@ -169,7 +180,7 @@ export default function DevPressureLayer({
               zIndex: active ? 3 : 1,
             }}
           >
-            {Math.round(s.score)}
+            {Math.round(s.score)}점
           </button>
         );
       })}
@@ -200,12 +211,14 @@ export default function DevPressureLayer({
       {/* 범례 */}
       <div
         data-testid="dev-pressure-legend"
-        className="pointer-events-auto absolute bottom-2 left-2 z-[600] w-max max-w-[min(92vw,300px)] rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur md:bottom-auto md:left-1/2 md:top-2 md:-translate-x-1/2"
+        className="pointer-events-auto absolute bottom-2 left-2 z-[600] w-max max-w-[min(92vw,344px)] rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur md:bottom-auto md:left-1/2 md:top-2 md:-translate-x-1/2"
       >
         <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
           <b className="text-slate-900">🔥 개발압력</b>
           {spots ? (
-            <span className="text-slate-500">{total.toLocaleString()}곳 · 굵은 핀일수록 높음</span>
+            <span className="text-slate-600">
+              <b className="font-bold text-slate-800">{total.toLocaleString()}곳</b> · 핀 숫자 = 100점 만점 압력 점수
+            </span>
           ) : (
             <span className="text-slate-500">{failed ? "불러오지 못했습니다" : "불러오는 중…"}</span>
           )}
@@ -221,11 +234,10 @@ export default function DevPressureLayer({
           )}
         </div>
         <div className="mt-0.5 text-[9.5px] leading-tight text-slate-500">
-          주변이 정비구역·아파트로 둘러싸인 노후 저층지 — 점수 = 포위 45 · 노후 25 · 아파트 20 · 역세권 10
+          정비구역·아파트에 둘러싸인 노후 저층지 — 아파트 동·단지를 뺀 저층 건물 기준
           {level >= 8 ? " · 확대하면 더 많이 보입니다" : ""}
           <br />
           아파트 동: © OpenStreetMap contributors (ODbL) · 구역: 서울시 고시
-        
         </div>
       </div>
     </div>

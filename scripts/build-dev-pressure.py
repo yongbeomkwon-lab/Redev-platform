@@ -5,18 +5,26 @@
   1) 서울을 150m 격자로 나누고, 격자마다 네 가지 신호로 0~100 점을 매긴다.
      ① 정비구역 포위도 — 반경 600m 안의 활성 정비구역 수·사방(4분면) 포위 비율
      ② 아파트 포위도   — 반경 500m 안 아파트 동 밀집도 × 그 칸의 저층 비율
-     ③ 노후·저층 밀집 — 3×3 칸(≈450m)의 30년 이상 비율·저층 비율
+     ③ 노후·저층 밀집 — 3×3 칸(≈450m)의 30년 이상 비율·저층 비율·밀집도
      ④ 역세권 보너스   — 지하철역 600m 이내
   2) 점수가 높은 칸을 인접 연결해 **핫스팟 클러스터**로 묶고, 대표 칸과 근거 문구를 만든다.
   3) `public/data/dev-pressure.json` 으로 저장한다(지도 오버레이가 읽는 파일).
 
+  ★ 아파트 제외(2026-11-22): ③과 핀 자리는 **아파트 동·단지를 뺀 저층 건물**만 센다.
+     격자 중심에 그냥 핀을 찍으면 사당우성2단지 같은 대단지 아파트 위에 핀이 꽂히고,
+     30년 넘은 아파트 동이 '노후 건물'로 잡혀 단지 자체가 핫스팟이 됐다. 그래서
+       · OSM 아파트 동(footprint)·단지(landuse) 폴리곤 안의 건물은 아파트로 분류해 빼고,
+       · 핀은 그 칸 안 **비아파트 저층 건물들이 가장 촘촘한 덩어리**의 한가운데 건물로 옮기며(스냅),
+       · 옮긴 자리가 여전히 아파트 단지·동 내부이거나 반경 110m 가 아파트로만 차 있으면 핫스팟에서 뺀다.
+
 입력
   · tmp/devpressure/tiles/*.json.gz — `scripts/fetch-dev-buildings.py` 가 모은 건물(중심·외곽면적·연도)
   · tmp/devpressure/emd.geojson     — 법정동 경계(없으면 내려받는다, 출처: 국가공간정보포털 경계 가공본)
-  · tmp/devpressure/osm-apt-seoul.json — OSM 건물중 아파트(없으면 내려받는다, ODbL © OpenStreetMap)
+  · tmp/devpressure/osm-apt-seoul.json       — OSM 아파트 표점(이름·중심, 없으면 내려받는다, ODbL © OpenStreetMap)
+  · tmp/devpressure/osm-apt-seoul-geom.json  — OSM 아파트 동·단지 폴리곤(없으면 내려받는다, ODbL © OpenStreetMap)
   · public/data/zones.geojson, public/data/subway-stations.json
 
-  python3 scripts/build-dev-pressure.py [--verbose]
+  python3 scripts/build-dev-pressure.py [--verbose] [--cells-out tmp/devpressure/cells.json]
 """
 from __future__ import annotations
 
@@ -50,6 +58,11 @@ APT_R = 500.0                     # 아파트 포위 반경
 STATION_R = 600.0                 # 역세권 반경
 BUCKET_M = 250.0                  # 공간 버킷(질의 속도)
 
+SNAP_M = 75.0                     # 핀 스냅 — 한 덩어리로 볼 반경(칸 안 저층 건물 무리)
+APT_NEAR_R = 110.0                # 핀 둘레가 '아파트 단지 중심'인지 보는 반경
+APT_ONLY = 0.62                   # 그 반경 건물 중 아파트 비율이 이보다 높으면 핫스팟 제외
+DENS_REF = 220.0                  # 3×3 칸(≈450m)의 30년↑ 저층 건물 수 상한(밀집도 100% 기준)
+
 # 점수 가중치 — 합 1.0
 W_SIEGE, W_OLD, W_APT, W_STATION = 0.45, 0.25, 0.20, 0.10
 
@@ -81,7 +94,22 @@ def ensure_inputs():
         )
         with urllib.request.urlopen(req, timeout=280) as r, open(osm, "wb") as f:
             f.write(r.read())
-    return emd, osm
+    geom = os.path.join(WORK, "osm-apt-seoul-geom.json")
+    if not os.path.exists(geom):
+        log("OSM 아파트 폴리곤(동·단지) 내려받는 중… 40MB 안팎이라 1~2분 걸립니다")
+        q = """[out:json][timeout:300];
+        (way["landuse"="residential"]["name"](37.42,126.76,37.71,127.19);
+         relation["landuse"="residential"]["name"](37.42,126.76,37.71,127.19);
+         way["building"="apartments"](37.42,126.76,37.71,127.19););
+        out geom;"""
+        req = urllib.request.Request(
+            "https://overpass-api.de/api/interpreter",
+            data=q.encode(),
+            headers={"user-agent": "redev-devpressure/0.1"},
+        )
+        with urllib.request.urlopen(req, timeout=300) as r, open(geom, "wb") as f:
+            f.write(r.read())
+    return emd, osm, geom
 
 
 # ── 투영·기하 ────────────────────────────────────────────────────────────────
@@ -165,6 +193,87 @@ class PointIndex:
         return out
 
 
+# ── 아파트 판정 — OSM 폴리곤(동·단지) ────────────────────────────────────────
+def _ring_bbox(ring):
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def point_in_ring(lng, lat, ring) -> bool:
+    inside = False
+    n = len(ring)
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][:2]
+        xj, yj = ring[j][:2]
+        if (yi > lat) != (yj > lat) and lng < (xj - xi) * (lat - yi) / (yj - yi + 1e-18) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _is_apt_landuse(name: str) -> bool:
+    """landuse=residential 중 '아파트 단지'인 것만 — 연립주택단지·유엔빌리지·구룡마을은 저층 주거지라 뺀다."""
+    n = name.replace(" ", "")
+    if not n or re.search(r"연립|빌라|단독|다세대|주택단지|마을$", n):
+        return False
+    return ("아파트" in n) or ("APT" in n.upper()) or n.endswith("단지")
+
+
+def load_apt_polys(path):
+    """OSM `out geom` 결과 → 아파트 동(footprint)·단지(landuse) 폴리곤 목록"""
+    d = json.load(open(path, encoding="utf-8"))
+    polys = []
+    for el in d["elements"]:
+        t = el.get("tags") or {}
+        name = (t.get("name") or "").strip()
+        bld = t.get("building") == "apartments"
+        landuse = t.get("landuse") == "residential" and _is_apt_landuse(name)
+        if not (bld or landuse):
+            continue
+        geoms = []
+        if el["type"] == "way":
+            g = el.get("geometry")
+            if g and len(g) >= 3:
+                geoms.append(g)
+        else:
+            for m in el.get("members", []):
+                if m.get("type") == "way" and m.get("geometry") and len(m["geometry"]) >= 3:
+                    geoms.append(m["geometry"])
+        for g in geoms:
+            ring = [(p["lon"], p["lat"]) for p in g]
+            polys.append({"name": name, "bld": bld, "landuse": landuse, "ring": ring, "bbox": _ring_bbox(ring)})
+    log(
+        f"OSM 아파트 폴리곤 {len(polys):,}개 — 동 {sum(1 for p in polys if p['bld']):,}"
+        f"·단지 {sum(1 for p in polys if p['landuse']):,}"
+    )
+    return polys
+
+
+class AptMask:
+    """아파트 동·단지 내부 판정 — 0.002°(≈220m) 버킷으로 후보만 검사한다."""
+
+    B = 0.002
+
+    def __init__(self, polys):
+        self.polys = polys
+        self.g = defaultdict(list)
+        for idx, p in enumerate(polys):
+            b = p["bbox"]
+            for ix in range(int(b[0] / self.B), int(b[2] / self.B) + 1):
+                for iy in range(int(b[1] / self.B), int(b[3] / self.B) + 1):
+                    self.g[(ix, iy)].append(idx)
+
+    def cover(self, lng, lat) -> bool:
+        for idx in self.g.get((int(lng / self.B), int(lat / self.B)), ()):
+            p = self.polys[idx]
+            b = p["bbox"]
+            if b[0] <= lng <= b[2] and b[1] <= lat <= b[3] and point_in_ring(lng, lat, p["ring"]):
+                return True
+        return False
+
+
 # ── 입력 로드 ────────────────────────────────────────────────────────────────
 def load_buildings():
     files = sorted(glob.glob(os.path.join(WORK, "tiles", "*.json.gz")))
@@ -229,19 +338,6 @@ def load_zones():
     return out
 
 
-def point_in_ring(lng, lat, ring) -> bool:
-    inside = False
-    n = len(ring)
-    j = n - 1
-    for i in range(n):
-        xi, yi = ring[i][:2]
-        xj, yj = ring[j][:2]
-        if (yi > lat) != (yj > lat) and lng < (xj - xi) * (lat - yi) / (yj - yi + 1e-18) + xi:
-            inside = not inside
-        j = i
-    return inside
-
-
 def load_osm_apts(path):
     d = json.load(open(path, encoding="utf-8"))
     pts = []
@@ -300,33 +396,105 @@ def dong_at(lng, lat, dongs):
     return None, None, None
 
 
+# ── 핀 자리 잡기 ─────────────────────────────────────────────────────────────
+def snap_pin(pts, mask):
+    """칸 안 비아파트 저층 건물 중 **가장 촘촘한 덩어리**의 한가운데 건물로 핀을 옮긴다.
+
+    pts: [(lng, lat, year)] — 이 칸의 비아파트 저층(≤250㎡) 건물
+    덩어리 점수는 30년↑ 건물에 무게를 더 준다(연식 미상 0.6·신축 0.35).
+    옮긴 자리가 아파트 동·단지 안이면 그 덩어리는 버리고 다음 덩어리를 본다.
+    """
+    if not pts:
+        return None
+    kx, ky = meters(37.55)
+    sub = defaultdict(list)  # 50m 씨앗 버킷
+    for lng, lat, year in pts:
+        sub[(int(lng * kx / 50.0), int(lat * ky / 50.0))].append((lng, lat, year))
+
+    def weight_of(years):
+        """30년↑ 건물에 무게를 더 준다 — 연식 미상 0.6·최근 10년 0.35."""
+        w = 0.0
+        for year in years:
+            w += 1.0 if (not year or year <= OLD_YEAR) else 0.6 if year <= OLD_YEAR + 10 else 0.35
+        return w
+
+    def cluster(seed):
+        """씨앗 버킷 둘레 75m 안 건물들"""
+        sx, sy = seed
+        out = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for lng, lat, year in sub.get((sx + dx, sy + dy), ()):
+                    cx, cy = (sx + dx + 0.5) * 50.0, (sy + dy + 0.5) * 50.0
+                    if math.hypot(lng * kx - cx, lat * ky - cy) <= SNAP_M:
+                        out.append((lng, lat, year))
+        return out
+
+    ranked = sorted(((weight_of([y for _, _, y in cluster(s)]), s) for s in sub), key=lambda t: -t[0])
+    for w, seed in ranked:
+        if w < 3.0:
+            break
+        cl = cluster(seed)
+        if len(cl) < 3:
+            continue
+        cx = sum(p[0] for p in cl) / len(cl)
+        cy = sum(p[1] for p in cl) / len(cl)
+        # 덩어리 중심에서 가장 가까운 실제 건물에 핀을 세운다(허공에 뜨지 않게)
+        pin = min(cl, key=lambda p: math.hypot((p[0] - cx) * kx, (p[1] - cy) * ky))
+        if mask.cover(pin[0], pin[1]):
+            continue  # 아직 아파트 단지·동 안 — 다음 덩어리
+        return pin[0], pin[1], len(cl), w
+    return None
+
+
 # ── 메인 ─────────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--cells-out", help="후보 칸 전체를 이 경로에 덤프(검증용)")
     args = ap.parse_args()
-    emd_path, osm_path = ensure_inputs()
+    emd_path, osm_path, geom_path = ensure_inputs()
     buildings = load_buildings()
     zones = load_zones()
     apts = load_osm_apts(osm_path)
+    mask = AptMask(load_apt_polys(geom_path))
     dongs = load_dongs(emd_path)
     stations = json.load(open(os.path.join(ROOT, "public", "data", "subway-stations.json"), encoding="utf-8"))
 
-    # 격자 집계
-    cells = defaultdict(lambda: {"n": 0, "old": 0, "known": 0, "low": 0, "area": 0.0})
+    # 격자 집계 — 건물은 아파트(OSM 동·단지 내부)와 비아파트로 나눠 센다
+    cells = defaultdict(
+        lambda: {
+            "n": 0, "low": 0, "known": 0, "old": 0,
+            "nv": 0, "lowv": 0, "knownv": 0, "oldv": 0, "oldlowv": 0,
+            "pts": [],
+        }
+    )
+    bld_idx = PointIndex(37.55)  # 핀 둘레가 아파트뿐인지 확인용 (item=1 이면 아파트)
     for lng, lat, area, year in buildings:
+        is_apt = mask.cover(lng, lat)
         ci = (int((lng - LON0) / DLNG), int((lat - LAT0) / DLAT))
         c = cells[ci]
         c["n"] += 1
-        c["area"] += area
-        if area <= LOW_AREA:
+        low = area <= LOW_AREA
+        if low:
             c["low"] += 1
         if year:
             c["known"] += 1
             if year <= OLD_YEAR:
                 c["old"] += 1
-    log(f"격자 {len(cells):,}칸에 건물 배정")
+        if not is_apt:
+            c["nv"] += 1
+            if low:
+                c["lowv"] += 1
+                c["pts"].append((lng, lat, year))
+            if year:
+                c["knownv"] += 1
+                if year <= OLD_YEAR:
+                    c["oldv"] += 1
+                    if low:
+                        c["oldlowv"] += 1
+        bld_idx.add(lng, lat, 1 if is_apt else 0)
+    log(f"격자 {len(cells):,}칸에 건물 배정 · 아파트 제외 저층 건물 {sum(c['lowv'] for c in cells.values()):,}동")
 
     # 아파트·역·구역 인덱스
     apt_idx = PointIndex(37.55)
@@ -340,51 +508,68 @@ def main():
         for pt in z["pts"]:
             zone_idx.add(pt[0], pt[1], z)
 
-    # 3×3 이웃 집계
+    # 3×3 이웃 집계 — 비아파트 건물만
     def ring_stat(i, j):
-        n = known = old = low = 0
+        n = known = old = low = oldlow = 0
         for di in (-1, 0, 1):
             for dj in (-1, 0, 1):
                 c = cells.get((i + di, j + dj))
                 if not c:
                     continue
-                n += c["n"]
-                known += c["known"]
-                old += c["old"]
-                low += c["low"]
-        return n, known, old, low
+                n += c["nv"]
+                known += c["knownv"]
+                old += c["oldv"]
+                low += c["lowv"]
+                oldlow += c["oldlowv"]
+        return n, known, old, low, oldlow
 
     scored = []
     for (i, j), c in cells.items():
-        if c["n"] < 6 or c["known"] < 5:
+        # 비아파트 저층 건물이 실제로 모여 있는 칸만 후보 — 아파트 단지 한가운데 칸은 여기서 걸러진다
+        if c["nv"] < 8 or c["knownv"] < 6:
             continue
-        low_share = c["low"] / c["n"]
+        low_share = c["lowv"] / c["nv"]
         if low_share < 0.45:  # 저층 주거지가 아니다(상업·아파트 단지 내부 등)
             continue
-        lng = LON0 + (i + 0.5) * DLNG
-        lat = LAT0 + (j + 0.5) * DLAT
+        clng = LON0 + (i + 0.5) * DLNG
+        clat = LAT0 + (j + 0.5) * DLAT
         # 서울 밖(경기·인천) 배제 — 법정동 경계로 확인
-        gu, dong, hjd = dong_at(lng, lat, dongs)
+        gu, dong, hjd = dong_at(clng, clat, dongs)
         if gu is None:
             continue
 
+        # 핀 자리 — 이 칸의 비아파트 저층 건물 덩어리 중심으로 옮긴다(아파트 위에 꽂히지 않게)
+        snap = snap_pin(c["pts"], mask)
+        if snap is None:
+            continue
+        lng, lat, cluster_n, _ = snap
+        # 옮긴 자리 둘레가 사실상 아파트 단지뿐이면 핫스팟이 아니다
+        near = bld_idx.near(lng, lat, APT_NEAR_R)
+        if near:
+            apt_n = sum(1 for _, _, _, is_apt in near if is_apt)
+            if apt_n / len(near) >= APT_ONLY and cluster_n < 12:
+                continue
+        pgu, pdong, phjd = dong_at(lng, lat, dongs)
+        if pgu is not None:
+            gu, dong, hjd = pgu, pdong, phjd
+
         # ① 포위도 — 사방 8방위가 "정비구역" 또는 "아파트"로 막혀 있는가
         #    (가까울수록 강하고, 8방위 평균이 곧 둘러싸인 정도)
-        apt_near = apt_idx.near(lng, lat, APT_R)
+        apt_near = apt_idx.near(clng, clat, APT_R)
         zone_sector = [0.0] * 8
         apt_sector = [0.0] * 8
         inside = None
         zlist = []
         nearest = {}  # 구역 id → (경계 거리, 그 표본점 좌표, 구역)
-        for d, x, y, z in zone_idx.near(lng, lat, ZONE_R):
+        for d, x, y, z in zone_idx.near(clng, clat, ZONE_R):
             prev = nearest.get(z["id"])
             if prev is None or d < prev[0]:
                 nearest[z["id"]] = (d, x, y, z)
         for zb, x, y, z in nearest.values():
-            if point_in_ring(lng, lat, z["ring"]):
+            if point_in_ring(clng, clat, z["ring"]):
                 inside = z  # 이 칸을 감싼 구역 — 포위 계산에서는 뺀다
                 continue
-            k = sector_of(x - lng, y - lat)
+            k = sector_of(x - clng, y - clat)
             zone_sector[k] = max(zone_sector[k], z["weight"] * (1 - zb / ZONE_R) ** 1.3)
             zlist.append((zb, z, k))
         apt_cnt = 0
@@ -396,7 +581,7 @@ def main():
                 apt_cnt += 1
             if not (is_bld or p["landuse"]):
                 continue
-            k = sector_of(x - lng, y - lat)
+            k = sector_of(x - clng, y - clat)
             if is_bld:
                 apt_sector[k] += 1.0 / (1.0 + d / 250.0)
             if p["name"] and not seen_names.__contains__(p["name"]):
@@ -418,11 +603,12 @@ def main():
         apt_names.sort(key=lambda a: a["dist"])
         apt_names = apt_names[:4]
 
-        # ③ 노후·저층
-        n3, known3, old3, low3 = ring_stat(i, j)
+        # ③ 노후·저층 — 아파트 동을 빼고, 30년↑ 저층 건물이 실제로 얼마나 촘촘한지까지 본다
+        n3, known3, old3, low3, oldlow3 = ring_stat(i, j)
         old_share = old3 / known3 if known3 else 0.0
         low_share3 = low3 / n3 if n3 else 0.0
-        s2 = 100 * (0.65 * old_share + 0.35 * low_share3)
+        dens = min(1.0, oldlow3 / DENS_REF)
+        s2 = 100 * (0.60 * old_share + 0.25 * low_share3 + 0.15 * dens)
         if old_share >= 0.6:
             s2 = min(100.0, s2 * 1.08)
 
@@ -430,7 +616,7 @@ def main():
         s3 = 100 * min(1.0, apt_cnt / 45.0)
 
         # ⑤ 역세권
-        st_near = st_idx.near(lng, lat, STATION_R)
+        st_near = st_idx.near(clng, clat, STATION_R)
         s4 = 100 * (1 - st_near[0][0] / STATION_R) if st_near else 0.0
 
         score = W_SIEGE * s1 + W_OLD * s2 + W_APT * s3 + W_STATION * s4
@@ -443,6 +629,9 @@ def main():
                 "j": j,
                 "lng": lng,
                 "lat": lat,
+                "cellLng": clng,
+                "cellLat": clat,
+                "snapM": int(round(math.hypot((lng - clng) * 88000, (lat - clat) * 110540))),
                 "gu": gu,
                 "dong": dong,
                 "hjd": hjd,
@@ -464,6 +653,7 @@ def main():
                 "station": st_near[0][3] if st_near else None,
                 "stationDist": int(round(st_near[0][0])) if st_near else None,
                 "n": c["n"],
+                "nv": c["nv"],
             }
         )
     scored.sort(key=lambda s: -s["score"])
@@ -474,6 +664,9 @@ def main():
             {
                 "lat": round(s["lat"], 5),
                 "lng": round(s["lng"], 5),
+                "cellLat": round(s["cellLat"], 5),
+                "cellLng": round(s["cellLng"], 5),
+                "snapM": s["snapM"],
                 "dong": s["dong"],
                 "gu": s["gu"],
                 "score": round(s["score"], 1),
@@ -486,6 +679,7 @@ def main():
                 "oldPct": s["oldPct"],
                 "lowPct": s["lowPct"],
                 "n": s["n"],
+                "nv": s["nv"],
                 "inside": s["inside"]["name"] if s["inside"] else None,
             }
             for s in scored
@@ -497,7 +691,7 @@ def main():
         for s in scored[:15]:
             log(
                 f"  {s['score']:5.1f} {s['gu']} {s['dong']} ({s['lat']:.5f},{s['lng']:.5f}) "
-                f"구역{len(s['zones'])}·사방{s['quads']}·아파트{s['apt']}·노후{s['oldPct']}%"
+                f"구역{len(s['zones'])}·사방{s['quads']}·아파트{s['apt']}·노후{s['oldPct']}%·저층{s['lowPct']}%·이동{s['snapM']}m"
                 + (f" [구역내:{s['inside']['name']}]" if s["inside"] else "")
             )
 
@@ -598,13 +792,13 @@ def main():
     log(f"핫스팟 {len(hotspots)}곳 확정 · 점수 {hotspots[0]['score']}~{hotspots[-1]['score']}")
 
     payload = {
-        "generatedAt": "2026-11-21",
+        "generatedAt": "2026-11-22",
         "method": {
             "grid": int(CELL_M),
             "oldYear": OLD_YEAR,
             "lowArea": LOW_AREA,
             "weights": {"siege": W_SIEGE, "old": W_OLD, "apt": W_APT, "station": W_STATION},
-            "note": "건물: 브이월드 GIS건물통합정보+건축물대장 연식 / 아파트: OpenStreetMap(ODbL) / 구역: 서울시 고시 경계",
+            "note": "건물: 브이월드 GIS건물통합정보+건축물대장 연식 / 아파트: OpenStreetMap(ODbL) / 구역: 서울시 고시 경계 / 노후·저층은 아파트 동·단지를 뺀 저층 건물 기준",
         },
         "hotspots": hotspots,
     }

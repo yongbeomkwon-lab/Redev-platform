@@ -2233,7 +2233,7 @@ export default function ZoneExplorer() {
                           className="shrink-0 rounded-full px-1.5 py-[2px] text-[10px] font-extrabold text-white"
                           style={{ backgroundColor: DEV_GRADE_COLOR[h.grade] }}
                         >
-                          {Math.round(h.score)}
+                          {Math.round(h.score)}점
                         </span>
                       </button>
                     ))}

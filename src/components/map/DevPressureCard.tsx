@@ -34,7 +34,7 @@ export default function DevPressureCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[13px] font-extrabold leading-tight text-ink">개발압력 {Math.round(spot.score)}</span>
+            <span className="text-[13px] font-extrabold leading-tight text-ink">개발압력 {Math.round(spot.score)}점</span>
             <span
               className="rounded-full px-1.5 py-[1px] text-[9.5px] font-bold text-white"
               style={{ background: color }}
@@ -87,6 +87,9 @@ export default function DevPressureCard({
           <div className="text-[9px] text-slate-400">아파트 동</div>
           <div className="text-[11.5px] font-bold text-ink">{spot.aptCount}</div>
         </div>
+      </div>
+      <div className="mx-3 -mt-1 mb-2 text-[9px] leading-tight text-slate-400">
+        노후·저층은 이 일대 아파트 동·단지를 뺀 저층 건물 기준 · 아파트 동은 500m 안 개수
       </div>
 
       {spot.zones.length > 0 && (
