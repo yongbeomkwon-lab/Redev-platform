@@ -180,8 +180,10 @@ export default function DevPressureLayer({
           style={{
             position: "absolute",
             left: Math.max(140, Math.min(selected.x, (wrapRef.current?.clientWidth ?? 600) - 140)),
-            top: selected.y - 22,
-            transform: "translate(-50%, -100%)",
+            // 카드가 위로 잘리면(핀이 화면 위쪽) 핀 아래로 뒤집어 붙인다
+            ...(selected.y < 352
+              ? { top: selected.y + 22, transform: "translate(-50%, 0)" }
+              : { top: selected.y - 22, transform: "translate(-50%, -100%)" }),
             pointerEvents: "auto",
             zIndex: 5,
           }}
@@ -198,7 +200,7 @@ export default function DevPressureLayer({
       {/* 범례 */}
       <div
         data-testid="dev-pressure-legend"
-        className="pointer-events-auto absolute bottom-14 left-2 z-[600] w-max max-w-[min(92vw,300px)] rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur md:bottom-14"
+        className="pointer-events-auto absolute bottom-2 left-2 z-[600] w-max max-w-[min(92vw,300px)] rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur md:bottom-auto md:left-1/2 md:top-2 md:-translate-x-1/2"
       >
         <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
           <b className="text-slate-900">🔥 개발압력</b>
