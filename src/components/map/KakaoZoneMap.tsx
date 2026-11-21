@@ -268,8 +268,13 @@ const ZONE_TAG_LAYER_STYLE = {
 /** 이름표를 띄우는 구역의 최소 화면 크기(px) — 이보다 작은 구역은 확대하면 자연히 나타난다 */
 const TAG_MIN_W = 6;
 const TAG_MIN_H = 5;
-/** 한 화면에 띄우는 이름표 최대 개수 — 겹침 회피로 이미 줄지만 상한을 둬 이동 중 비용을 묶는다 */
-const TAG_MAX = 72;
+/**
+ * 한 화면에 띄우는 이름표 최대 개수 — 겹침 회피로 이미 줄지만 상한을 둬 이동 중 비용을 묶는다.
+ *   · 카드형이 기본이 된 뒤로는 카드가 칩보다 세로로 4배 가까이 크므로 상한을 낮춰 지도가
+ *     카드로 덮이지 않게 한다(넓은 화면 32개 · 폰 16개 — 실제로는 겹침 회피가 먼저 줄인다).
+ */
+const TAG_MAX_DESKTOP = 32;
+const TAG_MAX_MOBILE = 16;
 const TAG_FONT = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
 const TAG_CHIP_FONT = "800 9px ui-sans-serif, system-ui, -apple-system, sans-serif";
 /** 이름표 높이(px) — 11px 글자 + 위아래 여백 2px + 테두리 */
@@ -279,10 +284,13 @@ const TAG_H = 17;
 //   흰 카드 **왼쪽 위 테두리에** 사업유형 캡슐(알약)이 살짝 걸쳐 앉고, 카드 안에는
 //   구역명(굵게)과 진행단계(작은 회색)가 두 줄로 들어간다. 사업유형 색은 지도 폴리곤과
 //   같은 TYPE_COLORS 원색을 캡슐 바탕으로 그대로 쓴다.
-//   · 서울 전체/광역에서는 1줄 칩을 그대로 둔다 — 2,400곳이 카드가 되면 지도가 카드로 덮인다.
-//   · **동네·구역 단위로 확대했을 때만** 카드로 바꾼다(CARD_LEVEL_MAX). 카카오 level 4 ≈ Leaflet
-//     zoom 15 — 구역 경계와 주변 골목이 함께 읽히는 배율이다.
-const CARD_LEVEL_MAX = 4;
+//   · 2026-11-21 사용자 피드백: 구·서울 단위(레벨 6~7)의 넓은 화면에서 1줄 칩만 나와 “계속 1단으로만
+//     나온다” → 처음에는 동네 단위(레벨 4 이하)에서만 카드로 바꿨는데, 사용자가 주로 보는 화면이
+//     그보다 넓어 카드를 한 번도 못 봤다. 그래서 **사실상 모든 배율에서 카드형을 기본**으로 띄운다.
+//   · 지도가 카드로 덮이지 않게 하는 일은 ① 배율별 카드 최소 크기(cardMinSize — 물러날수록 완화),
+//     ② `tag-layer` 겹침 회피 ③ 화면 크기별 개수 상한(TAG_MAX_*)이 맡는다. 면적이 큰 대표 구역부터
+//     자리를 잡으므로 넓은 화면에서도 읽을 만한 구역 이름만 카드로 남는다.
+const CARD_LEVEL_MAX = 14;
 /** 캡슐 높이 · 흰 카드 높이 · 캡슐이 카드 위로 걸치는 높이(px) */
 const CARD_PILL_H = 20;
 const CARD_BODY_H = 50;
@@ -295,9 +303,24 @@ const CARD_H = CARD_BODY_TOP + CARD_BODY_H;
 /** 카드 좌우 여백 · 캡슐이 카드 왼쪽에서 들어오는 거리(px) */
 const CARD_PAD_X = 10;
 const CARD_PILL_LEFT = 10;
-/** 카드를 앉히는 데 필요한 구역의 최소 화면 크기(px) — 골목 안 작은 구역은 1줄 칩으로 남긴다 */
+/** 카드를 앉히는 데 필요한 구역의 최소 화면 크기(px) — 동네 단위(레벨 4 이하) 기준.
+ *  골목 안 작은 구역은 1줄 칩으로 남긴다. */
 const CARD_MIN_W = 26;
 const CARD_MIN_H = 16;
+
+/**
+ * 배율별 카드 최소 크기.
+ *   · 광역으로 물러나면 구역이 화면에서 몇 px 되지 않는다 — 서울 전체(레벨 7~8)에서 1만㎡ 구역은
+ *     3×3px 남짓이다. 여기서도 26×16 을 요구하면 모든 구역이 1줄 칩으로 떨어져, 넓은 화면에는
+ *     카드가 하나도 안 나왔다(사용자 피드백의 원인).
+ *   · 그래서 동네 단위(레벨 4)의 26×16 을 기준으로, 한 단계 물러날 때마다 0.62씩 낮춰 레벨 7
+ *     이상에서는 이름표를 띄우는 최소치(6×5)까지 푼다. 무엇이 카드로 남는지는 면적이 큰 구역부터
+ *     놓는 겹침 회피가 정한다 → 넓은 화면에서도 대표 구역만 카드로 남고 지도는 숨통이 트인다.
+ */
+function cardMinSize(level: number): { w: number; h: number } {
+  const k = Math.min(1, Math.pow(0.62, Math.max(0, level - 4)));
+  return { w: Math.max(TAG_MIN_W, CARD_MIN_W * k), h: Math.max(TAG_MIN_H, CARD_MIN_H * k) };
+}
 /** 카드 안 글자 크기 — 칩(11px)보다 한 단계 크게, 스케치의 비중을 따른다 */
 const CARD_NAME_FONT = "700 15px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
 const CARD_STAGE_FONT = "600 10px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
@@ -709,8 +732,11 @@ export default function KakaoZoneMap({
       const tagT0 = performance.now();
       const tagLayer = tagLayerRef.current;
       const selTag = selectedRef.current;
-      // 동네·구역 단위로 확대했는지 — 여기서부터 1줄 칩 대신 2단 카드형 뱃지를 띄운다
-      const cardMode = map.getLevel() <= CARD_LEVEL_MAX;
+      // 카드형 뱃지를 쓰는 배율인지 — 이제 사실상 모든 배율에서 카드가 기본이다
+      const level = map.getLevel();
+      const cardMode = level <= CARD_LEVEL_MAX;
+      // 이번 배율에서 카드를 앉힐 수 있는 구역의 최소 화면 크기 — 물러날수록 기준이 낮아진다
+      const cardMin = cardMinSize(level);
       if (cardZoomRef.current !== cardMode) {
         cardZoomRef.current = cardMode;
         setCardZoom(cardMode);
@@ -796,7 +822,9 @@ export default function KakaoZoneMap({
       const pushCand = (z: SeoulZone, x: number, y: number, sw: number, sh: number) => {
         // 카드는 구역이 화면에서 카드만큼 자리를 가질 때만 띄운다 — 골목 안 작은 구역에
         // 100px짜리 카드를 얹으면 지도가 카드로 덮인다. 그 구역은 더 확대하면 카드로 나타난다.
-        const card = cardMode && sw >= CARD_MIN_W && sh >= CARD_MIN_H;
+        //   · 기준은 배율에 따라 낮아진다(cardMin) — 광역 화면에서 구역이 몇 px 이어도 대표
+        //     구역은 카드로 보이게. 넓은 화면에서 전부 칩으로 떨어지던 원인이 이 고정 기준이었다.
+        const card = cardMode && sw >= cardMin.w && sh >= cardMin.h;
         const name = card ? cardName(z.name) : tagName(z.name);
         // 카드 캡슐은 사용자가 쓰는 온전한 사업유형명(신속통합기획·일반재개발·민간도심복합)을 쓴다
         const typeText = card ? shortZoneType(z.type) : tagTypeText(z.type);
@@ -865,10 +893,13 @@ export default function KakaoZoneMap({
       }
       const chosen: TagCand[] = [];
       // 좁은 화면(폰)에서는 개수를 줄인다 — 지도가 작아 이름표가 화면을 다 덮었다
-      const tagMax = cardMode ? (cw < 560 ? 18 : 40) : cw < 560 ? 26 : TAG_MAX;
+      const tagMax = cw < 560 ? TAG_MAX_MOBILE : TAG_MAX_DESKTOP;
       for (const c of cands) {
-        const hw = c.w / 2 + 3;
-        const hh = c.h / 2 + 3;
+        // 카드는 그림자와 위로 걸친 캡슐까지 있어 칩보다 여유를 더 둔다 — 바짝 붙으면
+        // 두 카드가 한 덩어리로 보인다(겹침 패딩을 카드 크기에 맞춘다).
+        const pad = c.card ? 5 : 3;
+        const hw = c.w / 2 + pad;
+        const hh = c.h / 2 + pad;
         const x0 = c.x - hw;
         const x1 = c.x + hw;
         const y0 = c.y - hh;
