@@ -45,6 +45,8 @@ ZONES = {
 }
 
 cfg = ZONES[ZONE]
+if os.environ.get("OUT"):
+    cfg = dict(cfg, out=os.environ["OUT"])
 
 # 구역 중심 좌표 — zones.geojson(로컬 빌드와 같은 파일)
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
