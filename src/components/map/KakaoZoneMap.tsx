@@ -246,6 +246,60 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.closePath();
 }
 
+/**
+ * 기본 구역 이름표 레이어 — 지도 위에 **늘** 떠 있는 `구역명 + 사업유형` 뱃지.
+ *   · 폴리곤 캔버스(2)보다 위, 실거래 핀(95)·매물 배지(100)·선택 이름표(101)보다 아래(90).
+ *   · 레이어는 클릭을 통과시키고, 이름표 버튼만 pointerEvents: auto 로 받는다.
+ */
+const ZONE_TAG_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 90,
+  pointerEvents: "none" as const,
+};
+
+/** 이름표를 띄우는 구역의 최소 화면 크기(px) — 이보다 작은 구역은 확대하면 자연히 나타난다 */
+const TAG_MIN_W = 6;
+const TAG_MIN_H = 5;
+/** 한 화면에 띄우는 이름표 최대 개수 — 겹침 회피로 이미 줄지만 상한을 둬 이동 중 비용을 묶는다 */
+const TAG_MAX = 72;
+const TAG_FONT = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+const TAG_CHIP_FONT = "800 9px ui-sans-serif, system-ui, -apple-system, sans-serif";
+/** 이름표 높이(px) — 11px 글자 + 위아래 여백 2px + 테두리 */
+const TAG_H = 17;
+
+/**
+ * 사업유형 칩 문구 — 좁은 이름표에 들어가도록 짧게.
+ *   · 색은 폴리곤과 같은 TYPE_COLORS 를 쓰므로 지도 아래 범례와 그대로 맞는다.
+ */
+const TAG_TYPE_TEXT: Record<string, string> = {
+  신통기획: "신통기획",
+  모아타운: "모아타운",
+  도공복: "도공복",
+  일반재개발: "재개발",
+  공공재개발: "공공재개발",
+  가로주택: "가로주택",
+  소규모: "소규모",
+  역세권: "역세권",
+  장기전세: "장기전세",
+  "민간도심복합(성장거점형)": "민간복합",
+  "민간도심복합(주거중심형)": "민간복합",
+};
+
+function tagTypeText(type?: string | null): string {
+  if (!type) return "";
+  return TAG_TYPE_TEXT[type] ?? (type.length > 5 ? type.slice(0, 5) : type);
+}
+
+/** 이름표에 넣을 구역명 — 긴 공식 명칭은 줄이고, 전문은 hover title 로 보여 준다 */
+function tagName(name: string): string {
+  const s = name.trim();
+  return s.length > 14 ? `${s.slice(0, 13)}…` : s;
+}
+
 /** 툴팁 한 줄: 신림1구역 · 재정비촉진구역 · 사업시행인가 · 22.3만㎡ (관악구) */
 function labelLine(z: { name: string; kind: string; stage: string; area: number; gu?: string }) {
   const area = z.area >= 10000 ? `${(z.area / 10000).toFixed(1)}만㎡` : `${z.area.toLocaleString()}㎡`;
@@ -304,6 +358,22 @@ export default function KakaoZoneMap({
   /** 지하철역 핀 레이어 — 주소 핀과 동시에 떠 있을 수 있어 따로 둔다 */
   const stationLayerRef = useRef<HTMLDivElement | null>(null);
   const labelLayerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 기본 구역 이름표(구역명 + 사업유형 뱃지) 레이어
+   *   · 요소는 React 가 아니라 draw 가 직접 만들고 풀에서 재사용한다 — 지도를 옮길 때마다
+   *     수십 개 버튼을 리렌더하면 이동이 끓긴다(이 파일의 다른 레이어도 같은 이유로 DOM 을 직접 만진다).
+   */
+  const tagLayerRef = useRef<HTMLDivElement | null>(null);
+  /** 지금 화면에 떠 있는 이름표 요소(구역 id → 버튼) */
+  const tagElsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
+  /** 화면에서 사라진 이름표 요소 재사용 풀 */
+  const tagPoolRef = useRef<HTMLButtonElement[]>([]);
+  /** 이름표 글자 폭 측정 캐시(이름|유형 → px) — 매 프레임 measureText 를 줄인다 */
+  const tagWRef = useRef<Map<string, number>>(new Map());
+  /** 진단용 — 마지막 프레임의 이름표 배치 소요(ms). `?diag=1` 에서만 읽는다 */
+  const tagMsRef = useRef(0);
+  /** 이번 프레임에 놓인 이름표의 사각형(구역 id → 높이) — 매물 배지가 위로 비켜 놓는다 */
+  const tagBoxRef = useRef<Map<string, { h: number }>>(new Map());
   /** 매물 배지 레이어 + 배지 요소(구역 id → 버튼) — draw 가 매 프레임 좌표를 맞춘다 */
   const badgeLayerRef = useRef<HTMLDivElement | null>(null);
   const badgeElsRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -564,6 +634,203 @@ export default function KakaoZoneMap({
     placeOnMap(pinLayerRef.current, pinAtRef.current.lat, pinAtRef.current.lng);
     placeOnMap(stationLayerRef.current, stationAtRef.current.lat, stationAtRef.current.lng);
 
+    // ── 기본 구역 이름표 — `구역명 + 사업유형` 을 **처음 화면부터** 띄운다 ──────────
+    //   · 예전에는 마우스를 올려야(툴팁) 구역명이 보였다(사용자 요청으로 기본 표시).
+    //   · 2,400곳을 다 찍으면 서울 전경이 글자로 새까맣게 되므로:
+    //       ① 화면에 들어온 구역 중 화면 크기가 최소치(6×5px) 이상인 곳만,
+    //       ② 면적이 큰 구역부터,
+    //       ③ 놓인 이름표 사각형과 겹치는 곳은 건너뛴다 → 서로 가리지 않는 것만 남는다.
+    //     줌인하면 작은 가로주택·모아타운도 ①을 넘어 자연스럽게 새로 나타난다.
+    //   · 선택된 구역은 큰 이름표(유형·단계·지번)가 따로 떠 있어 기본 이름표를 걷어 중복을 막는다.
+    //     (호버는 그대로 둔다 — 이름표 위에 커서가 오면 그 이름표가 사라져 깜빡였음)
+    if (tagLayerRef.current) {
+      const tagT0 = performance.now();
+      const tagLayer = tagLayerRef.current;
+      const selTag = selectedRef.current;
+      const tLng0 = lng0 + (0 - p0x) / pxPerLng;
+      const tLng1 = lng0 + (cw - p0x) / pxPerLng;
+      const tLat0 = unmercator((0 - p0y) / pxPerMerc + m0);
+      const tLat1 = unmercator((ch - p0y) / pxPerMerc + m0);
+      const tMinLat = Math.min(tLat0, tLat1) - 0.0006;
+      const tMaxLat = Math.max(tLat0, tLat1) + 0.0006;
+      const tMinLng = Math.min(tLng0, tLng1) - 0.0006;
+      const tMaxLng = Math.max(tLng0, tLng1) + 0.0006;
+
+      /** 이름표 전체 폭(px) — 칩 + 이름 + 여백. 같은 글자는 캐시한다. */
+      const widthOf = (name: string, typeText: string) => {
+        const key = `${name}|${typeText}`;
+        const cached = tagWRef.current.get(key);
+        if (cached) return cached;
+        ctx.save();
+        ctx.font = TAG_FONT;
+        const nw = ctx.measureText(name).width;
+        ctx.font = TAG_CHIP_FONT;
+        const tw = typeText ? ctx.measureText(typeText).width + 8 + 4 : 0;
+        ctx.restore();
+        // 좌우 여백(4+6) + 테두리 2 + 안전 여유 2
+        const w = Math.ceil(nw + tw + 14);
+        if (tagWRef.current.size > 5000) tagWRef.current.clear();
+        tagWRef.current.set(key, w);
+        return w;
+      };
+
+      type TagCand = {
+        id: string;
+        x: number;
+        y: number;
+        w: number;
+        area: number;
+        name: string;
+        typeText: string;
+        color: string;
+        full: string;
+      };
+      const cands: TagCand[] = [];
+      for (const pz of prepRef.current.zones) {
+        if (pz.maxLat < tMinLat || pz.minLat > tMaxLat || pz.maxLng < tMinLng || pz.minLng > tMaxLng) continue;
+        const z = pz.zone;
+        // 선택 구역은 큰 이름표(유형·단계·지번)가 따로 떠 있다 — 기본 이름표를 겹치지 않게 걷어낸다.
+        //   (호버는 그대로 둔다: 이름표 위에 커서가 오면 그 이름표가 사라져 깜빡였음)
+        if (z.id === selTag) continue;
+        // 화면 크기 — 위도는 메르카토르로 단조라 경계 상자 네 모서리로 정확히 구해진다
+        const sw = (pz.maxLng - pz.minLng) * pxPerLng;
+        const sh = (mercator(pz.minLat) - mercator(pz.maxLat)) * pxPerMerc;
+        if (sw < TAG_MIN_W || sh < TAG_MIN_H) continue;
+        const cLat = z.center && Number.isFinite(z.center[0]) ? z.center[0] : (pz.minLat + pz.maxLat) / 2;
+        const cLng = z.center && Number.isFinite(z.center[1]) ? z.center[1] : (pz.minLng + pz.maxLng) / 2;
+        const x = p0x + (cLng - lng0) * pxPerLng;
+        const y = p0y + (mercator(cLat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) continue;
+        const name = tagName(z.name);
+        const typeText = tagTypeText(z.type);
+        cands.push({
+          id: z.id,
+          x,
+          y,
+          w: widthOf(name, typeText),
+          area: z.area || 0,
+          name,
+          typeText,
+          color: TYPE_COLORS[z.type] ?? "#64748b",
+          full: labelLine(z),
+        });
+      }
+      // 경계 미고시 후보지(사당21 등) — 점으로 그려지는 구역도 이름은 늘 보이게
+      for (const z of prepRef.current.points) {
+        if (!z.center) continue;
+        if (z.center[0] < tMinLat || z.center[0] > tMaxLat || z.center[1] < tMinLng || z.center[1] > tMaxLng) continue;
+        if (z.id === selTag) continue;
+        const x = p0x + (z.center[1] - lng0) * pxPerLng;
+        const y = p0y + (mercator(z.center[0]) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) continue;
+        const name = tagName(z.name);
+        const typeText = tagTypeText(z.type);
+        cands.push({
+          id: z.id,
+          x,
+          y,
+          w: widthOf(name, typeText),
+          area: z.area || 0,
+          name,
+          typeText,
+          color: TYPE_COLORS[z.type] ?? "#64748b",
+          full: labelLine(z),
+        });
+      }
+
+      // 큰 구역부터 자리를 잡는다 — 멀리서 볼수록 주요 구역 이름이 먼저 남는다
+      cands.sort((a, b) => b.area - a.area);
+
+      const placedTag: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      // 선택 구역의 큰 이름표 자리도 비워 둔다(기본 이름표가 그 위에 겹치지 않게)
+      const lbl = labelAtRef.current;
+      if (Number.isFinite(lbl.lat) && Number.isFinite(lbl.lng)) {
+        const lx = p0x + (lbl.lng - lng0) * pxPerLng;
+        const ly = p0y + (mercator(lbl.lat) - m0) * pxPerMerc;
+        placedTag.push({ x0: lx - 90, y0: ly - 34, x1: lx + 90, y1: ly + 4 });
+      }
+      const chosen: TagCand[] = [];
+      // 좁은 화면(폰)에서는 개수를 줄인다 — 지도가 작아 이름표가 화면을 다 덮었다
+      const tagMax = cw < 560 ? 26 : TAG_MAX;
+      for (const c of cands) {
+        const hw = c.w / 2 + 3;
+        const hh = TAG_H / 2 + 3;
+        const x0 = c.x - hw;
+        const x1 = c.x + hw;
+        const y0 = c.y - hh;
+        const y1 = c.y + hh;
+        // 화면에 반쯤 걸친 이름표는 잘려 보인다 — 통째로 들어오는 자리만 쓴다(모바일에서 특히 지저분했음)
+        if (x0 < 2 || x1 > cw - 2 || y0 < 2 || y1 > ch - 2) continue;
+        let clash = false;
+        for (const b of placedTag) {
+          if (x0 < b.x1 && x1 > b.x0 && y0 < b.y1 && y1 > b.y0) {
+            clash = true;
+            break;
+          }
+        }
+        if (clash) continue;
+        placedTag.push({ x0, y0, x1, y1 });
+        chosen.push(c);
+        if (chosen.length >= tagMax) break;
+      }
+
+      // DOM 반영 — 이번에 안 보이는 요소는 숨겨 풀에 돌리고, 새 id 만 만들어 붙인다
+      const keep = new Set(chosen.map((c) => c.id));
+      for (const [id, node] of tagElsRef.current) {
+        if (keep.has(id)) continue;
+        node.style.visibility = "hidden";
+        tagElsRef.current.delete(id);
+        tagPoolRef.current.push(node);
+        if (tagPoolRef.current.length > 90) tagPoolRef.current.shift()?.remove();
+      }
+      tagBoxRef.current.clear();
+      for (const c of chosen) {
+        let node = tagElsRef.current.get(c.id) ?? null;
+        if (!node) {
+          node = tagPoolRef.current.pop() ?? null;
+          if (!node) {
+            node = document.createElement("button");
+            node.type = "button";
+            node.className = "zone-tag";
+            node.dataset.testid = "zone-tag";
+            node.addEventListener("click", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const id = node?.dataset.zoneId;
+              if (id) onSelectRef.current(id);
+            });
+            node.addEventListener("mouseenter", () => {
+              const id = node?.dataset.zoneId;
+              if (!id || hoverRef.current === id) return;
+              hoverRef.current = id;
+              draw();
+            });
+            node.addEventListener("mouseleave", () => {
+              const id = node?.dataset.zoneId;
+              if (!id || hoverRef.current !== id) return;
+              hoverRef.current = null;
+              draw();
+            });
+          }
+          node.dataset.zoneId = c.id;
+          node.innerHTML =
+            (c.typeText
+              ? `<span class="zone-tag-chip" style="background:${c.color}">${escapeHtml(c.typeText)}</span>`
+              : "") + `<b>${escapeHtml(c.name)}</b>`;
+          node.title = c.full;
+          node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
+          node.style.visibility = "visible";
+          tagLayer.appendChild(node);
+          tagElsRef.current.set(c.id, node);
+        } else {
+          node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
+          node.style.visibility = "visible";
+        }
+        tagBoxRef.current.set(c.id, { h: TAG_H });
+      }
+      tagMsRef.current = performance.now() - tagT0;
+    }
+
     // 매물 배지 — 구역 중심에 `🏠 매물 N`. 지도와 같은 변환으로 매 프레임 좌표를 맞추고,
     // 가까이서 겹치는 배지는 숨긴다(도시 전체 보기에서 글자가 뭉개지지 않게).
     //   · **선택한 구역 배지를 가장 먼저** 놓는다 — 옆 구역 배지에 밀려 사라지지 않게.
@@ -578,7 +845,10 @@ export default function KakaoZoneMap({
         const node = badgeElsRef.current.get(b.id);
         if (!node) continue;
         const x = p0x + (b.lng - lng0) * pxPerLng;
-        const y = p0y + (mercator(b.lat) - m0) * pxPerMerc;
+        // 같은 구역에 기본 이름표(구역명)가 떠 있으면 배지를 그 위로 비켜 놓는다
+        let y = p0y + (mercator(b.lat) - m0) * pxPerMerc;
+        const tagBox = tagBoxRef.current.get(b.id);
+        if (tagBox) y -= tagBox.h / 2 + 12;
         if (!Number.isFinite(x) || !Number.isFinite(y) || x < -140 || x > cw + 140 || y < -50 || y > ch + 50) {
           node.style.visibility = "hidden";
           continue;
@@ -1084,6 +1354,7 @@ export default function KakaoZoneMap({
         draw: () => draw(),
         anchor: () => anchorModeRef.current,
         draws: () => drawCountRef.current,
+        tagMs: () => tagMsRef.current,
         places: () => placeCountRef.current,
         anchorInfo: () => {
           const pair = anchorsRef.current;
@@ -2183,6 +2454,10 @@ export default function KakaoZoneMap({
           />
         )}
       </div>
+
+      {/* ── 기본 구역 이름표 — `구역명 + 사업유형` (z-index 90, 매물 배지 아래) ──
+             요소는 draw 가 직접 만들어 붙인다(이동할 때마다 리렌더하지 않게). */}
+      <div ref={tagLayerRef} style={ZONE_TAG_LAYER_STYLE} data-testid="zone-tag-layer" />
 
       {/* ── 매물 배지 — `🏠 매물 N` (z-index 100 우리 레이어, 폴리곤 위) ── */}
       <div ref={badgeLayerRef} style={BADGE_LAYER_STYLE}>

@@ -21,3 +21,6 @@ tmp/
 
 # Next 빌드 캐시 스왑 잔여물 (NFS busy 파일 회피용)
 .next-old*
+
+# NFS 잠금으로 지우지 못한 빌드 캐시 스왑 잔여물
+.next-stale-*

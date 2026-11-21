@@ -43,6 +43,51 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
+/* 기본 구역 이름표 — 지도에 늘 떠 있는 `구역명 + 사업유형` 칩.
+   · 요소는 KakaoZoneMap 의 draw 가 직접 만들고 위치를 맞춘다(지도와 같은 프레임).
+   · 폴리곤 색과 같은 유형 칩을 달아 지도 아래 범례와 그대로 읽힌다. */
+.zone-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 3px;
+  border: 1px solid rgba(15, 23, 42, 0.22);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.6);
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  visibility: hidden;
+  will-change: transform;
+}
+.zone-tag b {
+  font-weight: 700;
+}
+.zone-tag .zone-tag-chip {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 11px;
+  letter-spacing: -0.03em;
+}
+.zone-tag:hover,
+.zone-tag:focus-visible {
+  border-color: #0f172a;
+  background: #fff;
+}
+
 /* 멀리서(카카오 레벨 9 이상) 볼 때는 내 매물 핀의 두 번째 줄을 감춘다 — 63개 핀이 서로 덜 가리게 */
 [data-compact="1"] .my-pin-sub {
   display: none !important;
