@@ -14,6 +14,8 @@ type Mark = { spot: DevHotspot; x: number; y: number };
 
 /** 한 화면에 그릴 핀 상한 — DOM 수를 묶어 이동할 때 끊기지 않게 */
 const MAX_MARKS = 140;
+/** 핀 사이 최소 간격(px) — 겹치면 뒤 핀을 누를 수 없어 점수 높은 쪽만 남긴다 */
+const MIN_GAP_PX = 22;
 
 export default function DevPressureLayer({
   sdk,
@@ -77,7 +79,14 @@ export default function DevPressureLayer({
       out.push({ spot: s, x: p.x, y: p.y });
     }
     out.sort((a, b2) => b2.spot.score - a.spot.score);
-    setMarks(out.slice(0, MAX_MARKS));
+    // 겹침 정리 — 점수 높은 핀부터 두고, 22px 안에 이미 놓인 핀이 있으면 건너뛴다
+    const kept: Mark[] = [];
+    for (const m of out) {
+      if (kept.length >= MAX_MARKS) break;
+      if (kept.some((k) => Math.hypot(k.x - m.x, k.y - m.y) < MIN_GAP_PX)) continue;
+      kept.push(m);
+    }
+    setMarks(kept);
   }, [map, sdk, spots]);
 
   // 첫 화면 패널 → 핫스팟 카드: 지도를 그 자리로 옮기고 카드를 연다(token 이 바뀔 때만)
@@ -96,14 +105,17 @@ export default function DevPressureLayer({
     if (!spots) return;
     place();
     const handler = () => place();
+    const closeOnMapClick = () => setSelId(null);
     sdk.maps.event.addListener(map, "idle", handler);
     sdk.maps.event.addListener(map, "zoom_changed", handler);
     sdk.maps.event.addListener(map, "center_changed", handler);
+    sdk.maps.event.addListener(map, "click", closeOnMapClick);
     window.addEventListener("resize", handler);
     return () => {
       sdk.maps.event.removeListener(map, "idle", handler);
       sdk.maps.event.removeListener(map, "zoom_changed", handler);
       sdk.maps.event.removeListener(map, "center_changed", handler);
+      sdk.maps.event.removeListener(map, "click", closeOnMapClick);
       window.removeEventListener("resize", handler);
     };
   }, [map, place, sdk, spots]);
@@ -186,7 +198,7 @@ export default function DevPressureLayer({
       {/* 범례 */}
       <div
         data-testid="dev-pressure-legend"
-        className="pointer-events-auto absolute left-2 top-2 z-[600] w-max max-w-[min(92vw,300px)] rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur"
+        className="pointer-events-auto absolute bottom-14 left-2 z-[600] w-max max-w-[min(92vw,300px)] rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur md:bottom-14"
       >
         <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
           <b className="text-slate-900">🔥 개발압력</b>

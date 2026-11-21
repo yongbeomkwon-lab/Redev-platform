@@ -105,7 +105,7 @@ export const DEV_GRADE_COLOR: Record<DevHotspot["grade"], string> = {
 
 /** 이 배율(카카오 레벨)보다 멀리 보면 점수 높은 곳만 남긴다 — 서울 전체에서 핀이 뒤덮지 않게 */
 export function minScoreForLevel(level: number): number {
-  if (level <= 5) return 0;
-  if (level <= 7) return 72;
-  return 82;
+  if (level <= 5) return 0; // 구역 단위로 확대 — 전부
+  if (level <= 7) return 76; // 동네 단위
+  return 88; // 서울 전체 — 최상위만
 }
