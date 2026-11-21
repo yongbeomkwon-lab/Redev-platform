@@ -13,7 +13,7 @@ import DevPressureCard from "./DevPressureCard";
 type Mark = { spot: DevHotspot; x: number; y: number };
 
 /** 한 화면에 그릴 핀 상한 — DOM 수를 묶어 이동할 때 끊기지 않게 */
-const MAX_MARKS = 140;
+const MAX_MARKS = 64;
 /** 핀 사이 최소 간격(px) — 겹치면 뒤 핀을 누를 수 없어 점수 높은 쪽만 남긴다 */
 const MIN_GAP_PX = 22;
 
