@@ -223,6 +223,9 @@ export default function DevPressureLayer({
         <div className="mt-0.5 text-[9.5px] leading-tight text-slate-500">
           주변이 정비구역·아파트로 둘러싸인 노후 저층지 — 점수 = 포위 45 · 노후 25 · 아파트 20 · 역세권 10
           {level >= 8 ? " · 확대하면 더 많이 보입니다" : ""}
+          <br />
+          아파트 동: © OpenStreetMap contributors (ODbL) · 구역: 서울시 고시
+        
         </div>
       </div>
     </div>
