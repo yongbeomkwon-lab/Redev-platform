@@ -59,6 +59,7 @@ STATION_R = 600.0                 # 역세권 반경
 BUCKET_M = 250.0                  # 공간 버킷(질의 속도)
 
 SNAP_M = 75.0                     # 핀 스냅 — 한 덩어리로 볼 반경(칸 안 저층 건물 무리)
+APT_EDGE_M = 20.0                 # 핀은 아파트 단지·동 경계에서 이만큼은 떨어져야 한다(경계에 붙은 핀은 단지 위로 보인다)
 APT_NEAR_R = 110.0                # 핀 둘레가 '아파트 단지 중심'인지 보는 반경
 APT_ONLY = 0.62                   # 그 반경 건물 중 아파트 비율이 이보다 높으면 핫스팟 제외
 DENS_REF = 220.0                  # 3×3 칸(≈450m)의 30년↑ 저층 건물 수 상한(밀집도 100% 기준)
@@ -273,6 +274,42 @@ class AptMask:
                 return True
         return False
 
+    def near(self, lng, lat, margin: float) -> bool:
+        """점이 아파트 단지·동 안이거나 경계에서 margin(m) 안쪽이면 True."""
+        kx = 111320.0 * math.cos(math.radians(lat))
+        ky = 110540.0
+        px, py = lng * kx, lat * ky
+        dlat = margin / ky
+        dlng = margin / kx
+        bx = int((lng - dlng) / self.B), int((lng + dlng) / self.B)
+        by = int((lat - dlat) / self.B), int((lat + dlat) / self.B)
+        seen = set()
+        for ix in range(bx[0], bx[1] + 1):
+            for iy in range(by[0], by[1] + 1):
+                for idx in self.g.get((ix, iy), ()):
+                    if idx in seen:
+                        continue
+                    seen.add(idx)
+                    p = self.polys[idx]
+                    b = p["bbox"]
+                    if lng < b[0] - dlng or lng > b[2] + dlng or lat < b[1] - dlat or lat > b[3] + dlat:
+                        continue
+                    ring = p["ring"]
+                    if point_in_ring(lng, lat, ring):
+                        return True
+                    for i in range(len(ring)):
+                        x1, y1 = ring[i][0] * kx, ring[i][1] * ky
+                        x2, y2 = ring[(i + 1) % len(ring)][0] * kx, ring[(i + 1) % len(ring)][1] * ky
+                        dx, dy = x2 - x1, y2 - y1
+                        if dx == 0.0 and dy == 0.0:
+                            d = math.hypot(px - x1, py - y1)
+                        else:
+                            t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+                            d = math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+                        if d <= margin:
+                            return True
+        return False
+
 
 # ── 입력 로드 ────────────────────────────────────────────────────────────────
 def load_buildings():
@@ -441,8 +478,8 @@ def snap_pin(pts, mask):
         cy = sum(p[1] for p in cl) / len(cl)
         # 덩어리 중심에서 가장 가까운 실제 건물에 핀을 세운다(허공에 뜨지 않게)
         pin = min(cl, key=lambda p: math.hypot((p[0] - cx) * kx, (p[1] - cy) * ky))
-        if mask.cover(pin[0], pin[1]):
-            continue  # 아직 아파트 단지·동 안 — 다음 덩어리
+        if mask.near(pin[0], pin[1], APT_EDGE_M):
+            continue  # 아직 아파트 단지·동 안이거나 경계에 붙어 있다 — 다음 덩어리
         return pin[0], pin[1], len(cl), w
     return None
 
