@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  displayBuildingName,
   eokShort,
   toPyeong,
   type BuildingHistoryResponse,
@@ -289,6 +290,8 @@ export default function BuildingTradeHistory({
   const jibuns = useMemo(() => [...new Set(rows.map((r) => r.jibun))], [rows]);
   const kindTone = KIND_TONE[kind] ?? { bg: "#334155", text: "#fff" };
   const periodLabel = PERIODS.find((p) => p.months === period)?.label ?? "5년";
+  // 국토부 건물명은 지번이 붙어 오기도 한다(`한아름맨션(440-9)`) — 화면에는 이름만 보인다
+  const displayName = displayBuildingName(name, jibun) || name;
 
   // 연도 구분선을 넣은 목록(최신순) — '더 보기' 상한까지
   const listGroups = useMemo(() => {
@@ -315,7 +318,7 @@ export default function BuildingTradeHistory({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`${name} 실거래 이력`}
+        aria-label={`${displayName} 실거래 이력`}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-[0_18px_48px_-12px_rgba(16,24,40,.45)] sm:max-h-[88vh] sm:rounded-2xl"
       >
@@ -331,7 +334,7 @@ export default function BuildingTradeHistory({
                   {kind}
                 </span>
                 <h2 className="truncate text-[17px] font-bold leading-tight tracking-[-0.03em] text-ink">
-                  {name}
+                  {displayName}
                 </h2>
               </div>
               <p className="mt-1 text-[11px] leading-snug text-slate-500">

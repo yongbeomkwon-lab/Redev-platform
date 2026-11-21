@@ -40,7 +40,7 @@ import {
 } from "@/lib/address-verdict";
 import type { AddressPin, AdminMapConfig, AdminZoneShape, JibunPin, StationPin, TxMapPin } from "@/components/map/props";
 import BuildingTradeHistory from "@/components/BuildingTradeHistory";
-import type { BuildingHistoryResponse, BuildingTradeKind, BuildingTradeTarget } from "@/lib/molit";
+import type { BuildingHistoryResponse, BuildingTradeKind, BuildingTradeTarget, MolitTransaction } from "@/lib/molit";
 import { reverseGeocode } from "@/lib/kakao-address";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
@@ -181,6 +181,10 @@ export default function ZoneExplorer() {
   const [jibunPickOn, setJibunPickOn] = useState(false);
   const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
   const [jibunProbing, setJibunProbing] = useState(false);
+  /** 주소 검색 결과의 지번 — 주소 카드에서도 「이 지번 실거래 5년 보기」를 연다 */
+  const [addrJibun, setAddrJibun] = useState<{ gu: string; dong: string; jibun: string } | null>(null);
+  /** 지번 실거래 조회 안내(거래 없음·조회 실패) — 지번 핀 카드와 주소 카드가 함께 본다 */
+  const [jibunNote, setJibunNote] = useState<string | null>(null);
   const jibunSeqRef = useRef(0);
 
   // 첫 화면 패널 데이터 — 개발압력 상위 6곳과 최근 반영 구역 6곳
@@ -553,6 +557,7 @@ export default function ZoneExplorer() {
   //   · 그 지점이 속한 정비구역은 경계 판정(judgeAddress)으로 찾는다 — 카드에 바로가기로 붙는다.
   async function pickJibun(lat: number, lng: number) {
     const seq = ++jibunSeqRef.current;
+    setJibunNote(null);
     setJibunPin({ lat, lng, gu: "", dong: "", jibun: "", jibunAddress: "", zones: [], state: "loading" });
     const rev = await reverseGeocode(lat, lng);
     if (jibunSeqRef.current !== seq) return;
@@ -598,38 +603,99 @@ export default function ZoneExplorer() {
   }
 
   /**
-   * 찍은 지번의 공동주택 5년 이력 — 아파트를 먼저 보고, 없으면 연립·다세대로 찾는다.
-   *   · 지도에서 찍은 지점은 단지명을 모르므로, 최근 1년 거래에서 그 지번의 단지명을 확인한다.
+   * 지번 하나의 공동주택 실거래를 확인해 5년 이력 창을 연다.
+   *   · 1차: 최근 24개월 — 아파트·연립다세대 **병렬** 조회
+   *   · 2차: 둘 다 없을 때만 나머지 36개월(offset 24) 병렬 — 합쳐 최근 5년(60개월)
+   *   · 한 유형이라도 거래가 1건이라도 있으면 바로 그 단지·건물의 5년 이력 창을 연다.
+   *     (예전엔 최근 12개월만 보고 없으면 포기해 — 1년 넘은 거래만 있는 건물(사당동 440-9
+   *      한아름맨션)이 '거래 없음'으로 보였다.)
    */
-  async function openJibunHistory(pin: JibunPin) {
-    if (!pin.jibun || !pin.gu || !pin.dong) {
-      setJibunPin((p) => (p ? { ...p, note: "자치구·법정동·지번을 확인하지 못해 실거래를 조회할 수 없습니다." } : p));
+  async function openJibunHistory(target: { gu: string; dong: string; jibun: string }) {
+    const { gu, dong, jibun } = target;
+    /** 안내 문구는 주소 카드에 쓰고, 같은 지번의 지도 핀이 있을 때만 그 핀에도 쓴다 */
+    const say = (message: string | null) => {
+      setJibunNote(message);
+      setJibunPin((p) =>
+        p && p.gu === gu && p.dong === dong && p.jibun === jibun ? { ...p, note: message } : p
+      );
+    };
+    if (!jibun || !gu || !dong) {
+      say("자치구·법정동·지번을 확인하지 못해 실거래를 조회할 수 없습니다.");
       return;
     }
     setJibunProbing(true);
+    // 이전 안내 문구는 지운다 — 다시 누르면 새 조회 결과로 채운다
+    say(null);
     try {
-      for (const kind of ["아파트", "연립·다세대"] as BuildingTradeKind[]) {
+      const kinds: BuildingTradeKind[] = ["아파트", "연립·다세대"];
+      const ask = async (kind: BuildingTradeKind, months: number, offset: number) => {
         const qs = new URLSearchParams({
-          gu: pin.gu,
-          dong: pin.dong,
-          jibun: pin.jibun,
+          gu,
+          dong,
+          jibun,
           kind,
-          months: "12",
-          offset: "0",
+          months: String(months),
+          offset: String(offset),
         });
-        const res = await fetch(`/api/transactions/building?${qs.toString()}`, { cache: "no-store" });
-        const json = (await res.json()) as BuildingHistoryResponse;
-        const first = json.transactions?.[0];
-        if (json.ok && first) {
-          setBuildingTarget({ gu: pin.gu, dong: pin.dong, jibun: pin.jibun, kind, name: first.name });
-          return;
+        try {
+          const res = await fetch(`/api/transactions/building?${qs.toString()}`, { cache: "no-store" });
+          const json = (await res.json()) as BuildingHistoryResponse;
+          return {
+            ok: !!json.ok,
+            rows: json.transactions ?? [],
+            // 국토부 호출 한도로 일부 달을 못 받은 응답 — '거래 없음'으로 단정하지 않는다
+            partial: !json.ok || !!json.partial,
+          };
+        } catch {
+          return { ok: false, rows: [] as MolitTransaction[], partial: true };
+        }
+      };
+      /** 가장 최근 계약일 — 유형을 고를 때 거래 건수가 같으면 최신 쪽을 고른다 */
+      const latestDate = (rows: MolitTransaction[]) =>
+        rows.reduce((acc, r) => (r.dealDate > acc ? r.dealDate : acc), "");
+
+      let anyAnswered = false;
+      let incomplete = false;
+      let found: { kind: BuildingTradeKind; rows: MolitTransaction[] } | null = null;
+      const chunks: [number, number][] = [
+        [24, 0], // 최근 2년
+        [36, 24], // 그 앞 3년 — 위에서 없을 때만
+      ];
+      for (const [months, offset] of chunks) {
+        const results = await Promise.all(
+          kinds.map(async (kind) => ({ kind, ...(await ask(kind, months, offset)) }))
+        );
+        if (results.some((r) => r.ok)) anyAnswered = true;
+        if (results.some((r) => r.partial)) incomplete = true;
+        // 거래가 많은 유형을 고르고, 같으면 최근 거래가 있는 유형을 고른다
+        const hit = results
+          .filter((r) => r.rows.length > 0)
+          .sort(
+            (a, b) =>
+              b.rows.length - a.rows.length || latestDate(b.rows).localeCompare(latestDate(a.rows))
+          )[0];
+        if (hit) {
+          found = { kind: hit.kind, rows: hit.rows };
+          break;
         }
       }
-      setJibunPin((p) =>
-        p ? { ...p, note: "이 지번에는 최근 1년 공동주택(아파트·연립다세대) 신고 거래가 없습니다." } : p
-      );
+
+      if (!found) {
+        say(
+          incomplete
+            ? "실거래를 일부만 불러왔습니다(국토부 호출 한도). 잠시 뒤 다시 시도해 주세요."
+            : anyAnswered
+              ? "이 지번에는 최근 5년 공동주택(아파트·연립다세대) 신고 거래가 없습니다."
+              : "실거래를 조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."
+        );
+        return;
+      }
+
+      // 현 거래의 단지·건물명을 이력 창의 대상으로 넘긴다(이름이 비면 지번만으로 조회된다)
+      const first = found.rows[0];
+      setBuildingTarget({ gu, dong, jibun, kind: found.kind, name: first.name ?? "" });
     } catch {
-      setJibunPin((p) => (p ? { ...p, note: "실거래를 조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요." } : p));
+      say("실거래를 조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
     } finally {
       setJibunProbing(false);
     }
@@ -678,6 +744,8 @@ export default function ZoneExplorer() {
     setAddrVerdict(null);
     setAddrCandidates([]);
     setAddrNote(null);
+    setAddrJibun(null);
+    setJibunNote(null);
   }
 
   /** 주소 후보 확정 — 판정 → 핀 → (속한 구역이 있으면) 그 구역 선택 */
@@ -687,6 +755,12 @@ export default function ZoneExplorer() {
     setQuery("");
     setAddrCandidates([]);
     setAddrNote(null);
+    setJibunNote(null);
+    // 지번이 있는 주소면 카드에서 바로 실거래 5년을 열 수 있게 지번을 기억한다
+    //   (지도에서 지번을 찍지 않아도 같은 조회를 쓴다 — 사당동 440-9 같은 지번 주소)
+    setAddrJibun(
+      c.jibun && c.dong && c.gu ? { gu: c.gu, dong: c.dong, jibun: c.jibun } : null
+    );
     if (v.status === "inside") {
       pickZone(v.inside[0].zone.id);
     } else if (v.status === "completed") {
@@ -1224,7 +1298,7 @@ export default function ZoneExplorer() {
           jibunPin={jibunPin}
           onCloseJibunPin={() => setJibunPin(null)}
           onOpenJibunHistory={(pin) => {
-            void openJibunHistory(pin);
+            void openJibunHistory({ gu: pin.gu, dong: pin.dong, jibun: pin.jibun });
           }}
           onOpenJibunZone={(id) => pickZone(id)}
           jibunHistoryLoading={jibunProbing}
@@ -1570,6 +1644,30 @@ export default function ZoneExplorer() {
                 핀 지우기 ✕
               </button>
             </div>
+
+            {/* 지번 실거래 — 주소 검색만으로도 그 지번의 5년 이력을 연다(지번이 있는 주소만) */}
+            {addrJibun && (
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  data-testid="address-open-history"
+                  disabled={jibunProbing}
+                  onClick={() => void openJibunHistory(addrJibun)}
+                  title={`${addrJibun.dong} ${addrJibun.jibun} 공동주택(아파트·연립다세대) 최근 5년 실거래`}
+                  className={
+                    "w-full rounded-lg py-1.5 text-[11px] font-bold transition " +
+                    (jibunProbing
+                      ? "cursor-progress bg-slate-100 text-slate-400"
+                      : "bg-brand text-white hover:bg-brand-deep")
+                  }
+                >
+                  {jibunProbing ? "실거래 확인 중…" : "이 지번 실거래 5년 보기"}
+                </button>
+                {jibunNote && (
+                  <p className="mt-1 text-[10px] leading-snug text-amber-700">{jibunNote}</p>
+                )}
+              </div>
+            )}
 
             {/* 결론 — 판정 종류별 색. 구역 밖은 판정 배너를 띄우지 않고 지점만 보여준다. */}
             {addrVerdict.status !== "outside" && (

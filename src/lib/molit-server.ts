@@ -336,6 +336,8 @@ export async function loadBuildingTransactions(params: {
   const { lawdCd, kind, months, key, dong } = params;
   const wantJibun = params.jibun ? normalizeJibun(params.jibun) : "";
   const wantName = params.name ? normalizeBuildingName(params.name) : "";
+  // 법정동 비교도 공백을 무시한다 — 화면(카카오)·국토부 표기 사이의 공백 차이로 놓치지 않게
+  const wantDong = dong.replace(/\s+/g, "");
 
   const results: { ym: string; res: ServiceResult; cached: boolean }[] = [];
   let cursor = 0;
@@ -362,10 +364,12 @@ export async function loadBuildingTransactions(params: {
     : { kind, service: MOLIT_SERVICES[kind], ok: true };
 
   const matches = (tx: MolitTransaction): boolean => {
-    if (tx.umdNm !== dong) return false;
+    if (tx.umdNm.replace(/\s+/g, "") !== wantDong) return false;
+    // 지번 표기(`440-09`·`440-9번지`·`산440-9`)가 달라도 같은 필지로 본다
     const sameJibun = wantJibun ? normalizeJibun(tx.jibun) === wantJibun : false;
     if (sameJibun) return true;
     if (!wantName) return false;
+    // 건물명 뒤에 지번이 붙어 오는 경우(`한아름맨션(440-9)`)도 이름 비교에서 같은 이름으로 본다
     if (normalizeBuildingName(tx.name) !== wantName) return false;
     // 아파트는 이름 일치를 인정하고, 연립·다세대는 지번을 모를 때만 이름으로 찾는다
     return kind === "아파트" || !wantJibun;

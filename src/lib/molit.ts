@@ -203,23 +203,59 @@ export type BuildingHistoryResponse = {
   fetchedAt?: string;
 };
 
-/** 지번 문자열을 비교 가능한 형태로 — `0209-00` · `209` · `209-0` 을 모두 `209` 로 */
+/**
+ * 지번 문자열을 비교 가능한 형태로 — `0209-00` · `209` · `209-0` · `440-09` · `440-9번지` 를
+ *   모두 `209` / `440-9` 로 만든다.
+ *   · 카카오 역지오코딩은 `440-9`, 국토부는 bonbun·bubun 을 따로 줘서 표기가 갈린다.
+ *   · `산440-9` 의 산(山)은 국토부 실거래 자료에 구분이 없어 뗀다 — 같은 필지로 본다.
+ */
 export function normalizeJibun(raw: string): string {
-  const s = (raw ?? "").trim();
-  const m = s.match(/^(\d{1,4})(?:\s*-\s*(\d{1,4}))?$/);
-  if (!m) return s.replace(/\s+/g, "");
+  let s = (raw ?? "").replace(/\s+/g, "");
+  if (s.startsWith("산")) s = s.slice(1);
+  s = s.replace(/번지$/, "");
+  const m = s.match(/^(\d{1,4})(?:[-.](\d{1,4}))?$/);
+  if (!m) return s;
   const bonbun = Number(m[1]);
   const bubun = m[2] ? Number(m[2]) : 0;
-  if (!Number.isFinite(bonbun) || bonbun <= 0) return s.replace(/\s+/g, "");
+  if (!Number.isFinite(bonbun) || bonbun <= 0) return s;
   return bubun > 0 ? `${bonbun}-${bubun}` : String(bonbun);
 }
 
-/** 단지·건물명 비교 키 — 공백·가운뎃점·괄호·대소문자 무시 */
+/** 건물명에서 뒤에 붙은 지번 표기만 떼어 낸다 — `한아름맨션(440-9)` → `한아름맨션` */
+function stripJibunSuffix(name: string): string {
+  const without = name
+    .replace(/\(\d{1,4}(?:-\d{1,4})?\)$/, "")
+    .replace(/\d{1,4}-\d{1,4}$/, "");
+  return without.length ? without : name;
+}
+
+/**
+ * 단지·건물명 비교 키 — 공백·가운뎃점·괄호·대소문자 무시.
+ *   · 국토부 연립·다세대 건물명은 지번이 붙어 오기도 한다(`한아름맨션(440-9)`).
+ *     같은 건물이 `한아름맨션` 으로만 오는 달도 있어, 뒤에 붙은 지번 표기를 떼고 비교한다.
+ */
 export function normalizeBuildingName(raw: string): string {
-  return (raw ?? "")
-    .replace(/\s+/g, "")
+  return stripJibunSuffix((raw ?? "").replace(/\s+/g, ""))
     .replace(/[·.,()\[\]{}'"`]/g, "")
     .toLowerCase();
+}
+
+/**
+ * 화면에 보일 단지·건물명 — 뒤에 붙은 지번이 **조회한 지번과 같을 때만** 뗀다.
+ *   (`한아름맨션(440-9)` + 지번 `440-9` → `한아름맨션`, 지번이 다르면 원문 그대로)
+ */
+export function displayBuildingName(raw: string, jibun?: string | null): string {
+  const original = (raw ?? "").trim();
+  const want = jibun ? normalizeJibun(jibun) : "";
+  const paren = original.match(/\((\d{1,4}(?:\s*-\s*\d{1,4})?)\)\s*$/);
+  if (paren && (!want || normalizeJibun(paren[1]) === want)) {
+    return original.slice(0, paren.index).trim() || original;
+  }
+  const tail = original.match(/(\d{1,4}\s*-\s*\d{1,4})\s*$/);
+  if (tail && (!want || normalizeJibun(tail[1]) === want)) {
+    return original.slice(0, tail.index).trim() || original;
+  }
+  return original;
 }
 
 export const PYEONG = 3.305785;

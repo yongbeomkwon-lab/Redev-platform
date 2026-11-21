@@ -83,6 +83,7 @@ export type KakaoAddressDoc = {
     region_3depth_name?: string;
     main_address_no?: string;
     sub_address_no?: string;
+    mountain_yn?: string;
     b_code?: string;
     h_code?: string;
   } | null;

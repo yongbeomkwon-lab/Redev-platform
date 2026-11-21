@@ -31,6 +31,10 @@ export type AddressCandidate = {
   lng: number;
   gu?: string;
   dong?: string;
+  /** 지번(예: 440-9) — 「이 지번 실거래 5년 보기」가 바로 쓴다. 도로명·장소 결과에는 없다 */
+  jibun?: string;
+  /** 지번 주소 전체(예: 서울특별시 동작구 사당동 440-9) */
+  jibunAddress?: string;
 };
 
 export type AddressSearchResult = {
@@ -72,6 +76,11 @@ function fromAddressDoc(d: KakaoAddressDoc): AddressCandidate | null {
     (v): v is string => !!v
   );
 
+  const jibunAddress = jibun?.trim() || undefined;
+  const bonbun = d.address?.main_address_no?.trim() ?? "";
+  const bubun = d.address?.sub_address_no?.trim() ?? "";
+  const jibunNo = bonbun ? (bubun && Number(bubun) > 0 ? `${bonbun}-${bubun}` : bonbun) : undefined;
+
   return {
     key: `addr:${label}:${lat.toFixed(6)},${lng.toFixed(6)}`,
     label,
@@ -81,6 +90,8 @@ function fromAddressDoc(d: KakaoAddressDoc): AddressCandidate | null {
     lng,
     gu: d.address?.region_2depth_name ?? d.road_address?.region_2depth_name,
     dong: d.address?.region_3depth_name,
+    jibun: jibunNo && d.address?.mountain_yn === "Y" ? `산${jibunNo}` : jibunNo,
+    jibunAddress,
   };
 }
 
