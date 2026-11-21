@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import BrandLogo from "@/components/BrandLogo";
 import SiteNav from "@/components/SiteNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  applicationName: "리디브",
   title: "리디브(redev) — 서울 재개발 구역·매물 플랫폼",
   description:
     "서울 정비구역 실거래가 조회(무료), 중개사 매물 등록(유료), 검증 매물 열람(유료) — 재개발 입주권·조합원 물건 원스톱 플랫폼",
@@ -33,10 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex min-h-dvh flex-col bg-canvas text-ink antialiased">
         <header className="sticky top-0 z-[700] h-[52px] shrink-0 border-b border-line bg-white">
           <div className="flex h-full items-center justify-between gap-2 px-3 sm:px-4">
-            <Link href="/" className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
-              <span className="text-[19px] font-extrabold leading-none tracking-[-0.03em] text-ink">
-                리디브<span className="text-brand">.</span>
-              </span>
+            <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap" aria-label="리디브 홈">
+              {/* 1번 시안(구역 폴리곤 + 핀) 심볼 + 리디브 워드마크 */}
+              <BrandLogo size={24} />
               <span className="hidden text-[11px] font-medium tracking-[-0.01em] text-slate-500 sm:inline">
                 서울 정비사업 실거래·매물
               </span>
