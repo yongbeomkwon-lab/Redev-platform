@@ -32,6 +32,7 @@ import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
 import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
+import Icon from "@/components/Icon";
 import SubwayLayer from "./SubwayLayer";
 import { SEOUL_BOUNDS, type AddressPin, type StationPin, type LeafletZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import { addressPinHtml, stationPinHtml } from "./address-pin";
@@ -625,13 +626,13 @@ export default function LeafletZoneMap({
             aria-pressed={myPinsOn}
             data-testid="my-listings-toggle"
             title={`내가 올린 매물 ${myPins.length}건만 지도에 표시`}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-md transition ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               myPinsOn
-                ? "border-amber-600 bg-amber-500 text-white"
-                : "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                ? "border-brand bg-brand text-white"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden>🏠</span>
+            <Icon name="home" size={13} />
             내 매물만 보기 ({myPins.length})
           </button>
         )}
@@ -640,13 +641,13 @@ export default function LeafletZoneMap({
           onClick={() => setShowSubway((v) => !v)}
           aria-pressed={showSubway}
           title="지하철 노선·역명 표시"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
             showSubway
-              ? "border-slate-300 bg-white text-slate-800"
-              : "border-slate-300 bg-white/80 text-slate-400 line-through hover:text-slate-600"
+              ? "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+              : "border-line bg-white/80 text-slate-400 line-through hover:text-slate-600"
           }`}
         >
-          <span aria-hidden>🚇</span>
+          <Icon name="train" size={13} />
           지하철 노선
         </button>
         {onToggleTxPins && txPins.length > 0 && (
@@ -656,13 +657,13 @@ export default function LeafletZoneMap({
             aria-pressed={txPinsOn}
             data-testid="tx-pins-toggle"
             title="구역 안 실거래 가격 핀 표시"
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               txPinsOn
-                ? "border-blue-400 bg-blue-50 text-blue-900"
-                : "border-slate-300 bg-white text-slate-500 hover:text-slate-900"
+                ? "border-brand/35 bg-brand-tint text-brand"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden>🏷</span>
+            <Icon name="tag" size={13} />
             실거래 핀
             <span className="font-normal text-slate-400">{txPins.length}</span>
           </button>
@@ -673,13 +674,13 @@ export default function LeafletZoneMap({
             onClick={onToggleCompleted}
             aria-pressed={showCompleted}
             title="준공·입주까지 끝난 구역도 지도에 표시"
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               showCompleted
-                ? "border-amber-400 bg-amber-50 text-amber-900"
-                : "border-slate-300 bg-white text-slate-600 hover:text-slate-900"
+                ? "border-brand/35 bg-brand-tint text-brand"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden>{showCompleted ? "👁" : "🏁"}</span>
+            <Icon name="check" size={13} />
             준공 포함
             {completedCount > 0 && <span className="font-normal text-slate-400">{completedCount}</span>}
           </button>

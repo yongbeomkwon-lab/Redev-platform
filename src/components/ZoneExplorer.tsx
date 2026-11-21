@@ -21,7 +21,8 @@ import {
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
-import { TYPE_COLORS, TYPE_ORDER } from "@/components/map/colors";
+import { TYPE_COLORS } from "@/components/map/colors";
+import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import ZoneTransactions from "@/components/ZoneTransactions";
 import LandPermitNotice from "@/components/LandPermitNotice";
@@ -83,6 +84,24 @@ const ZONE_TYPES: (MapZoneType | "전체")[] = [
   "장기전세",
 ];
 const STAGES: (ZoneStage | "전체")[] = ["전체", "추진위원회", "사업계획승인", "관리처분", "이주·철거", "착공", "준공"];
+
+/** 범례 9색 — 같은 색으로 묶인 소분류(민간도심복합 성장거점·주거중심, 가로주택·소규모)는
+ *  한 줄로 합쳐 세고, 사람이 쓰는 이름으로 적는다. */
+const LEGEND_GROUPS: { label: string; color: string; types: MapZoneType[] }[] = [
+  { label: "일반재개발", color: TYPE_COLORS["일반재개발"], types: ["일반재개발"] },
+  { label: "공공재개발", color: TYPE_COLORS["공공재개발"], types: ["공공재개발"] },
+  { label: "신속통합기획", color: TYPE_COLORS["신통기획"], types: ["신통기획"] },
+  { label: "모아타운", color: TYPE_COLORS["모아타운"], types: ["모아타운"] },
+  { label: "도공복", color: TYPE_COLORS["도공복"], types: ["도공복"] },
+  {
+    label: "민간도심복합",
+    color: TYPE_COLORS["민간도심복합(성장거점형)"],
+    types: ["민간도심복합(성장거점형)", "민간도심복합(주거중심형)"],
+  },
+  { label: "가로주택·소규모", color: TYPE_COLORS["가로주택"], types: ["가로주택", "소규모"] },
+  { label: "역세권", color: TYPE_COLORS["역세권"], types: ["역세권"] },
+  { label: "장기전세", color: TYPE_COLORS["장기전세"], types: ["장기전세"] },
+];
 
 export default function ZoneExplorer() {
   const [zones, setZones] = useState<Zone[]>([]);
@@ -1083,11 +1102,9 @@ export default function ZoneExplorer() {
 
       {/* ── 좌상단: 검색 + 필터 ─────────────────────────────────────────────── */}
       <div className="pointer-events-none absolute left-2 top-2 z-[620] flex w-[min(94vw,382px)] flex-col gap-2 sm:left-3 sm:top-3">
-        <div className="pointer-events-auto relative z-[650] rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <span aria-hidden className="text-base leading-none text-slate-400">
-              ⌕
-            </span>
+        <div className="pointer-events-auto relative z-[650] ui-float">
+          <div className="flex items-center gap-2 px-3 py-2.5">
+            <Icon name="search" size={15} className="text-slate-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1191,7 +1208,7 @@ export default function ZoneExplorer() {
               {stationHits.length > 0 && (
                 <div className="border-t border-slate-200">
                   <p className="flex items-center gap-1.5 px-3 pt-2 text-[10px] font-semibold text-slate-500">
-                    <span aria-hidden>🚇</span> 지하철역
+                    <Icon name="train" size={12} className="text-slate-400" /> 지하철역
                     <span className="font-normal text-slate-400">(클릭하면 역 주변 구역을 봅니다)</span>
                   </p>
                   <ul className="max-h-[30vh] overflow-y-auto pb-1">
@@ -1203,9 +1220,7 @@ export default function ZoneExplorer() {
                           onClick={() => pickStation(s)}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-sky-50"
                         >
-                          <span aria-hidden className="shrink-0 text-xs leading-none">
-                            🚇
-                          </span>
+                          <Icon name="train" size={13} className="shrink-0 text-slate-400" />
                           <span className="shrink-0 whitespace-nowrap text-sm font-medium text-slate-800">
                             {s.name}역
                           </span>
@@ -1233,7 +1248,7 @@ export default function ZoneExplorer() {
               {(addrCandidates.length > 0 || addrBusy || addrNote) && (
                 <div className="border-t border-slate-200 bg-slate-50/70">
                   <p className="flex items-center gap-1.5 px-3 pt-2 text-[10px] font-semibold text-slate-500">
-                    <span aria-hidden>📍</span> 주소 · 지번·도로명
+                    <Icon name="pin" size={12} className="text-slate-400" /> 주소 · 지번·도로명
                     <span className="font-normal text-slate-400">(카카오)</span>
                     {addrBusy && <span className="ml-auto font-normal text-slate-400">찾는 중…</span>}
                   </p>
@@ -1297,12 +1312,10 @@ export default function ZoneExplorer() {
         {stationPick && (
           <div
             data-testid="station-card"
-            className="pointer-events-auto rounded-2xl border border-slate-200 bg-white/97 p-3 shadow-xl backdrop-blur"
+            className="pointer-events-auto ui-float p-3"
           >
             <div className="flex items-start gap-2">
-              <span aria-hidden className="mt-0.5 text-sm">
-                🚇
-              </span>
+              <Icon name="train" size={14} className="mt-0.5 text-brand" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-bold text-slate-900" title={`${stationPick.name}역`}>
                   {stationPick.name}역
@@ -1365,12 +1378,10 @@ export default function ZoneExplorer() {
         {addrVerdict && (
           <div
             data-testid="address-card"
-            className="pointer-events-auto rounded-2xl border border-slate-200 bg-white/97 p-3 shadow-xl backdrop-blur"
+            className="pointer-events-auto ui-float p-3"
           >
             <div className="flex items-start gap-2">
-              <span aria-hidden className="mt-0.5 text-sm">
-                📍
-              </span>
+              <Icon name="pin" size={14} className="mt-0.5 text-brand" />
               <div className="min-w-0 flex-1">
                 <p
                   data-testid="address-pin-label"
@@ -1554,7 +1565,7 @@ export default function ZoneExplorer() {
         )}
 
         {/* 필터 — 접었다 펼 수 있는 카드 */}
-        <div className="pointer-events-auto rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
+        <div className="pointer-events-auto ui-float">
           <button
             type="button"
             onClick={() => setFiltersOpen((v) => !v)}
@@ -1594,13 +1605,13 @@ export default function ZoneExplorer() {
               <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
                 <span className="mr-1 text-[11px] font-semibold text-slate-500">매물 조건</span>
                 <Chip active={myOnly} onClick={toggleMyOnly}>
-                  <span data-testid="filter-my-only">🏠 내 매물만 보기 {MY_LISTINGS_COUNT}</span>
+                  <span data-testid="filter-my-only">내 매물만 보기 {MY_LISTINGS_COUNT}</span>
                 </Chip>
                 <Chip
                   active={listingsOnly}
                   onClick={() => setListingsOnly((v) => !v)}
                 >
-                  <span data-testid="filter-listings-only">🏠 매물 있는 구역 {listingZoneTotal}</span>
+                  <span data-testid="filter-listings-only">매물 있는 구역 {listingZoneTotal}</span>
                 </Chip>
                 <Chip active={leaseOnly} onClick={() => setLeaseOnly((v) => !v)}>
                   <span data-testid="filter-lease-only">임대사업자 승계</span>
@@ -1612,7 +1623,7 @@ export default function ZoneExplorer() {
                   {myOnly
                     ? `내 매물 ${MY_LISTINGS_COUNT}건 핀 · 정비구역 ${myZoneIds.size}곳만 표시`
                     : SHOW_MAP_LISTING_BADGES
-                      ? `${filteredListings.length}건 매물 · 지도에 🏠 매물 배지`
+                      ? `${filteredListings.length}건 매물 · 지도에 매물 배지`
                       : `${filteredListings.length}건 매물 · 구역 상세에서 확인`}
                 </span>
               </div>
@@ -1633,7 +1644,7 @@ export default function ZoneExplorer() {
                       : "border-dashed border-slate-300 bg-white text-slate-500 hover:border-slate-500 hover:text-slate-700")
                   }
                 >
-                  <span aria-hidden>{showCompleted ? "👁" : "🏁"}</span>
+                  <Icon name="check" size={13} />
                   준공 완료 포함 ({completedZones.length})
                 </button>
                 <span className="text-[11px] leading-tight text-slate-500">
@@ -1681,7 +1692,7 @@ export default function ZoneExplorer() {
       </div>
 
       {/* ── 좌하단: 범례 ───────────────────────────────────────────────────── */}
-      <div className="pointer-events-auto absolute bottom-14 left-2 z-[600] max-w-[min(94vw,430px)] rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur md:bottom-[3.4rem] md:left-2">
+      <div className="pointer-events-auto absolute bottom-14 left-2 z-[600] max-w-[min(94vw,430px)] ui-float md:bottom-[3.4rem] md:left-2">
         <button
           type="button"
           onClick={() => setLegendOpen((v) => !v)}
@@ -1701,12 +1712,14 @@ export default function ZoneExplorer() {
         </button>
         {legendOpen && (
           <div className="space-y-1.5 border-t border-slate-100 px-3 py-2 text-[11px] text-slate-600">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              {TYPE_ORDER.map((t) => (
-                <span key={t} className="inline-flex items-center gap-1">
-                  <i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: TYPE_COLORS[t] }} />
-                  {t}
-                  <b className="font-semibold text-slate-800">{(typeCounts[t] ?? 0).toLocaleString()}</b>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-[3px]">
+              {LEGEND_GROUPS.map((g) => (
+                <span key={g.label} className="inline-flex items-center gap-1.5">
+                  <i className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: g.color }} />
+                  <span className="truncate">{g.label}</span>
+                  <b className="ml-auto shrink-0 font-semibold text-ink">
+                    {g.types.reduce((n, t) => n + (typeCounts[t] ?? 0), 0).toLocaleString()}
+                  </b>
                 </span>
               ))}
             </div>
@@ -1721,7 +1734,7 @@ export default function ZoneExplorer() {
             </p>
             <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["민간도심복합(성장거점형)"] }}>민간도심복합</b> = 민간이 하는
-              도심복합개발(도공복의 민간판) · 성장거점형·주거중심형을 진한/연한 빨강으로 나눔
+              도심복합개발(도공복의 민간판) · 성장거점형·주거중심형을 한 색으로 묶었습니다
             </p>
             <p className="text-[10px] leading-snug text-slate-400">
               구역을 클릭하면 서울시 고시 데이터가 열립니다 · 지도를 움직여 둘러보세요
@@ -1732,7 +1745,7 @@ export default function ZoneExplorer() {
 
       {/* ── 우측: 구역 상세 · 목록 패널 ─────────────────────────────────────── */}
       {panelOpen ? (
-        <aside className="absolute z-[610] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl inset-x-2 bottom-2 top-auto max-h-[62dvh] md:inset-x-auto md:left-auto md:right-3 md:top-3 md:bottom-3 md:max-h-none md:w-[400px]">
+        <aside className="absolute z-[610] flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(16,24,40,.05),0_18px_44px_-24px_rgba(16,24,40,.38)] inset-x-2 bottom-2 top-auto max-h-[62dvh] md:inset-x-auto md:left-auto md:right-3 md:top-3 md:bottom-3 md:max-h-none md:w-[400px]">
           <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
             <b className="text-sm font-bold text-slate-900">
               {selectedCustom ? selectedCustom.name : selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "대표 구역"}
@@ -1839,7 +1852,7 @@ export default function ZoneExplorer() {
                   <Badge tone={selected.residenceRequired ? "red" : "slate"}>
                     {selected.residenceRequired ? "실거주 의무" : "실거주 무관"}
                   </Badge>
-                  {selected.toehoApplied && <Badge tone="purple">토허제 적용</Badge>}
+                  {selected.toehoApplied && <Badge tone="gold">토허제 적용</Badge>}
                   <Badge tone="blue">예상 입주 {selected.moveInEstimate}</Badge>
                 </div>
 
@@ -1859,19 +1872,19 @@ export default function ZoneExplorer() {
 
                 {/* 서울시 고시 데이터 (구역 경계·면적·단계의 근거) */}
                 {selected.official && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 text-[11px]">
-                    <div className="mb-1 flex items-center justify-between font-semibold text-emerald-800">
+                  <div className="rounded-xl border border-line bg-[#F7F9FB] p-3 text-[11px]">
+                    <div className="mb-1 flex items-center justify-between font-semibold text-ink">
                       <span>서울시 고시 데이터</span>
-                      <span className="font-normal text-emerald-700/70">{selected.official.asOf} 기준</span>
+                      <span className="font-normal text-slate-400">{selected.official.asOf} 기준</span>
                     </div>
-                    <dl className="grid grid-cols-[4.6rem_minmax(0,1fr)] gap-x-2.5 gap-y-0.5 text-emerald-900">
-                      <dt className="whitespace-nowrap text-emerald-700/80">고시 명칭</dt>
+                    <dl className="grid grid-cols-[4.6rem_minmax(0,1fr)] gap-x-2.5 gap-y-0.5 text-slate-700">
+                      <dt className="whitespace-nowrap text-slate-400">고시 명칭</dt>
                       <dd className="min-w-0 break-words">{selected.official.name}</dd>
-                      <dt className="whitespace-nowrap text-emerald-700/80">사업유형</dt>
+                      <dt className="whitespace-nowrap text-slate-400">사업유형</dt>
                       <dd className="min-w-0 break-words">{selected.official.kind}</dd>
-                      <dt className="whitespace-nowrap text-emerald-700/80">추진단계</dt>
+                      <dt className="whitespace-nowrap text-slate-400">추진단계</dt>
                       <dd className="min-w-0 break-words">{selected.official.stage}</dd>
-                      <dt className="whitespace-nowrap text-emerald-700/80">구역면적</dt>
+                      <dt className="whitespace-nowrap text-slate-400">구역면적</dt>
                       <dd className="min-w-0">
                         {selected.official.area.toLocaleString()}㎡
                         <span className="ml-1 whitespace-nowrap">
@@ -1880,10 +1893,10 @@ export default function ZoneExplorer() {
                       </dd>
                       {selected.official.geomSource?.startsWith("UQ181") && (
                         <>
-                          <dt className="whitespace-nowrap text-emerald-700/80">경계 도형</dt>
+                          <dt className="whitespace-nowrap text-slate-400">경계 도형</dt>
                           <dd className="min-w-0 break-words">
                             의제처리구역 실경계(필지선 추종)
-                            <span className="text-emerald-700/70"> · {selected.official.geomAsOf} 기준</span>
+                            <span className="text-slate-400"> · {selected.official.geomAsOf} 기준</span>
                           </dd>
                         </>
                       )}
@@ -2089,10 +2102,10 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     <button
       onClick={onClick}
       className={
-        "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition " +
+        "rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition " +
         (active
-          ? "border-slate-900 bg-slate-900 text-white"
-          : "border-slate-300 bg-white text-slate-600 hover:border-slate-500")
+          ? "border-brand bg-brand text-white"
+          : "border-line bg-white text-slate-600 hover:border-slate-400 hover:text-ink")
       }
     >
       {children}

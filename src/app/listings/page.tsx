@@ -99,7 +99,7 @@ export default function ListingsPage() {
           <p className="text-sm text-slate-600">
             재개발 입주권·조합원 물건을 <b>매매가·기보증금·초기투자금</b>과 함께 봅니다. 구역을 누르면 지도에서
             경계와 실거래가까지 한 화면에 열립니다. 부동산포스에 올린 내 매물은{" "}
-            <b>🏠 내 매물만 보기</b>로 모아 볼 수 있습니다.
+            <b>내 매물만 보기</b>로 모아 볼 수 있습니다.
           </p>
         </div>
         <Link
@@ -121,7 +121,7 @@ export default function ListingsPage() {
           className="mr-1 h-9 w-full max-w-xs rounded-lg border border-slate-300 px-3 text-sm focus:border-blue-500 focus:outline-none"
         />
         <Chip active={myOnly} onClick={() => setMyOnly((v) => !v)} testId="filter-my-only">
-          🏠 내 매물만 보기 {MY_LISTINGS_COUNT}
+          내 매물만 보기 {MY_LISTINGS_COUNT}
         </Chip>
         <Chip active={verifiedOnly} onClick={() => setVerifiedOnly((v) => !v)} testId="filter-verified">
           검증 매물만

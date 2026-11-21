@@ -34,6 +34,7 @@ import {
   type BuildingAgeResponse,
 } from "@/lib/building-age";
 import { TYPE_COLORS, shortStage, zoneStyle } from "./colors";
+import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, type AdminMapConfig, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
@@ -90,9 +91,9 @@ const MY_PIN_LAYER_STYLE = {
   pointerEvents: "none" as const,
 };
 
-/** 실거래 핀 색 — 유형 구분(아파트=파랑, 연립·다세대=보라) */
+/** 실거래 핀 색 — 유형 구분(아파트=브랜드 블루, 연립·다세대=보라) */
 const TX_PIN_COLORS: Record<string, string> = {
-  아파트: "#1d4ed8",
+  아파트: "#0054A6",
   "연립·다세대": "#7c3aed",
 };
 
@@ -114,7 +115,10 @@ type View = {
 };
 
 type Batch = {
+  /** 테두리 색 */
   color: string;
+  /** 채움 색 — 테두리보다 원색에 가깝다(사업유형 9색 팔레트) */
+  fillColor: string;
   weight: number;
   strokeOpacity: number;
   fillOpacity: number;
@@ -1043,7 +1047,14 @@ export default function KakaoZoneMap({
     const hoverId = hoverRef.current;
 
     const batches = new Map<string, Batch>();
-    const activePaths: { path: Path2D; color: string; weight: number; fillOpacity: number; dash: number[] | null }[] = [];
+    const activePaths: {
+      path: Path2D;
+      color: string;
+      fillColor: string;
+      weight: number;
+      fillOpacity: number;
+      dash: number[] | null;
+    }[] = [];
 
     let buf = bufRef.current;
 
@@ -1066,11 +1077,12 @@ export default function KakaoZoneMap({
         activePath = new Path2D();
         target = activePath;
       } else {
-        const key = `${st.color}|${st.weight}|${st.opacity}|${st.fillOpacity}|${dash ? "d" : "-"}`;
+        const key = `${st.color}|${st.fillColor}|${st.weight}|${st.opacity}|${st.fillOpacity}|${dash ? "d" : "-"}`;
         let batch = batches.get(key);
         if (!batch) {
           batch = {
             color: st.color,
+            fillColor: st.fillColor,
             weight: st.weight,
             strokeOpacity: st.opacity,
             fillOpacity: st.fillOpacity,
@@ -1112,13 +1124,20 @@ export default function KakaoZoneMap({
       }
 
       if (activePath) {
-        activePaths.push({ path: activePath, color: st.color, weight: st.weight, fillOpacity: st.fillOpacity, dash });
+        activePaths.push({
+          path: activePath,
+          color: st.color,
+          fillColor: st.fillColor,
+          weight: st.weight,
+          fillOpacity: st.fillOpacity,
+          dash,
+        });
       }
     }
 
     // 1) 일반 구역 — 스타일별로 한 번에 채우고 긋는다
     for (const b of batches.values()) {
-      ctx.fillStyle = rgba(b.color, b.fillOpacity);
+      ctx.fillStyle = rgba(b.fillColor, b.fillOpacity);
       ctx.fill(b.path);
       ctx.setLineDash(b.dash ?? []);
       ctx.strokeStyle = rgba(b.color, b.strokeOpacity);
@@ -1130,7 +1149,7 @@ export default function KakaoZoneMap({
     // 2) 호버·선택 구역은 위에 한 번 더 — 눈에 띄게
     for (const a of activePaths) {
       ctx.setLineDash(a.dash ?? []);
-      ctx.fillStyle = rgba(a.color, a.fillOpacity);
+      ctx.fillStyle = rgba(a.fillColor, a.fillOpacity);
       ctx.fill(a.path);
       ctx.strokeStyle = rgba(a.color, 1);
       ctx.lineWidth = a.weight;
@@ -2551,22 +2570,22 @@ export default function KakaoZoneMap({
                 style={{
                   display: "block",
                   pointerEvents: "auto",
-                  border: `1.5px solid ${accent}`,
-                  borderLeft: `4px solid ${accent}`,
-                  background: open ? "#f8fafc" : "#ffffff",
-                  borderRadius: "6px",
+                  border: `1px solid ${accent}33`,
+                  borderLeft: `3px solid ${accent}`,
+                  background: open ? "#F7F9FB" : "#ffffff",
+                  borderRadius: "5px",
                   padding: "2px 5px",
-                  boxShadow: "0 2px 7px rgba(15,23,42,.3)",
+                  boxShadow: "0 1px 2px rgba(16,24,40,.10), 0 6px 14px -8px rgba(16,24,40,.35)",
                   cursor: "pointer",
                   textAlign: "center",
                   whiteSpace: "nowrap",
                   lineHeight: 1.15,
                 }}
               >
-                <span style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>
+                <span style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#1A1A1A", letterSpacing: "-0.02em" }}>
                   {p.priceLabel}
                 </span>
-                <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#475569" }}>
+                <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#5B6472", letterSpacing: "-0.01em" }}>
                   {p.areaLabel || p.kind}
                 </span>
               </button>
@@ -2871,7 +2890,7 @@ export default function KakaoZoneMap({
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
       {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}
       <div className="absolute right-2 top-1/2 z-[600] flex -translate-y-1/2 flex-col items-end gap-1.5 md:bottom-2 md:left-2 md:right-auto md:top-auto md:translate-y-0 md:flex-row md:items-center">
-        <div className="flex items-center gap-0.5 rounded-lg border border-slate-300 bg-white/95 p-0.5 shadow-md">
+        <div className="flex items-center gap-0.5 rounded-lg border border-line bg-white p-0.5 shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)]">
           <button
             type="button"
             onClick={() => zoomBy(-1)}
@@ -2898,16 +2917,16 @@ export default function KakaoZoneMap({
             aria-pressed={myPinsOn}
             data-testid="my-listings-toggle"
             title={`내가 올린 매물 ${myPins.length}건만 지도에 표시 — 끄면 서울 전체 재개발 지도로 돌아갑니다`}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-md transition ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               myPinsOn
-                ? "border-amber-600 bg-amber-500 text-white"
-                : "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                ? "border-brand bg-brand text-white"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden>🏠</span>
+            <Icon name="home" size={13} />
             <span className="hidden md:inline">내 매물만 보기</span>
             <span className="md:hidden">내 매물</span>
-            <span className={`font-extrabold ${myPinsOn ? "text-white" : "text-amber-700"}`}>
+            <span className={`font-bold ${myPinsOn ? "text-white/90" : "text-brand"}`}>
               ({myPins.length})
             </span>
           </button>
@@ -2916,13 +2935,14 @@ export default function KakaoZoneMap({
           type="button"
           onClick={toggleSkyview}
           aria-pressed={skyview}
-          title="스카이뷰 — 위성 항공사진 + 도로·지명 라벨"          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+          title="스카이뷰 — 위성 항공사진 + 도로·지명 라벨"
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
             skyview
-              ? "border-sky-400 bg-sky-50 text-sky-900"
-              : "border-slate-300 bg-white text-slate-700 hover:text-slate-900"
+              ? "border-brand/35 bg-brand-tint text-brand"
+              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
           }`}
         >
-          <span aria-hidden>🛰</span>
+          <Icon name="image" size={13} />
           <span className="hidden md:inline">스카이뷰</span>
         </button>
         <button
@@ -2930,13 +2950,13 @@ export default function KakaoZoneMap({
           onClick={toggleDistrict}
           aria-pressed={district}
           title="지적편집도 — 필지 경계·지번을 겹쳐 보기 (참고용)"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
             district
-              ? "border-amber-400 bg-amber-50 text-amber-900"
-              : "border-slate-300 bg-white text-slate-700 hover:text-slate-900"
+              ? "border-brand/35 bg-brand-tint text-brand"
+              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
           }`}
         >
-          <span aria-hidden>📐</span>
+          <Icon name="grid" size={13} />
           <span className="hidden md:inline">지적편집도</span>
         </button>
         <button
@@ -2945,13 +2965,13 @@ export default function KakaoZoneMap({
           aria-pressed={aging}
           data-testid="aging-toggle"
           title="노후도 — 건물별 사용승인 연도로 색칠 (30년 이상 / 20~30년 / 10~20년 / 10년 미만). 확대해서 보세요"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
             aging
-              ? "border-rose-400 bg-rose-50 text-rose-900"
-              : "border-slate-300 bg-white text-slate-700 hover:text-slate-900"
+              ? "border-brand/35 bg-brand-tint text-brand"
+              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
           }`}
         >
-          <span aria-hidden>🏚</span>
+          <Icon name="building" size={13} />
           <span className="hidden md:inline">노후도</span>
         </button>
         {onToggleTxPins && txPins.length > 0 && (
@@ -2961,13 +2981,13 @@ export default function KakaoZoneMap({
             aria-pressed={txPinsOn}
             data-testid="tx-pins-toggle"
             title="구역 안 실거래 가격 핀 표시"
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               txPinsOn
-                ? "border-blue-400 bg-blue-50 text-blue-900"
-                : "border-slate-300 bg-white text-slate-500 hover:text-slate-900"
+                ? "border-brand/35 bg-brand-tint text-brand"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden>🏷</span>
+            <Icon name="tag" size={13} />
             <span className="hidden md:inline">실거래 핀</span>
             <span className="font-normal text-slate-400">{txPins.length}</span>
           </button>
@@ -2978,13 +2998,13 @@ export default function KakaoZoneMap({
             onClick={onToggleCompleted}
             aria-pressed={showCompleted}
             title="준공·입주까지 끝난 구역도 지도에 표시"
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-md transition ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               showCompleted
-                ? "border-amber-400 bg-amber-50 text-amber-900"
-                : "border-slate-300 bg-white text-slate-600 hover:text-slate-900"
+                ? "border-brand/35 bg-brand-tint text-brand"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden>{showCompleted ? "👁" : "🏁"}</span>
+            <Icon name="check" size={13} />
             <span className="hidden md:inline">준공 포함</span>
             {completedCount > 0 && <span className="font-normal text-slate-400">{completedCount}</span>}
           </button>

@@ -18,6 +18,7 @@ import { calcInitialInvestment, listingDeposit } from "@/lib/types";
 import { loadSeoulZones, type SeoulZone } from "@/lib/seoul-zones";
 import { formatMan } from "@/lib/format";
 import { TYPE_COLORS } from "@/components/map/colors";
+import Icon from "@/components/Icon";
 import { Badge } from "@/components/Badges";
 import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
@@ -270,7 +271,9 @@ export default function RegisterPage() {
           className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 shadow-sm"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span aria-hidden className="text-lg leading-none">✅</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <Icon name="check" size={13} strokeWidth={2.2} />
+            </span>
             <b className="text-sm text-emerald-900">등록 완료 — {saved.zoneName}</b>
             <Badge tone="green">지도·목록에 반영됨</Badge>
             {saving && <Badge tone="blue">공용 DB에 올리는 중…</Badge>}
@@ -645,7 +648,7 @@ export default function RegisterPage() {
           {saving ? "공용 DB에 저장하는 중…" : canSave ? "베타 무료로 등록하기" : "구역·매매가·중개사무소를 입력하세요"}
         </button>
         <p className="mt-1.5 text-[11px] text-slate-400">
-          등록하면 {SHOW_MAP_LISTING_BADGES && <>메인 지도에 <b>🏠 매물</b> 배지가, </>}이 구역 상세 패널과{" "}
+          등록하면 {SHOW_MAP_LISTING_BADGES && <>메인 지도에 <b>매물</b> 배지가, </>}이 구역 상세 패널과{" "}
           <Link href="/listings" className="underline">매물 목록</Link>에 매물 카드가 바로 나타납니다.
         </p>
       </div>

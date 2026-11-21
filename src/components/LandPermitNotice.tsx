@@ -43,14 +43,14 @@ export default function LandPermitNotice({
       data-level={info.level}
       className={
         "rounded-xl border p-2.5 " +
-        (designated ? "border-purple-300 bg-purple-50/70" : "border-slate-300 bg-slate-50")
+        (designated ? "border-[#E6D9BC] bg-[#FBF7EF]" : "border-line bg-slate-50")
       }
     >
       <div className="flex items-start gap-1.5">
         <span
           className={
             "mt-px shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold text-white " +
-            (designated ? "bg-purple-700" : "bg-slate-600")
+            (designated ? "bg-[#745E34]" : "bg-slate-600")
           }
         >
           토허제 참고 안내
@@ -58,12 +58,12 @@ export default function LandPermitNotice({
         <div className="min-w-0 flex-1">
           <p
             className={
-              "text-[11px] font-bold leading-snug " + (designated ? "text-purple-900" : "text-slate-800")
+              "text-[11px] font-bold leading-snug " + (designated ? "text-[#4A3A1D]" : "text-slate-800")
             }
           >
             {info.badge}
           </p>
-          <p className={"mt-0.5 text-[10px] leading-snug " + (designated ? "text-purple-800/90" : "text-slate-600")}>
+          <p className={"mt-0.5 text-[10px] leading-snug " + (designated ? "text-[#5C4A28]" : "text-slate-600")}>
             {info.summary}
           </p>
         </div>
@@ -75,7 +75,7 @@ export default function LandPermitNotice({
           className={
             "shrink-0 whitespace-nowrap rounded border bg-white px-1.5 py-0.5 text-[10px] font-semibold " +
             (designated
-              ? "border-purple-300 text-purple-800 hover:border-purple-500"
+              ? "border-[#D8C79F] text-[#745E34] hover:border-[#B08D48]"
               : "border-slate-300 text-slate-700 hover:border-slate-500")
           }
         >
@@ -109,7 +109,7 @@ export default function LandPermitNotice({
       <p
         className={
           "mt-1.5 border-t pt-1 text-[9.5px] leading-snug " +
-          (designated ? "border-purple-200 text-purple-900/70" : "border-slate-200 text-slate-500")
+          (designated ? "border-[#E6D9BC] text-[#745E34]" : "border-slate-200 text-slate-500")
         }
       >
         {LAND_PERMIT_DISCLAIMER}

@@ -170,3 +170,118 @@ body {
   font-size: 10px;
   color: #64748b;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2026-11-21 리디자인 — 지마켓 산스 · 오레오 블루 (시안 B: 미니멀 라이트 지도중심)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 폰트: 지마켓 산스 (눈누 배포본을 woff2 로 변환해 public/fonts 에 자체 호스팅)
+      · 300 Light / 400–600 Medium / 700–900 Bold — 시안과 같은 세 단계
+      · CDN 에 기대지 않는다(배포·오프라인 모두 같은 모양) */
+@font-face {
+  font-family: "Gmarket Sans";
+  src: url("/fonts/gmarket/GmarketSansLight.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gmarket Sans";
+  src: url("/fonts/gmarket/GmarketSansMedium.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gmarket Sans";
+  src: url("/fonts/gmarket/GmarketSansBold.woff2") format("woff2");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* 기본 글꼴 — 지마켓 산스가 없으면 기존 한글 스택으로 떨어진다 */
+  --font-sans: "Gmarket Sans", "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", "Malgun Gothic", system-ui, sans-serif;
+
+  /* 브랜드 — Oreo Blue(주) · Bright Blue(보조) · Hazelnut Gold(규제 알림) · Cocoa Black(본문) */
+  --color-brand: #0054a6;
+  --color-brand-deep: #00417f;
+  --color-brand-tint: #f1f7fb;
+  --color-accent: #29abe2;
+  --color-gold: #c8a25a;
+  --color-gold-tint: #faf6ec;
+  --color-ink: #1a1a1a;
+  --color-line: #e3e6ea;
+  --color-canvas: #f4f5f7;
+
+  /* Tailwind 기본 blue 를 오레오 블루 계열로 교체 —
+     기존 blue-* 클래스(링크·활성 탭·차트)가 브랜드 색으로 통일된다 */
+  --color-blue-50: #f1f7fb;
+  --color-blue-100: #e0edf6;
+  --color-blue-200: #bedcef;
+  --color-blue-300: #8fc4e7;
+  --color-blue-400: #29abe2;
+  --color-blue-500: #1b77be;
+  --color-blue-600: #0054a6;
+  --color-blue-700: #00417f;
+  --color-blue-800: #003667;
+  --color-blue-900: #00294f;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+}
+
+/* Gmarket Sans 는 자폭이 넓다 — 본문 자간을 시안(-.012em)에 맞춰 살짝 조인다 */
+body {
+  letter-spacing: -0.012em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 지도 위에 앱이 그리는 글자(Leaflet 툴팁·컨트롤, 카카오 오버레이)도 같은 폰트로 */
+.leaflet-container,
+.leaflet-container .leaflet-tooltip,
+.leaflet-container .leaflet-control,
+.kakao-map-wrap,
+.zone-tag,
+.zone-name-label {
+  font-family: var(--font-sans);
+}
+
+/* 폼 요소는 브라우저 기본 글꼴을 물려받지 않는다 — 명시해 준다 */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
+/* 지도 플로팅 카드 공통 — 반경 12px, 테두리 한 겹, 옅은 그림자(시안 B) */
+.ui-float {
+  border-radius: 12px;
+  border: 1px solid var(--color-line);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -12px rgba(16, 24, 40, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+/* 스크롤바 — 프로페셔널한 얇은 회색 */
+.ui-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd2da transparent;
+}
+.ui-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.ui-scroll::-webkit-scrollbar-thumb {
+  background: #cbd2da;
+  border-radius: 999px;
+}
+.ui-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

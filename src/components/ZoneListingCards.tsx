@@ -13,6 +13,7 @@ import { calcInitialInvestment, listingDeposit } from "@/lib/types";
 import { formatMan } from "@/lib/format";
 import { isMyListing } from "@/lib/my-listings";
 import { Badge } from "./Badges";
+import Icon from "./Icon";
 
 /** 임대사업자 승계 · 토허제(실거주) 조건 배지 — 매물 카드·목록에서 같은 말을 쓴다 */
 export function ListingConditionBadges({ listing }: { listing: Listing }) {
@@ -50,7 +51,9 @@ export function ZoneListingCards({
       className="rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3 shadow-sm"
     >
       <div className="mb-2 flex items-center gap-1.5">
-        <span aria-hidden className="text-sm leading-none">🏠</span>
+        <span aria-hidden className="text-slate-400">
+          <Icon name="home" size={14} />
+        </span>
         <b className="text-xs font-bold text-amber-900">검증 매물 {listings.length}건</b>
         <span className="truncate text-[10px] text-amber-800/80">{zoneName}</span>
         <Link
