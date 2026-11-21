@@ -12,6 +12,9 @@ export const SEOUL_BOUNDS: [[number, number], [number, number]] = [
 /**
  * 매물 배지 — 구역 id → 매물 건수.
  *   지도는 매물이 1건 이상인 구역의 중심에 `🏠 매물 N` 배지를 얹는다(우리 DOM 레이어 z-index 100).
+ *   · 지금은 호출측(ZoneExplorer)이 넘기지 않는다 — 사용자 요청(2026-11-21)으로 초기 화면에서는
+ *     매물 배지를 숨기고, 마이페이지에서 다시 쓸 때 `src/lib/zone-listing-badges.ts` 의
+ *     `SHOW_MAP_LISTING_BADGES` 를 켜서 되살린다.
  */
 export type ZoneListingCounts = Record<string, number>;
 
@@ -20,7 +23,7 @@ export type ZoneMapProps = {
   zones: Zone[];
   /** 서울시 정비구역 전수 (호출측이 표시 범위만 걸러서 넘긴다 — 준공 숨김 등) */
   seoulZones: SeoulZone[];
-  /** 구역별 매물 건수 — 있으면 지도에 🏠 매물 N 배지를 그린다 */
+  /** 구역별 매물 건수 — 넘기면 지도가 🏠 매물 N 배지를 그린다(지금은 초기 화면에서 숨김) */
   listingCounts?: ZoneListingCounts;
   selectedZoneId?: string;
   onSelectZone: (id: string) => void;

@@ -19,6 +19,7 @@ import { loadSeoulZones, type SeoulZone } from "@/lib/seoul-zones";
 import { formatMan } from "@/lib/format";
 import { TYPE_COLORS } from "@/components/map/colors";
 import { Badge } from "@/components/Badges";
+import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
 import {
   deleteCustomListing,
@@ -644,8 +645,8 @@ export default function RegisterPage() {
           {saving ? "공용 DB에 저장하는 중…" : canSave ? "베타 무료로 등록하기" : "구역·매매가·중개사무소를 입력하세요"}
         </button>
         <p className="mt-1.5 text-[11px] text-slate-400">
-          등록하면 메인 지도에 <b>🏠 매물</b> 배지가, 이 구역 상세 패널과 <Link href="/listings" className="underline">매물 목록</Link>에
-          매물 카드가 바로 나타납니다.
+          등록하면 {SHOW_MAP_LISTING_BADGES && <>메인 지도에 <b>🏠 매물</b> 배지가, </>}이 구역 상세 패널과{" "}
+          <Link href="/listings" className="underline">매물 목록</Link>에 매물 카드가 바로 나타납니다.
         </p>
       </div>
 

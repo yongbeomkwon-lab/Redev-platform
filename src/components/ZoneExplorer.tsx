@@ -46,6 +46,8 @@ import {
   listingMatchesZone,
 } from "@/lib/custom-listings";
 import { MY_LISTINGS, MY_LISTINGS_COUNT, MY_LISTINGS_AS_OF, MY_LISTING_ZONE_IDS } from "@/lib/my-listings";
+// 지도 위 `🏠 매물 N` 배지 노출 스위치 — 지금은 초기 화면에서 숨김(마이페이지에서 되살린다)
+import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
 import {
   ADMIN_STORAGE_KEY,
@@ -1018,6 +1020,8 @@ export default function ZoneExplorer() {
     <div className="relative h-[calc(100dvh-52px)] w-full overflow-hidden bg-slate-200">
       {/* ── 지도: 화면 전체 ─────────────────────────────────────────────────── */}
       <div className="absolute inset-0">
+        {/* 매물 배지 — 사용자 요청(2026-11-21)으로 초기 화면에는 매물 배지를 넘기지 않는다.
+            `SHOW_MAP_LISTING_BADGES` 를 true 로 바꾸면 지도가 다시 `🏠 매물 N` 을 그린다. */}
         <MapPanel
           zones={mapFeaturedZones}
           seoulZones={mapSeoulZones}
@@ -1029,7 +1033,7 @@ export default function ZoneExplorer() {
           addressPin={addressPin}
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
-          listingCounts={listingCounts}
+          listingCounts={SHOW_MAP_LISTING_BADGES ? listingCounts : undefined}
           myPins={MY_LISTINGS}
           myPinsOn={myOnly}
           onToggleMyPins={toggleMyOnly}
@@ -1607,7 +1611,9 @@ export default function ZoneExplorer() {
                 <span className="text-[10px] leading-tight text-slate-400">
                   {myOnly
                     ? `내 매물 ${MY_LISTINGS_COUNT}건 핀 · 정비구역 ${myZoneIds.size}곳만 표시`
-                    : `${filteredListings.length}건 매물 · 지도에 🏠 매물 배지`}
+                    : SHOW_MAP_LISTING_BADGES
+                      ? `${filteredListings.length}건 매물 · 지도에 🏠 매물 배지`
+                      : `${filteredListings.length}건 매물 · 구역 상세에서 확인`}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
