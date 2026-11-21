@@ -94,7 +94,7 @@ export default function DevPressureLayer({
     if (!focus) return;
     setSelId(focus.id);
     try {
-      if (map.getLevel() > 5) map.setLevel(4);
+      if (map.getLevel() > 6) map.setLevel(5); // 500m 안팎 — 핫스팟과 둘러싼 구역이 함께 보이게
       map.panTo(new sdk.maps.LatLng(focus.lat, focus.lng));
     } catch {
       /* 지도 준비 전이면 idle 에서 다시 자리를 잡는다 */
