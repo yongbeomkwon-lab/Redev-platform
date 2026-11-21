@@ -4,16 +4,17 @@
 // SiteNav — 상단 내비게이션 (2026-11-21 리디자인)
 //   · 지도 화면(/), 검증 매물(/listings), 판례 리포트(/cases), CTA(중개사 매물 등록)
 //   · 판례 리포트는 매주 월요일 정비사업 판례를 한 편씩 올리는 자리 — 첫 화면에서
-//     바로 들어갈 수 있게 메뉴에 둔다(아직 글은 준비 중 안내).
+//     바로 들어갈 수 있게 메뉴에 둔다(아직 글은 준비 중 안내). 옆의 점이 그 표시다.
 //   · 지금 있는 화면은 오레오 블루 밑줄로 표시한다.
+//   · 폰에서는 이름을 줄여 한 줄에 담는다(지도·매물·판례 / 매물 등록).
 // ─────────────────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/", label: "구역 탐색" },
-  { href: "/listings", label: "검증 매물" },
-  { href: "/cases", label: "판례 리포트", note: true },
+  { href: "/", label: "구역 탐색", short: "지도" },
+  { href: "/listings", label: "검증 매물", short: "매물" },
+  { href: "/cases", label: "판례 리포트", short: "판례", note: true },
 ];
 
 export default function SiteNav() {
@@ -21,7 +22,7 @@ export default function SiteNav() {
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
-    <nav className="flex items-center gap-0.5 text-[13px] font-medium sm:gap-1">
+    <nav className="flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[13px] font-medium sm:gap-1">
       {LINKS.map((l) => {
         const active = isActive(l.href);
         return (
@@ -30,18 +31,19 @@ export default function SiteNav() {
             href={l.href}
             aria-current={active ? "page" : undefined}
             className={
-              "relative flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors sm:px-2.5 " +
+              "relative flex items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors sm:px-2.5 " +
               (active
-                ? "text-brand after:absolute after:inset-x-2 after:-bottom-[7px] after:h-[2px] after:rounded-full after:bg-brand"
+                ? "text-brand after:absolute after:inset-x-1.5 after:-bottom-[7px] after:h-[2px] after:rounded-full after:bg-brand sm:after:inset-x-2"
                 : "text-slate-600 hover:bg-slate-50 hover:text-ink")
             }
           >
-            {l.label}
+            <span className="sm:hidden">{l.short}</span>
+            <span className="hidden sm:inline">{l.label}</span>
             {l.note && (
               <span
                 aria-hidden
                 title="매주 월요일 업데이트"
-                className="ml-0.5 inline-block h-[5px] w-[5px] rounded-full bg-accent align-middle"
+                className="inline-block h-[5px] w-[5px] rounded-full bg-accent"
               />
             )}
           </Link>
@@ -49,9 +51,10 @@ export default function SiteNav() {
       })}
       <Link
         href="/register"
-        className="ml-1 rounded-md bg-brand px-2.5 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5"
+        className="ml-1 rounded-md bg-brand px-2 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5 sm:px-2.5"
       >
-        중개사 매물 등록
+        <span className="sm:hidden">매물 등록</span>
+        <span className="hidden sm:inline">중개사 매물 등록</span>
       </Link>
     </nav>
   );

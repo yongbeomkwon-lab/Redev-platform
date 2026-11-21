@@ -9,6 +9,7 @@ import type { Listing, Zone } from "@/lib/types";
 import { calcImpliedRights, calcInitialInvestment, UNLOCK_PRICE } from "@/lib/types";
 import { formatMan } from "@/lib/format";
 import { Badge } from "./Badges";
+import Icon from "./Icon";
 
 export function ListingCompare({
   listings,
@@ -75,7 +76,8 @@ export function ListingCompare({
                       onClick={() => onUnlockRequest(l)}
                       className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
                     >
-                      🔒 열람권 {formatMan(UNLOCK_PRICE)}에 열기
+                      <Icon name="lock" size={11} className="mr-1 inline-block align-[-1px]" />
+                      열람권 {formatMan(UNLOCK_PRICE)}에 열기
                     </button>
                   )}
                 </td>

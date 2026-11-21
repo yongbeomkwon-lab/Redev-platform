@@ -174,7 +174,7 @@ function ListingBadges({
           position={b.center}
           icon={L.divIcon({
             className: "redev-listing-badge",
-            html: `<div style="transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:3px;border-radius:999px;border:2px solid #b45309;background:#fffbeb;color:#7c2d12;font-size:11px;font-weight:800;line-height:1;padding:3px 7px;white-space:nowrap;box-shadow:0 3px 10px rgba(15,23,42,.35);"><span aria-hidden>🏠</span> 매물 ${b.count}</div>`,
+            html: `<div style="transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:3px;border-radius:999px;border:1.5px solid #b45309;background:#fffbeb;color:#7c2d12;font-size:11px;font-weight:700;line-height:1;padding:3px 7px;white-space:nowrap;box-shadow:0 2px 8px rgba(16,24,40,.25);"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.6 12 4l8 6.6"/><path d="M6.2 9.8V20h11.6V9.8"/></svg> 매물 ${b.count}</div>`,
             iconSize: [0, 0],
             iconAnchor: [0, 0],
           })}

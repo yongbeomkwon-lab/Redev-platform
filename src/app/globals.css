@@ -242,9 +242,9 @@ body {
 }
 
 /* 지도 위에 앱이 그리는 글자(Leaflet 툴팁·컨트롤, 카카오 오버레이)도 같은 폰트로 */
-.leaflet-container,
-.leaflet-container .leaflet-tooltip,
-.leaflet-container .leaflet-control,
+html .leaflet-container,
+html .leaflet-container .leaflet-tooltip,
+html .leaflet-container .leaflet-control,
 .kakao-map-wrap,
 .zone-tag,
 .zone-name-label {

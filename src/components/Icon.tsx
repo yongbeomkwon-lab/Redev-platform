@@ -14,7 +14,8 @@ export type IconName =
   | "check"
   | "pin"
   | "train"
-  | "search";
+  | "search"
+  | "lock";
 
 const PATHS: Record<IconName, ReactNode> = {
   home: (
@@ -73,6 +74,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="11" cy="11" r="6.2" />
       <path d="m15.6 15.6 4 4" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5.2" y="10.4" width="13.6" height="9.4" rx="2.2" />
+      <path d="M8.5 10.4V7.9a3.5 3.5 0 0 1 7 0v2.5" />
     </>
   ),
 };

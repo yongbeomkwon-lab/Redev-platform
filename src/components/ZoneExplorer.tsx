@@ -1762,7 +1762,7 @@ export default function ZoneExplorer() {
               접기 ✕
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="ui-scroll min-h-0 flex-1 overflow-y-auto p-3">
             {/* 내 매물만 보기 요약 — 핀을 누르기 전에 무엇이 달려 있는지 한눈에 */}
             {myOnly && !selected && !selectedSeoul && (
               <div data-testid="my-listings-summary" className="mb-3 space-y-1.5 rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3">

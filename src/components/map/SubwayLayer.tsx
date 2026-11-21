@@ -72,7 +72,10 @@ function loadSubwayData(): Promise<SubwayData> {
   return cache;
 }
 
-const FONT = "system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
+// 지도 위 역명도 앱과 같은 지마켓 산스로 그린다(캔버스는 CSS 를 물려받지 않는다).
+//   · 폰트가 아직 없으면 브라우저가 다음 후보(시스템 한글)로 그린다 — 깨지지 않는다.
+const FONT =
+  "'Gmarket Sans', system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
 
 function stationLabel(name: string) {
   return name.endsWith("역") ? name : `${name}역`;

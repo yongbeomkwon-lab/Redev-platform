@@ -2535,9 +2535,7 @@ export default function KakaoZoneMap({
               boxShadow: "0 3px 10px rgba(15,23,42,.35), 0 1px 3px rgba(15,23,42,.3)",
             }}
           >
-            <span aria-hidden style={{ fontSize: "11px", lineHeight: 1 }}>
-              🏠
-            </span>
+            <Icon name="home" size={11} />
             <span>매물 {b.count}</span>
           </button>
         ))}

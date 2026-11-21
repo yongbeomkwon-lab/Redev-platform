@@ -32,8 +32,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       {/* 헤더는 슬림(52px) — 지도 탐색 화면이 화면 전체를 쓰도록 위아래 여백을 최소화한다 */}
       <body className="flex min-h-dvh flex-col bg-canvas text-ink antialiased">
         <header className="sticky top-0 z-[700] h-[52px] shrink-0 border-b border-line bg-white">
-          <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-4">
-            <Link href="/" className="flex items-baseline gap-2">
+          <div className="flex h-full items-center justify-between gap-2 px-3 sm:px-4">
+            <Link href="/" className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
               <span className="text-[19px] font-extrabold leading-none tracking-[-0.03em] text-ink">
                 리디브<span className="text-brand">.</span>
               </span>

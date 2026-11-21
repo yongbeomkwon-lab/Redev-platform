@@ -10,7 +10,7 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 .next-old
 
-# 로컬 빌드 캐시 잔여물
+# 로컬 빌드 캐시 잔여물 (빌드 디렉터리를 옮겨 둔 사본 — 저장소에 넣지 않는다)
 .next-broken-*
 
 # 파이썬 변환 스크립트 캐시

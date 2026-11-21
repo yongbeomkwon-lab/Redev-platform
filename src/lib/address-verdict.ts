@@ -80,15 +80,15 @@ export function verdictHeadline(v: AddressVerdict): string {
   switch (v.status) {
     case "inside": {
       const z = v.inside[0].zone;
-      return `✅ ${z.name} 포함`;
+      return `${z.name} 포함`;
     }
     case "completed": {
       const z = v.completedHits[0].zone;
-      return `🏁 준공 완료된 ${z.name} 내 주소`;
+      return `준공 완료된 ${z.name} 내 주소`;
     }
     case "near-candidate": {
       const z = v.nearCandidates[0].zone;
-      return `⚠️ 경계 미고시 후보지(${z.name}) 인근 주소`;
+      return `경계 미고시 후보지(${z.name}) 인근 주소`;
     }
     default:
       // 구역 밖 — 판정 문구를 싣지 않는다(핀은 주소만, 카드는 가까운 구역 목록만).
