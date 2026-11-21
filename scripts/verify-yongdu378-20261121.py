@@ -24,7 +24,7 @@ ZONES = {
     "y3": {
         "id": "11230UQ120PS202605210001",
         "out": "/workspace/downloads/리디브_용두3구역_2026-11-21.png",
-        "level": 4,
+        "level": 3,
         "expect": ["용두3구역", "추진위구성", "23,793", "39-361", "695세대", "95.78"],
         "search": None,
     },
@@ -38,7 +38,7 @@ ZONES = {
     "y8": {
         "id": "rest17gu-ddm-용두동-39-24-역세시프",
         "out": "/workspace/downloads/리디브_용두8구역_2026-11-21.png",
-        "level": 3,
+        "level": 2,
         "expect": ["용두8역세권", "번호부여(2025-06-20)", "26,485.8", "39-446", "39-15"],
         "search": ("용두8", "용두8역세권"),
     },
@@ -74,19 +74,20 @@ with sync_playwright() as p:
     page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
     time.sleep(6)
 
-    # 지도를 그 구역으로 — 폴리곤 구역은 경계가 한눈에, 점 구역은 점선 원이 보이게
-    page.evaluate(
-        """([lat, lng, level]) => {
-          const d = window.__redevDiag, k = window.kakao;
-          const m = d.map();
-          m.setCenter(new k.maps.LatLng(lat, lng));
-          m.setLevel(level);
-        }""",
-        [lat, lng, cfg["level"]],
-    )
-    time.sleep(4)
-    page.evaluate("() => window.__redevDiag.draw && window.__redevDiag.draw()")
-    time.sleep(2)
+    # 지도를 그 구역으로 — 폴리곤 구역은 경계가 한눈에, 점 구역은 점선 원이 보이게.
+    #   ★ 프로그램으로 setLevel 하면 앱 상태(줌 유지)가 곧바로 되돌려 화면이 안 바뀐다.
+    #     사용자가 하는 것과 같은 입력(지도 위 마우스 휠)으로만 화면이 실제로 확대된다.
+    page.mouse.move(700, 500)
+    for _ in range(6):
+        cur = page.evaluate("() => window.__redevDiag.map().getLevel()")
+        if cur <= cfg["level"]:
+            break
+        page.mouse.wheel(0, -240)
+        time.sleep(1.8)
+    time.sleep(1.2)
+    page.screenshot(path=cfg["out"])
+    print("saved", cfg["out"])
+    print("map level:", page.evaluate("() => window.__redevDiag.map().getLevel()"), "target", cfg["level"])
 
     body = page.inner_text("body")
     missing = [s for s in cfg["expect"] if s not in body]
@@ -111,11 +112,9 @@ with sync_playwright() as p:
             time.sleep(4)
             page.evaluate("() => window.__redevDiag.draw && window.__redevDiag.draw()")
             time.sleep(2)
+            print("map level after search pick:", page.evaluate("() => window.__redevDiag.map().getLevel()"))
         except Exception as e:
             print("검색 결과 클릭 실패:", str(e)[:120])
-
-    page.screenshot(path=cfg["out"])
-    print("saved", cfg["out"])
     print("errors:", errs[:5])
     ctx.close()
     b.close()
