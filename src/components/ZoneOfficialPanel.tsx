@@ -165,7 +165,12 @@ export default function ZoneOfficialPanel({
                 </span>
               </>
             ) : (
-              <>도시계획사업 고시 경계</>
+              <>
+                도시계획사업 고시 경계
+                {zone.boundaryNote && (
+                  <span className="text-emerald-700/70"> · {zone.boundaryNote}</span>
+                )}
+              </>
             )}
           </dd>
           <dt className="whitespace-nowrap text-emerald-700/80">고시 레코드</dt>
