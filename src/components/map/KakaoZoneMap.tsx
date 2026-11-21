@@ -38,6 +38,7 @@ import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import JibunPinCard from "./JibunPinCard";
+import DevPressureLayer from "./DevPressureLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -428,6 +429,9 @@ export default function KakaoZoneMap({
   onToggleMyPins,
   fitSeoulRequest,
   myFocusId,
+  devPressureOn = false,
+  onToggleDevPressure,
+  devPressureFocus,
   admin,
   onFail,
 }: KakaoZoneMapProps) {
@@ -596,6 +600,8 @@ export default function KakaoZoneMap({
   const [district, setDistrict] = useState(false);
   /** 노후도(건물 연식) 오버레이 — 지도 아래 툴바의 `노후도` 토글 */
   const [aging, setAging] = useState(false);
+  /** 카카오 지도 인스턴스가 준비됐는지 — 개발압력 레이어가 지도 객체를 받아야 한다 */
+  const [mapReady, setMapReady] = useState(false);
   /** 노후도 범례에 보여 줄 상태(받은 건물 수·구간별 수·확대 안내·불러오는 타일 수) */
   const [ageStats, setAgeStats] = useState<AgeStats>({ buildings: 0, counts: [], tooFar: false, loading: 0 });
   const [ready, setReady] = useState(false);
@@ -1573,6 +1579,7 @@ export default function KakaoZoneMap({
       return;
     }
     mapRef.current = map;
+    setMapReady(true);
     map.setMinLevel(1);
     map.setMaxLevel(MAX_LEVEL);
 
@@ -2740,7 +2747,11 @@ export default function KakaoZoneMap({
   const adminDraft = admin?.draft ?? null;
 
   return (
-    <div ref={wrapRef} className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl">
+    <div
+      ref={wrapRef}
+      className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl"
+      data-jibun-pick={jibunPickOn ? "1" : undefined}
+    >
       <div ref={mapElRef} className="h-full w-full" />
 
       {/* ── 선택 구역 이름표 — z-index 101: 매물 배지(100)보다 위에 둔다 ── */}
@@ -3216,6 +3227,18 @@ export default function KakaoZoneMap({
         </div>
       )}
 
+      {/* ── 🔥 개발압력 레이어 — 주변이 정비구역·아파트로 둘러싸인 노후 저층지(z 98) ── */}
+      {devPressureOn && mapReady && sdkRef.current && mapRef.current && (
+        <DevPressureLayer
+          sdk={sdkRef.current}
+          map={mapRef.current}
+          focus={devPressureFocus ?? null}
+          onOpenZone={onSelectZone}
+          onPickJibun={onPickJibun}
+          onCloseLayer={onToggleDevPressure}
+        />
+      )}
+
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
       {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}
       <div className="absolute right-2 top-1/2 z-[600] flex -translate-y-1/2 flex-col items-end gap-1.5 md:bottom-2 md:left-2 md:right-auto md:top-auto md:translate-y-0 md:flex-row md:items-center">
@@ -3302,6 +3325,21 @@ export default function KakaoZoneMap({
         >
           <Icon name="building" size={13} />
           <span className="hidden md:inline">노후도</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onToggleDevPressure?.()}
+          aria-pressed={!!devPressureOn}
+          data-testid="dev-pressure-toggle"
+          title="개발압력 — 주변이 정비구역·아파트로 둘러싸인 노후 저층지. 켜면 지도에 🔥 핫스팟이 뜹니다"
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+            devPressureOn
+              ? "border-brand bg-brand text-white"
+              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+          }`}
+        >
+          <span aria-hidden className="text-[12px] leading-none">🔥</span>
+          <span className="hidden md:inline">개발압력</span>
         </button>
         {onToggleJibunPick && (
           <button
