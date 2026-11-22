@@ -95,7 +95,7 @@ const MY_PIN_LAYER_STYLE = {
 };
 
 /**
- * ⚖️ 경매 물건 핀 레이어 — 실거래 핀(95) 위, 지번 핀(97)·매물 배지·이름표(100) 아래(z-index 96).
+ * ⚖️ 경매 물건 핀 레이어 — 실거래 핀(95) 위, 매물 배지·이름표(100) 아래(z-index 96).
  *   · 실거래 핀과 같은 자리 규칙을 쓰지만 색을 앰버로 달리해 한눈에 구분된다.
  */
 const AUCTION_PIN_LAYER_STYLE = {
@@ -3302,11 +3302,13 @@ export default function KakaoZoneMap({
         ))}
       </div>
 
-      {/* ── ⚖️ 경매 물건 핀 — `⚖️ 2.0억 / 11.24 · 유찰 1회` (z-index 96: 실거래 핀 위·배지 아래) ── */}
+      {/* ── ⚖️ 경매 물건 핀 — `⚖️ 2.0억 / 11.24 · 유찰 1회`
+          (z-index 96: 실거래 핀 위·배지 아래 · **구역을 골랐을 때는 101** — 그 구역 이름표가
+           좁은 구역(예: 쌍문동 507-1일원 3,110㎡)의 핀을 덮어 ‘경매 물건이 안 보이는’ 일을 막는다) ── */}
       <div
         ref={auctionLayerRef}
         className="auction-pin-layer"
-        style={AUCTION_PIN_LAYER_STYLE}
+        style={{ ...AUCTION_PIN_LAYER_STYLE, zIndex: selectedZoneId ? 101 : AUCTION_PIN_LAYER_STYLE.zIndex }}
         data-testid="auction-pin-layer"
       >
         {visibleAuctionPins.map((p) => {
