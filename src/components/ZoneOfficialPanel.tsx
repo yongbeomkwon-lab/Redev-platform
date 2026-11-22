@@ -22,6 +22,7 @@ import type { TxMapPin } from "./map/props";
 import type { BuildingTradeTarget } from "@/lib/molit";
 import type { AuctionItem, AuctionsMeta } from "@/lib/auctions";
 import ZoneAuctions from "./ZoneAuctions";
+import StageTimeline from "./StageTimeline";
 
 const PYEONG = 3.305785;
 
@@ -102,6 +103,9 @@ export default function ZoneOfficialPanel({
           <span className="text-slate-400">· 검색창에서 어느 표기로도 찾을 수 있습니다</span>
         </p>
       )}
+
+      {/* 사업 진행단계 — 지금이 어느 단계인지, 지나온 단계·남은 단계까지 한눈에 */}
+      <StageTimeline zone={zone} />
 
       {/* 서울시 고시 데이터 — 1단. 라벨은 줄바꿈 금지, 값은 칸 안에서만 감싼다 */}
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
