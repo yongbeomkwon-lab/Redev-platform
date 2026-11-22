@@ -30,8 +30,13 @@
   · 360·370 은 서로 겹침 0㎡, 2구역과도 겹침 0㎡, 2구역은 양재동 374와 겹침 0㎡.
   · ⚠️ 저장된 `양재동 374`(UQ120)·`양재동 382`(UQ120)는 **2025-08-28 서울시 고시 제2025-476호에서
     축소되기 전(기정) 범위**다(374 65,070→45,953.2㎡, 382 74,515→36,683.1㎡). 그래서 360·370
-    블록을 통째로 품고 있다(370은 374 안에 100%, 360은 382 안에 99.4%). 이 스크립트는 그 둘을
-    건드리지 않는다 — `--trim-parents` 를 주면 새 블록만큼 차집합해 겹침을 0으로 만든다(기본 꺼짐).
+    블록을 통째로 품고 있다(370은 374 안에 100%, 360은 382 안에 99.4%).
+  · `--trim-parents` — 2026-11-23 사용자 결정으로 **실행**(360·370만 맞추고 두면 370이 374 색에
+    가려 지도에서 보이지 않고, 주소검색 카드가 `30,426㎡ · 겹친 구역이 있습니다 · 겹침 양재동 382`
+    로 결함을 안내한다). 374 에서 370 을, 382 에서 360 을 차집합(버퍼 0.3m)해 겹침 0㎡로 맞췄다.
+    → 374 52,991㎡(13정점) · 382 39,797㎡(2조각 38,613+1,184 — 100㎡ 미만 부스러기 2개는 버림).
+    표기 면적(61,289/68,804㎡)은 공개된 UQ120 기정 값이라 그대로 두고, note·areaNote·boundaryNote 에
+    "서울시 고시 제2025-476호 변경면적(45,953.2 / 36,683.1㎡)으로 다시 그려 재정합 예정"을 적었다.
 
 실행: python3 scripts/apply-yangjae-cleanup-20261122.py [--check] [--trim-parents]   (멱등)
 """
@@ -49,6 +54,7 @@ META_KEY = "yangjaeCleanup20261122"
 
 TRIM_PARENTS = "--trim-parents" in sys.argv
 TRIM_BUFFER_M = 0.3
+PARENT_TRIM_MIN_M2 = 100.0
 
 
 # ── 좌표 (서초구 공고 도면 → 연속지적도 필지선) ───────────────────────────────
@@ -125,30 +131,102 @@ def _overlap(a_ring, b_ring) -> float:
 
 
 def _zone_ring(zid: str):
-    geo = json.loads(GEOJSON.read_text(encoding="utf-8"))
-    feat = next((f for f in geo["features"] if f["properties"].get("id") == zid), None)
-    if feat is None or not (feat.get("geometry") or {}).get("coordinates"):
-        return None
-    return [[round(c[1], 7), round(c[0], 7)] for c in feat["geometry"]["coordinates"][0][:-1]]
+    """저장된 도형의 가장 큰 조각 외곽 링 — [위도, 경도] (참고 출력용)."""
+    rings = _zone_outer_rings(zid)
+    return max(rings, key=_m2) if rings else None
 
 
-def _trim(ring, cut_rings):
-    """ring 에서 cut_rings 를 차집합(버퍼 0.3m) — 겹침 항상 0."""
+def _open_holes(g, slit_m: float = 1.0, extend_m: float = 5.0):
+    """홀(내부 링)을 슬릿으로 열어 단순 폴리곤으로 만든다.
+
+    · 370 이 374 안에 **완전히** 들어 있어(경계 접점 0) 차집합은 도넛(홀 1개)이 된다.
+    · 앱 렌더러(Leaflet·카카오 캔버스)는 외곽·조각 링만 칠하고 홀은 무시하므로, 홀을 그대로 두면
+      374 채움색이 370을 다시 덮는다. 그래서 홀 안쪽 점에서 바깥 링 너머까지 폭 1m 슬릿을 내어
+      C자 모양 단순 폴리곤으로 만든다(지도에서는 경계선 한 줄).
+    · 슬릿은 **홀 안쪽 점**에서 시작해야 한다 — 홀 경계에서 시작하면 링이 퇴화해 잘못된 도형이 된다.
+    """
+    from shapely.geometry import LineString, Point
+    from shapely.geometry import Polygon as SHPolygon
+    from shapely.ops import nearest_points
+
+    for _ in range(8):
+        if not g.interiors:
+            break
+        hole = SHPolygon(g.interiors[0])
+        c = hole.representative_point()
+        p_out, _ = nearest_points(g.exterior, c)
+        dx, dy = p_out.x - c.x, p_out.y - c.y
+        dist = math.hypot(dx, dy) or 1.0
+        end = Point(p_out.x + dx / dist * extend_m, p_out.y + dy / dist * extend_m)
+        out = g.difference(LineString([c, end]).buffer(slit_m / 2, cap_style=2))
+        polys = [p for p in getattr(out, "geoms", [out]) if p.geom_type == "Polygon"]
+        g = max(polys, key=lambda p: p.area) if polys else g
+    return g
+
+
+def _trim_pieces(rings, cut_rings):
+    """rings 에서 cut_rings 를 차집합(버퍼 0.3m) — 겹침 항상 0.
+
+    · 입력은 조각별 외곽 링 목록이다(저장 도형이 이미 2조각이면 둘 다 넘긴다) — 두 번 돌려도
+      조각이 줄지 않게 한다.
+    · UQ120 기정 도형은 12~13정점짜리 간략화 도형이라, 정밀한 새 블록과 맞물리는 자리에
+      100㎡ 미만 부스러기 조각이 생긴다(382−360 의 26㎡·5㎡). 지도에서도 보이지 않고 면적만
+      흐리므로 버린다 — 382 는 38,613 + 1,184㎡ 두 조각이 남는다.
+    """
     from shapely.ops import transform
 
     fwd, inv = _proj()
-    a = transform(lambda x, y, z=None: fwd(x, y), _poly(ring))
-    for c in cut_rings:
-        cm = transform(lambda x, y, z=None: fwd(x, y), _poly(c))
-        if a.intersection(cm).area > 0.01:
-            a = a.difference(cm.buffer(TRIM_BUFFER_M))
-    if a.geom_type != "Polygon":
-        a = max(a.geoms, key=lambda g: g.area)
-    out = []
-    for x, y in list(a.exterior.coords)[:-1]:
-        lng, lat = inv(x, y)
-        out.append([round(lat, 7), round(lng, 7)])
-    return out
+    geoms = []
+    for ring in rings:
+        a = transform(lambda x, y, z=None: fwd(x, y), _poly(ring))
+        for c in cut_rings:
+            cm = transform(lambda x, y, z=None: fwd(x, y), _poly(c))
+            if a.intersection(cm).area > 0.01:
+                a = a.difference(cm.buffer(TRIM_BUFFER_M))
+        for piece in [a] if a.geom_type == "Polygon" else list(a.geoms):
+            geoms.append(_open_holes(piece))
+    keep = [g for g in geoms if g.area >= PARENT_TRIM_MIN_M2] or [max(geoms, key=lambda g: g.area)]
+    keep.sort(key=lambda g: -g.area)
+    pieces = []
+    for g in keep:
+        out = []
+        for x, y in list(g.exterior.coords)[:-1]:
+            lng, lat = inv(x, y)
+            out.append([round(lat, 7), round(lng, 7)])
+        pieces.append(out)
+    return pieces, sum(g.area for g in keep)
+
+
+def _geom_ll(pieces):
+    """링 목록 → GeoJSON geometry (1조각 Polygon · 여러 조각 MultiPolygon)."""
+    rings = [[[lng, lat] for lat, lng in p] + [[p[0][1], p[0][0]]] for p in pieces]
+    if len(rings) == 1:
+        return {"type": "Polygon", "coordinates": rings}
+    return {"type": "MultiPolygon", "coordinates": [[r] for r in rings]}
+
+
+def _zone_outer_rings(zid: str):
+    """저장된 도형의 외곽 링 목록(조각마다 1개) — [위도, 경도] 소수 7자리."""
+    geo = json.loads(GEOJSON.read_text(encoding="utf-8"))
+    feat = next((f for f in geo["features"] if f["properties"].get("id") == zid), None)
+    g = (feat or {}).get("geometry") or {}
+    if not g.get("coordinates"):
+        return []
+    polys = g["coordinates"] if g["type"] == "MultiPolygon" else [g["coordinates"]]
+    return [[[round(c[1], 7), round(c[0], 7)] for c in poly[0][:-1]] for poly in polys]
+
+
+def _zone_shapely(zid: str):
+    """저장된 도형(Polygon·MultiPolygon) → EPSG:5179 shapely 도형 (겹침 검사용)."""
+    from shapely.geometry import shape
+    from shapely.ops import transform
+
+    fwd, _ = _proj()
+    geo = json.loads(GEOJSON.read_text(encoding="utf-8"))
+    feat = next((f for f in geo["features"] if f["properties"].get("id") == zid), None)
+    if feat is None or not (feat.get("geometry") or {}).get("coordinates"):
+        raise KeyError(zid)
+    return transform(lambda x, y, z=None: fwd(x, y), shape(feat["geometry"]))
 
 
 AREA_360 = int(round(_m2(RING_360)))
@@ -192,10 +270,15 @@ PROPS_360 = {
         "서초구청 공지(2026-01-21) 붙임 PDF의 지적도 위 빨간 점선 구역계를 그대로 옮긴 경계입니다 — "
         "북동 B2는 양재동 361~365번지 블록의 톱니(도로 굴곡)를 따라가고, 남서 B1은 349·358·359번지 "
         "블록, 남변은 353~355번지 남측 도로까지입니다. 가운데를 가로지르는 내부 간선도로가 B1·B2를 "
-        "가릅니다. 370 일대와는 20m 남짓 떨어져 겹침 0㎡입니다. 다만 동쪽 이웃 양재동 382 관리지역의 "
+        "가릅니다. 370 일대와는 20m 남짓 떨어져 겹침 0㎡입니다. 동쪽 이웃 양재동 382 관리지역의 "
         "저장 폴리곤(UQ120)은 2025-08-28 서울시 고시 제2025-476호로 74,515→36,683.1㎡로 줄기 전인 "
-        "기정 범위라 360 블록을 통째로 품고 있어 도형상으로는 겹칩니다(382 폴리곤을 변경 범위로 다시 "
-        "그려야 0이 됩니다)."
+        "기정 범위라 360 블록을 통째로 품고 있습니다"
+        + (
+            " — 그 382 도형에서 이 블록(30,699㎡)을 차집합해 겹침 0㎡로 맞췄습니다. 382 표기 면적·도형은 "
+            "고시 변경면적(36,683.1㎡)으로 다시 그려 재정합 예정입니다."
+            if TRIM_PARENTS
+            else "(382 폴리곤을 변경 범위로 다시 그려야 0이 됩니다)."
+        )
     ),
     "sources": [
         {
@@ -243,8 +326,13 @@ PROPS_370 = {
         "블록(372-4가 서쪽 꼭짓점), 중앙 370·373번지 블록, 북동 376번지 블록(376-3 근린공원 포함)까지이고, "
         "남동변은 390-1·390-2 도로 필지를 따라 자릅니다. 남쪽 360 일대와는 겹침 0㎡. 북동 이웃 양재동 374 "
         "관리지역의 저장 폴리곤(UQ120)은 2025-08-28 서울시 고시 제2025-476호로 65,070→45,953.2㎡로 줄기 전인 "
-        "기정 범위라 370 블록을 통째로 품고 있어 도형상으로는 겹칩니다(374 폴리곤을 변경 범위로 다시 그려야 "
-        "0이 됩니다)."
+        "기정 범위라 370 블록을 통째로 품고 있습니다"
+        + (
+            " — 그 374 도형에서 이 블록(15,230㎡)을 차집합해 겹침 0㎡로 맞췄습니다. 374 표기 면적·도형은 "
+            "고시 변경면적(45,953.2㎡)으로 다시 그려 재정합 예정입니다."
+            if TRIM_PARENTS
+            else "(374 폴리곤을 변경 범위로 다시 그려야 0이 됩니다)."
+        )
     ),
     "sources": [
         {
@@ -314,13 +402,51 @@ JOBS = [
     ("yangjae2-2", PROPS_YJ22, RING_YJ22),
 ]
 
+# ── 이웃 관리지역(374·382) — 새 블록만큼 차집합(2026-11-23 사용자 결정) ──────────────────
+#   pid, 표기 이름, 표기 면적(UQ120 기정·공개값), 뺄 구역 id, 뺄 구역 이름, 뺄 면적(도면), 고시 변경면적
+PARENT_JOBS = [
+    ("11000UQ120PS202503070074", "양재동 374", 61289, "yangjae-370", "370 일대", 15230, 45953.2),
+    ("11000UQ120PS202503070075", "양재동 382", 68804, "yangjae-360", "360 일대", 30699, 36683.1),
+]
+
+
+def _parent_props(name, published, cut_name, cut_area, changed, geom_area, npieces) -> dict:
+    """374·382 에 붙일 설명 — 표기 면적은 공개된 UQ120 기정 값 그대로 두고, 지도 도형 면적과
+    고시 변경면적·재정합 예정을 같이 밝힌다."""
+    piece = f"{npieces}조각" if npieces > 1 else "1조각"
+    return {
+        "note": (
+            f"{name} 일대 모아타운(관리지역)입니다. 지도 경계(geom UQ120)는 2025-08-28 서울시 고시 "
+            f"제2025-476호로 줄기 전(기정) 범위에서, 2026-11-22 새로 잡은 양재동 {cut_name} 모아타운 "
+            f"구역계({cut_area:,}㎡)를 차집합해 겹침 0㎡로 맞춘 것입니다. 서울시 고시 제2025-476호 "
+            f"변경면적({changed:,.1f}㎡) 기준 도형으로 다시 그려 재정합 예정입니다."
+        ),
+        "areaNote": (
+            f"표기 면적 {published:,}㎡는 2025-08-28 고시 전 UQ120 기정 도형의 공개 값입니다. 지도에 "
+            f"그린 도형은 {cut_name} 구역계를 뺀 {geom_area:,.0f}㎡({piece})이고, 서울시 고시 "
+            f"제2025-476호 변경면적은 {changed:,.1f}㎡ — 변경면적 기준으로 다시 그려 재정합 예정입니다."
+        ),
+        "boundaryNote": (
+            f"고시 도형(UQ120)에서 양재동 {cut_name} 구역계를 차집합한 경계({piece}) · 고시 "
+            f"변경면적({changed:,.1f}㎡)으로 재정합 예정"
+        ),
+    }
+
 META = {
-    "asOf": "2026-11-22",
+    "asOf": "2026-11-23",
     "zones": ["yangjae-360", "yangjae-370", "yangjae2-2"],
+    "parentsTrimmed": ["11000UQ120PS202503070074", "11000UQ120PS202503070075"] if TRIM_PARENTS else [],
     "note": (
         "양재2동 모아타운·도공복 구역계 정밀 보강 — 360·370은 서초구 공고 도면(2026-01-21)의 지적도 "
         "구역계를 연속지적도 필지선에 맞춰 옮긴 실경계(30,426㎡·14,969㎡), 2구역은 필지선을 따라 잡은 "
-        "가상경계(56,162㎡). 근사원(점선원) 3개를 모두 실제 다각형으로 대체."
+        "가상경계(56,162㎡). 근사원(점선원) 3개를 모두 실제 다각형으로 대체"
+        + (
+            ". 이웃 양재동 374·382(UQ120 기정 도형)에서는 370·360 블록을 차집합해 겹침 0㎡ — 두 구역 "
+            "도형 면적은 52,991·39,797㎡로 줄었고, 표기 면적은 고시 변경면적(45,953.2·36,683.1㎡)으로 "
+            "재정합 예정."
+            if TRIM_PARENTS
+            else "."
+        )
     ),
 }
 
@@ -362,19 +488,61 @@ def check() -> int:
     r = {zid: ring for zid, _, ring in JOBS}
     r["374"] = _zone_ring("11000UQ120PS202503070074")
     r["382"] = _zone_ring("11000UQ120PS202503070075")
-    for a, b in [
-        ("yangjae-360", "yangjae-370"),
-        ("yangjae-360", "yangjae2-2"),
-        ("yangjae-370", "yangjae2-2"),
-        ("yangjae2-2", "374"),
-    ]:
-        o = _overlap(r[a], r[b]) if r.get(a) and r.get(b) else float("nan")
-        ok = o < 0.01
-        print(f"[{'OK' if ok else 'FAIL'}] 겹침 {a}×{b} = {o:.3f}㎡")
+
+    P = {}
+    for zid in ["yangjae-360", "yangjae-370", "yangjae2-2", *[p[0] for p in PARENT_JOBS]]:
+        try:
+            P[zid] = _zone_shapely(zid)
+        except Exception as exc:  # noqa: BLE001 — 데이터가 없으면 FAIL 로 모은다
+            print(f"[FAIL] {zid} 도형 읽기 실패 — {exc}")
+            bad += 1
+
+    pairs = [
+        ("yangjae-360", "yangjae-370", 0.01),
+        ("yangjae-360", "yangjae2-2", 0.01),
+        ("yangjae-370", "yangjae2-2", 0.01),
+        ("yangjae2-2", "11000UQ120PS202503070074", 0.01),
+        ("yangjae2-2", "11000UQ120PS202503070075", 0.01),
+        ("yangjae-360", "11000UQ120PS202503070074", 0.01),
+        ("yangjae-370", "11000UQ120PS202503070075", 0.01),
+        # 374·382 는 원래 껌딩한 자리가 있어 0.1㎡ 선으로 스치는 정도는 허용(도형 오차)
+        ("11000UQ120PS202503070074", "11000UQ120PS202503070075", 1.0),
+    ]
+    if TRIM_PARENTS:
+        pairs += [
+            ("yangjae-360", "11000UQ120PS202503070075", 0.01),
+            ("yangjae-370", "11000UQ120PS202503070074", 0.01),
+        ]
+    for a, b, tol in pairs:
+        if a not in P or b not in P:
+            continue
+        o = P[a].intersection(P[b]).area
+        ok = o < tol
+        print(f"[{'OK' if ok else 'FAIL'}] 겹침 {a}×{b} = {o:,.3f}㎡")
         bad += 0 if ok else 1
     for a, b in [("yangjae-360", "382"), ("yangjae-370", "374")]:
+        if TRIM_PARENTS:
+            continue
         o = _overlap(r[a], r[b]) if r.get(a) and r.get(b) else float("nan")
         print(f"[참고] 겹침 {a}×{b} = {o:,.0f}㎡ (상대 구역 폴리곤이 고시 축소 전 기정 범위)")
+
+    for pid, name, published, _cut_id, _cut_name, _cut_area, changed in PARENT_JOBS:
+        g = P.get(pid)
+        if g is None:
+            continue
+        entry = next((z for z in src if z.get("id") == pid), None)
+        poly_pts = len((entry or {}).get("polygon") or [])
+        synced = bool(entry and poly_pts == len(_zone_outer_rings(pid)[0]))
+        info = (
+            f"{name} 도형 {g.area:,.0f}㎡/{g.geom_type} 표기 {published:,}㎡ "
+            f"고시 변경 {changed:,.1f}㎡ · seoul-zones 동기화 {'OK' if synced else 'FAIL'}"
+        )
+        if TRIM_PARENTS:
+            ok = g.is_valid and g.area < published and synced
+            print(f"[{'OK' if ok else 'FAIL'}] {info}")
+            bad += 0 if ok else 1
+        else:
+            print(f"[참고] {info} (트림 없음)")
     return bad
 
 
@@ -402,20 +570,31 @@ def apply() -> int:
         print(f"[반영] {zid} — {len(ring)}정점, area={props['area']}, geom={props['geom']}")
 
     if TRIM_PARENTS:
-        r360 = next(r for z, _, r in JOBS if z == "yangjae-360")
-        r370 = next(r for z, _, r in JOBS if z == "yangjae-370")
-        for pid, cuts in [
-            ("11000UQ120PS202503070075", [r360]),
-            ("11000UQ120PS202503070074", [r370]),
-        ]:
+        cut_rings = {zid: ring for zid, _, ring in JOBS}
+        for pid, name, published, cut_id, cut_name, cut_area, changed in PARENT_JOBS:
             feat = next((f for f in geo["features"] if f["properties"].get("id") == pid), None)
-            cur = _zone_ring(pid)
-            trimmed = _trim(cur, cuts)
-            feat["geometry"] = {
-                "type": "Polygon",
-                "coordinates": [[[lng, lat] for lat, lng in trimmed] + [[trimmed[0][1], trimmed[0][0]]]],
-            }
-            print(f"[트림] {pid} {len(cur)}→{len(trimmed)}정점, {_m2(cur):,.0f}→{_m2(trimmed):,.0f}㎡")
+            if feat is None:
+                print(f"[경고] {pid} 없음 — 트림 건너뜀")
+                continue
+            before = _zone_outer_rings(pid)
+            pieces, area = _trim_pieces(before, [cut_rings[cut_id]])
+            feat["geometry"] = _geom_ll(pieces)
+            extra = _parent_props(name, published, cut_name, cut_area, changed, area, len(pieces))
+            feat["properties"] = {**feat["properties"], **extra}
+            entry = next((z for z in src if z.get("id") == pid), None)
+            if entry is not None:
+                entry.update(extra)
+                entry["polygon"] = [list(p) for p in pieces[0]]
+                if len(pieces) > 1:
+                    entry["parts"] = [[list(p) for p in pc] for pc in pieces[1:]]
+                else:
+                    entry.pop("parts", None)
+                entry.pop("holes", None)
+            before_m2 = sum(_m2(ring) for ring in before)
+            print(
+                f"[트림] {pid}({name}) {len(before)}조각→{len(pieces)}조각, "
+                f"{before_m2:,.0f}→{area:,.0f}㎡ (빼는 블록 {cut_name} {cut_area:,}㎡)"
+            )
 
     geo["metadata"][META_KEY] = META
     geo["metadata"]["count"] = len(geo["features"])
