@@ -449,6 +449,17 @@ export default function ZoneExplorer() {
     // 왼쪽 창의 경매 상세는 **그 구역의 물건일 때만** 남긴다(핀을 눌러 들어온 경우)
     setAuctionDetail((d) => (d && d.zoneId === selectedId ? d : null));
   }, [selectedId]);
+
+  // 고른 구역이 준공·입주 완료 구역이면 ‘준공 포함’을 자동으로 켠다.
+  //   꺼져 있으면 그 구역은 지도 레이어에서 통째로 빠져 패널만 열리고 경계가 사라진다
+  //   (2026-11-23 제보: 경매 132건 쌍문동 507-1일원을 눌렀는데 지도에 구역이 안 보인다).
+  //   경매 목록·경매 핀·검색·지도 이름표·`?zone=` 링크 어느 경로로 들어와도 같은 규칙이 적용된다.
+  //   (‘준공 포함’을 다시 끄면 toggleCompleted 가 선택을 풀므로 바로 되켜지는 일은 없다.)
+  useEffect(() => {
+    if (!selectedId || showCompleted || !seoulZones.length) return;
+    const z = seoulZones.find((s) => s.id === selectedId);
+    if (z && isCompletedZone(z)) setShowCompleted(true);
+  }, [selectedId, seoulZones, showCompleted]);
   // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
   const selectedListings = listings.filter((l) =>
     listingMatchesZone(l, selectedId, selectedSeoul?.name ?? selected?.name, selectedSeoul?.alias)
@@ -1101,13 +1112,9 @@ export default function ZoneExplorer() {
     setSelectedId(id);
     setPanelOpen(true);
     setAuctionFocus(null);
-    const z = seoulZones.find((s) => s.id === id);
-    // 준공·입주 완료 구역(예: 쌍문동 507-1일원 — 경매 132건)은 ‘준공 포함’이 꺼져 있으면
-    // 지도 레이어에서 통째로 빠진다. 그 구역을 골랐는데 지도에 아무것도 안 보이면 고장으로 보이므로,
-    // 고른 구역이 완공 구역이면 ‘준공 포함’을 자동으로 켜 경계를 그린다(2026-11-23 제보).
-    if (z && isCompletedZone(z) && !showCompleted) setShowCompleted(true);
     // 유형 필터가 켜져 있어 고른 구역이 지도 레이어에서 빠져 있으면 지도에서 사라진 것처럼 보인다
     // → 필터를 풀어 경계를 다시 그린다(검색·주소 판정은 필터와 무관하게 전체를 본다).
+    const z = seoulZones.find((s) => s.id === id);
     if (z && typeFilter !== "전체" && z.type !== typeFilter) setTypeFilter("전체");
     // 경매 목록에서 들어온 경우 경매 핀도 켠다 — 구역을 고르면 선택 초기화 효과가 ‘자동(켜짐)’으로
     // 돌리지만, 같은 구역에서 핀을 꺼 둔 상태로 목록을 누르는 경우까지 확실히 켜기 위해 명시한다.
