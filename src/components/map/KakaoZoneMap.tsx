@@ -434,6 +434,7 @@ function cardStage(stage?: string | null): string {
   const raw = (stage ?? "").replace(/\s*\([^)]*\)\s*/g, " ").trim();
   if (!raw) return "";
   const fixed = raw
+    .replace(/^사업시행자\s*지정\s*철회.*$/, "시행자 지정 철회")
     .replace(/^후보지선정$/, "후보지 선정")
     .replace(/^대상지선정$/, "대상지 선정")
     .replace(/^관리처분계획인가$/, "관리처분 인가")

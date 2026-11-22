@@ -209,6 +209,8 @@ export function shortStage(stage?: string | null): string {
   if (!s) return "";
   if (s.includes("연번")) return "연번동의";
   if (s.includes("관리처분")) return "관리처분";
+  // 사업시행자 '지정 철회'는 진행 단계가 아니라 되돌아간 사건이라 따로 줄인다(예: 대선제분1구역1지구)
+  if (/사업시행자\s*지정\s*(철회|취소)/.test(s)) return "시행자철회";
   if (s.includes("조합설립")) return "조합설립";
   if (s.includes("추진위")) return "추진위";
   if (s.includes("주민합의체")) return "주민합의체";
