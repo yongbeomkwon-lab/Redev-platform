@@ -72,9 +72,10 @@ export async function GET(request: Request) {
 
   const params = new URLSearchParams();
   incoming.searchParams.forEach((value, name) => {
-    if (name === "service" || name === "key" || name === "domain") return;
+    if (name === "key" || name === "domain") return;
     params.set(name, value);
   });
+  params.set("service", service);
   params.set("key", key);
   params.set("domain", domain);
   if (!params.has("format")) params.set("format", "json");
