@@ -5,11 +5,40 @@ import SiteNav from "@/components/SiteNav";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
+const SITE_URL = "https://redev-platform-iota.vercel.app";
+const SHARE_TITLE = "리디브 · 서울 정비사업 실거래·경매·매물 지도";
+const SHARE_DESCRIPTION =
+  "서울 2,400여 개 재개발·재건축 구역경계, 5년 실거래, 법원경매, 개발압력 분석까지 한눈에";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   applicationName: "리디브",
   title: "리디브(redev) — 서울 재개발 구역·매물 플랫폼",
   description:
     "서울 정비구역 실거래가 조회(무료), 중개사 매물 등록(유료), 검증 매물 열람(유료) — 재개발 입주권·조합원 물건 원스톱 플랫폼",
+  // 카카오톡·스레드·커뮤니티에 링크를 붙였을 때 뜨는 미리보기 카드
+  openGraph: {
+    type: "website",
+    siteName: "리디브",
+    locale: "ko_KR",
+    url: "/",
+    title: SHARE_TITLE,
+    description: SHARE_DESCRIPTION,
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "리디브 — 서울 정비사업 실거래·경매·매물 지도",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SHARE_TITLE,
+    description: SHARE_DESCRIPTION,
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
