@@ -1,20 +1,23 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SiteNav — 상단 내비게이션 (2026-11-21 리디자인)
-//   · 지도 화면(/), 검증 매물(/listings), 판례 리포트(/cases), CTA(중개사 매물 등록)
+// SiteNav — 상단 내비게이션 (2026-11-22 커뮤니티 추가)
+//   · 지도 화면(/), 검증 매물(/listings), 판례 리포트(/cases), 커뮤니티(/community)
+//     + CTA(중개사 매물 등록) + 로그인/회원가입(HeaderAuth)
 //   · 판례 리포트는 매주 월요일 정비사업 판례를 한 편씩 올리는 자리 — 첫 화면에서
 //     바로 들어갈 수 있게 메뉴에 둔다(아직 글은 준비 중 안내). 옆의 점이 그 표시다.
 //   · 지금 있는 화면은 오레오 블루 밑줄로 표시한다.
-//   · 폰에서는 이름을 줄여 한 줄에 담는다(지도·매물·판례 / 매물 등록).
+//   · 폰에서는 이름을 줄여 한 줄에 담는다(지도·매물·판례·커뮤 / 등록).
 // ─────────────────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import HeaderAuth from "@/components/auth/HeaderAuth";
 
 const LINKS = [
   { href: "/", label: "구역 탐색", short: "지도" },
   { href: "/listings", label: "검증 매물", short: "매물" },
   { href: "/cases", label: "판례 리포트", short: "판례", note: true },
+  { href: "/community", label: "커뮤니티", short: "커뮤" },
 ];
 
 export default function SiteNav() {
@@ -53,9 +56,12 @@ export default function SiteNav() {
         href="/register"
         className="ml-1 rounded-md bg-brand px-2 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5 sm:px-2.5"
       >
-        <span className="sm:hidden">매물 등록</span>
+        <span className="sm:hidden">등록</span>
         <span className="hidden sm:inline">중개사 매물 등록</span>
       </Link>
+      <div className="ml-0.5 sm:ml-1">
+        <HeaderAuth />
+      </div>
     </nav>
   );
 }

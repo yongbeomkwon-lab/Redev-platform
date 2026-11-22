@@ -54,6 +54,7 @@ import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
 import ZoneAuctions from "@/components/ZoneAuctions";
+import ZoneTalk from "@/components/community/ZoneTalk";
 import AuctionDetailCard from "@/components/AuctionDetailCard";
 import { formatWon, formatSaleDate, loadAuctions, type AuctionItem, type AuctionsData } from "@/lib/auctions";
 import { buildAuctionPins, type AuctionMapPin } from "@/lib/auction-pins";
@@ -2533,6 +2534,9 @@ export default function ZoneExplorer() {
                     onUnlockRequest={setUnlockTarget}
                   />
                 </div>
+
+                {/* 이 구역 이야기 — 커뮤니티(community_posts)의 zone_id 글. 패널에서 바로 한줄 글쓰기 */}
+                <ZoneTalk zoneId={selected.id} zoneName={selected.name} />
 
                 <p className="text-[10px] leading-snug text-slate-400">
                   ※ 구역 경계·면적·추진단계는 서울 열린데이터광장 「서울시 도시계획사업 현황(서울플랜+)」(OA-22712)

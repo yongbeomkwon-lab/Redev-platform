@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import BrandLogo from "@/components/BrandLogo";
 import SiteNav from "@/components/SiteNav";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -33,6 +34,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       {/* 헤더는 슬림(52px) — 지도 탐색 화면이 화면 전체를 쓰도록 위아래 여백을 최소화한다 */}
       <body className="flex min-h-dvh flex-col bg-canvas text-ink antialiased">
+        {/* 로그인 상태·로그인 창은 앱 전체가 공유한다(헤더·커뮤니티·지도 구역 패널) */}
+        <AuthProvider>
         <header className="sticky top-0 z-[700] h-[52px] shrink-0 border-b border-line bg-white">
           <div className="flex h-full items-center justify-between gap-2 px-3 sm:px-4">
             <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap" aria-label="리디브 홈">
@@ -46,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main className="flex-1">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

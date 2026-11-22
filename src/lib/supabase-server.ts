@@ -102,3 +102,39 @@ export function sbDelete<T>(table: string, filter: string): Promise<SbResult<T>>
     headers: { Prefer: "return=representation" },
   });
 }
+
+/** 행 수정 — filter 로 고른 행에 patch 를 적용하고 수정된 행을 돌려받는다 */
+export function sbUpdate<T>(table: string, filter: string, patch: unknown): Promise<SbResult<T>> {
+  return request<T>(`${table}?${filter}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+    headers: { Prefer: "return=representation" },
+  });
+}
+
+/** 조건에 맞는 전체 행 수 (게시판 페이지 번호·총 건수) — 본문은 받지 않는다 */
+export async function sbCount(
+  table: string,
+  query: string
+): Promise<{ ok: true; count: number } | { ok: false; status: number; message: string }> {
+  if (!supabaseConfigured()) return { ok: false, status: 0, message: "Supabase 환경변수가 없습니다." };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      method: "HEAD",
+      headers: {
+        apikey: rawKey,
+        Authorization: `Bearer ${rawKey}`,
+        Prefer: "count=exact",
+        "Range-Unit": "items",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return { ok: false, status: res.status, message: `HTTP ${res.status}` };
+    // Content-Range: 0-9/123  → 분모가 전체 건수
+    const range = res.headers.get("content-range") ?? "";
+    const total = Number(range.split("/")[1]);
+    return { ok: true, count: Number.isFinite(total) ? total : 0 };
+  } catch (e) {
+    return { ok: false, status: 0, message: e instanceof Error ? e.message : "요청 실패" };
+  }
+}

@@ -16,6 +16,7 @@ import type { SeoulZonesMeta, SeoulZone } from "@/lib/seoul-zones";
 import type { Listing } from "@/lib/types";
 import { TYPE_COLORS, badgeColor } from "./map/colors";
 import ZoneTransactions from "./ZoneTransactions";
+import ZoneTalk from "./community/ZoneTalk";
 import { ZoneListingCards } from "./ZoneListingCards";
 import LandPermitNotice from "./LandPermitNotice";
 import type { TxMapPin } from "./map/props";
@@ -269,6 +270,9 @@ export default function ZoneOfficialPanel({
         onTxPins={onTxPins}
         onOpenBuilding={onOpenBuilding}
       />
+
+      {/* 이 구역 이야기 — 커뮤니티(community_posts)의 zone_id 글. 패널에서 바로 한줄 글쓰기 */}
+      <ZoneTalk zoneId={zone.id} zoneName={zone.name} />
 
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-slate-600">
         <h3 className="mb-1.5 text-xs font-bold text-slate-700">{boundaryMissing ? "경계·사업 정보" : "상세 데이터"}</h3>
