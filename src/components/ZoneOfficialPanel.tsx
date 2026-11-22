@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { SeoulZonesMeta, SeoulZone } from "@/lib/seoul-zones";
 import type { Listing } from "@/lib/types";
-import { TYPE_COLORS } from "./map/colors";
+import { TYPE_COLORS, badgeColor } from "./map/colors";
 import ZoneTransactions from "./ZoneTransactions";
 import { ZoneListingCards } from "./ZoneListingCards";
 import LandPermitNotice from "./LandPermitNotice";
@@ -111,7 +111,18 @@ export default function ZoneOfficialPanel({
           <dt className="whitespace-nowrap text-emerald-700/80">자치구</dt>
           <dd className="min-w-0 break-words">{zone.gu}</dd>
           <dt className="whitespace-nowrap text-emerald-700/80">사업유형</dt>
-          <dd className="min-w-0 break-words">{zone.kind}</dd>
+          <dd className="min-w-0 break-words">
+            {zone.kind}
+            {zone.badgeType && (
+              <span
+                className="ml-1.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white align-middle"
+                style={{ background: badgeColor(zone.badgeType, zone.type) }}
+                title="사업 방식이 확정되기 전이라 지도 뱃지에 이렇게 표기합니다"
+              >
+                {zone.badgeType}
+              </span>
+            )}
+          </dd>
           <dt className="whitespace-nowrap text-emerald-700/80">추진단계</dt>
           <dd className="min-w-0 break-words">{zone.stage}</dd>
           <dt className="whitespace-nowrap text-emerald-700/80">구역면적</dt>
@@ -138,6 +149,13 @@ export default function ZoneOfficialPanel({
             ) : zone.geom === "고시도면" ? (
               <>
                 구청·서울시 고시 지형도면에서 옮긴 경계
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
+                </span>
+              </>
+            ) : zone.geom === "추진위안내도" ? (
+              <>
+                추진위·신탁사 사업설명회 상세구역도에서 옮긴 경계
                 <span className="text-emerald-700/70">
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
                 </span>

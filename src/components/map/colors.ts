@@ -79,6 +79,24 @@ export const TYPE_TINT: Record<string, string> = {
 const NEUTRAL = "#64748B";
 const NEUTRAL_LINE = "#4B5563";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 사업유형 대신 띄우는 말 (badgeType)
+//
+//   · 사업 방식이 확정되기 전인 구역은 사업유형을 단정해 뱃지에 쓰면 사실과 달라진다.
+//     예: 방배동 467-19는 신속통합기획과 모아타운을 함께 검토 중이라 '신통모아미정'으로 둔다.
+//   · 색은 9색 팔레트(원색)에서 빼 둔 **중립 슬레이트** — 다른 구역 색과 헷갈리지 않고,
+//     지도에서 눈에 튀지도 않는다. 폴리곤은 type 색 그대로라 범례·필터 체계는 바뀌지 않는다.
+// ─────────────────────────────────────────────────────────────────────────────
+export const BADGE_COLORS: Record<string, string> = {
+  신통모아미정: "#475569",
+};
+
+/** 뱃지 알약 바탕 — badgeType 이 있으면 중립색, 없으면 사업유형 원색 */
+export function badgeColor(badgeType?: string | null, type?: string | null): string {
+  if (badgeType && BADGE_COLORS[badgeType]) return BADGE_COLORS[badgeType];
+  return typeColor(type);
+}
+
 export function typeColor(type?: string | null): string {
   return (type && TYPE_COLORS[type as MapZoneType]) || NEUTRAL;
 }

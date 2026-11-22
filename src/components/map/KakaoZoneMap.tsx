@@ -33,7 +33,7 @@ import {
   type AgeBuilding,
   type BuildingAgeResponse,
 } from "@/lib/building-age";
-import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
+import { TYPE_COLORS, badgeColor, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
@@ -859,7 +859,12 @@ export default function KakaoZoneMap({
         const card = cardMode && sw >= cardMin.w && sh >= cardMin.h;
         const name = card ? cardName(z.name) : tagName(z.name);
         // 카드 캡슐은 사용자가 쓰는 온전한 사업유형명(신속통합기획·일반재개발·민간도심복합)을 쓴다
-        const typeText = card ? shortZoneType(z.type) : tagTypeText(z.type);
+        //   · 사업 방식이 아직 정해지지 않은 구역은 레코드의 badgeType(예: '신통모아미정')을 그대로 띄운다
+        const typeText = z.badgeType
+          ? z.badgeType
+          : card
+            ? shortZoneType(z.type)
+            : tagTypeText(z.type);
         const stageText = card ? cardStage(z.stage) : "";
         const size = card ? cardSizeOf(name, typeText, stageText) : { w: widthOf(name, typeText), h: TAG_H };
         // 캡슐이 카드 위로 걸쳐 있어 덩어리 중심이 카드 본문보다 7px 위다 — 본문이 구역 중심에 오게 올린다
@@ -875,7 +880,7 @@ export default function KakaoZoneMap({
           typeText,
           stageText,
           card,
-          color: TYPE_COLORS[z.type] ?? "#64748b",
+          color: badgeColor(z.badgeType, z.type),
           full: labelLine(z),
         });
       };
@@ -2331,10 +2336,13 @@ export default function KakaoZoneMap({
     //   · 예전에는 ‘유형 · 단계’를 한 칩에 넣고 이름표 전체를 진한 남색 판으로 그렸고,
     //     그 탓에 이름표를 누르면 뱃지 바탕색이 바뀐 것처럼 보였다(사용자 요청으로 흰 칩 유지).
     //   · 단계·지번은 칩 대신 이름 뒤 회색 글씨로 붙인다 — 뱃지는 그대로, 정보만 늘어난다.
-    const typeText = cardZoom ? shortZoneType(type) : tagTypeText(type);
+    // 사업 방식이 아직 정해지지 않은 구역은 레코드의 badgeType 을 그대로 띄운다(예: 방배 467-19 '신통모아미정')
+    const badgeType =
+      seoul?.badgeType ?? (featured as { badgeType?: string } | undefined)?.badgeType;
+    const typeText = badgeType ?? (cardZoom ? shortZoneType(type) : tagTypeText(type));
     // 카드형(동네 단위 확대)에서는 둘째 줄이 진행단계 문구가 된다 — 기본 카드 뱃지와 같은 말·같은 모양
     const stageLabel = cardZoom ? cardStage(stage) : shortStage(stage);
-    const typeColor = type ? (TYPE_COLORS as Record<string, string>)[type] ?? "#64748b" : "#64748b";
+    const typeColor = badgeColor(badgeType, type);
     const badge = typeText
       ? `<span class="zone-type-badge" style="background:${typeColor}">${escapeHtml(typeText)}</span>`
       : "";
