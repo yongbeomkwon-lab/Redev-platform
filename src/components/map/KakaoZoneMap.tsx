@@ -310,8 +310,12 @@ const TAG_MIN_H = 5;
  */
 const TAG_MAX_DESKTOP = 32;
 const TAG_MAX_MOBILE = 16;
-const TAG_FONT = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
-const TAG_CHIP_FONT = "800 9px ui-sans-serif, system-ui, -apple-system, sans-serif";
+/** 작은 글씨용 UI 고딕 스택 — globals.css 의 --font-ui 와 같은 순서로 맞춘다(측정 폭 = 화면 폭) */
+const UI_FONT_STACK =
+  "'Pretendard', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', system-ui, sans-serif";
+const G_FONT_STACK = `'Gmarket Sans', ${UI_FONT_STACK}`;
+const TAG_FONT = `700 11px ${G_FONT_STACK}`;
+const TAG_CHIP_FONT = `600 9px ${UI_FONT_STACK}`;
 /** 이름표 높이(px) — 11px 글자 + 위아래 여백 2px + 테두리 */
 const TAG_H = 17;
 
@@ -357,9 +361,9 @@ function cardMinSize(level: number): { w: number; h: number } {
   return { w: Math.max(TAG_MIN_W, CARD_MIN_W * k), h: Math.max(TAG_MIN_H, CARD_MIN_H * k) };
 }
 /** 카드 안 글자 크기 — 칩(11px)보다 한 단계 크게, 스케치의 비중을 따른다 */
-const CARD_NAME_FONT = "700 15px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
-const CARD_STAGE_FONT = "600 10px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
-const CARD_PILL_FONT = "800 10px 'Gmarket Sans', 'Pretendard Variable', Pretendard, system-ui, sans-serif";
+const CARD_NAME_FONT = `700 15px ${G_FONT_STACK}`;
+const CARD_STAGE_FONT = `500 10px ${UI_FONT_STACK}`;
+const CARD_PILL_FONT = `600 10px ${UI_FONT_STACK}`;
 
 /**
  * 사업유형 칩 문구 — 좁은 이름표에 들어가도록 짧게.
@@ -490,6 +494,11 @@ export default function KakaoZoneMap({
   const stationLayerRef = useRef<HTMLDivElement | null>(null);
   const labelLayerRef = useRef<HTMLDivElement | null>(null);
   /**
+   * 선택 구역 이름표의 실제 크기(px) — 퍼센트(-50%) 가운데 정렬이 소수점 픽셀에 걸리지 않도록
+   * 폭·높이 반을 정수 좌표에 되돌려 놓는 데 쓴다. 내용(labelHtml·모드)이 바뀌면 dirty 로 다시 잰다.
+   */
+  const labelSizeRef = useRef<{ w: number; h: number; dirty: boolean }>({ w: 0, h: 0, dirty: true });
+  /**
    * 기본 구역 이름표(구역명 + 사업유형 뱃지) 레이어
    *   · 요소는 React 가 아니라 draw 가 직접 만들고 풀에서 재사용한다 — 지도를 옮길 때마다
    *     수십 개 버튼을 리렌더하면 이동이 끓긴다(이 파일의 다른 레이어도 같은 이유로 DOM 을 직접 만진다).
@@ -501,6 +510,8 @@ export default function KakaoZoneMap({
   const tagPoolRef = useRef<HTMLButtonElement[]>([]);
   /** 이름표 글자 폭 측정 캐시(이름|유형 → px) — 매 프레임 measureText 를 줄인다 */
   const tagWRef = useRef<Map<string, number>>(new Map());
+  /** 이름표 실제 DOM 크기(모드|이름|유형|단계 → w,h) — 가운데 정렬을 정수 픽셀에 맞추는 데 쓴다 */
+  const tagSizeRef = useRef<Map<string, { w: number; h: number }>>(new Map());
   /** 진단용 — 마지막 프레임의 이름표 배치 소요(ms). `?diag=1` 에서만 읽는다 */
   const tagMsRef = useRef(0);
   /** 이번 프레임에 놓인 이름표의 사각형(구역 id → 높이) — 매물 배지가 위로 비켜 놓는다 */
@@ -786,16 +797,53 @@ export default function KakaoZoneMap({
     if (!ctx) return;
     // 화면 좌표에 붙어 있는 DOM(구역 이름표·주소 핀)도 같은 변환으로 옮긴다 —
     //   카카오 오버레이(z-index 1)에 두면 우리 캔버스(z-index 2)가 위에 깔려 폴리곤 색에 덮인다.
+    //   · 좌표는 반드시 **정수 픽셀**로 스냅한다 — 소수점 자리에 놓인 글자는 서브픽셀에서 다시 그려져
+    //     흐려진다(예전엔 0.1px 단위로 반올림해 두어 이름표가 지도에 따라 번졌다).
+    //   · translate3d 대신 2D translate — 불필요한 GPU 레이어 승격을 막아 글자가 선명하게 남는다.
     const placeOnMap = (node: HTMLElement | null, lat: number, lng: number) => {
       if (!node) return;
       const x = p0x + (lng - lng0) * pxPerLng;
       const y = p0y + (mercator(lat) - m0) * pxPerMerc;
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
       const far = x < -260 || x > cw + 260 || y < -260 || y > ch + 260;
-      node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0)`;
+      node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
       node.style.visibility = far ? "hidden" : "visible";
     };
-    placeOnMap(labelLayerRef.current, labelAtRef.current.lat, labelAtRef.current.lng);
+    /**
+     * 선택 구역 이름표 — 자식이 스스로 `translate(-50%, 50%)` 로 가운데를 잡으므로,
+     * 레이어는 폭·높이 반의 소수 부분을 미리 더한 자리에 놓는다 → 최종 글자 상자가 정수 픽셀에 떨어진다.
+     * 크기는 내용이 바뀔 때만 잰다(매 프레임 측정은 지도 이동 중 레이아웃을 다시 돌린다).
+     */
+    const placeLabel = () => {
+      const node = labelLayerRef.current;
+      if (!node) return;
+      const { lat, lng } = labelAtRef.current;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        node.style.visibility = "hidden";
+        return;
+      }
+      const x = p0x + (lng - lng0) * pxPerLng;
+      const y = p0y + (mercator(lat) - m0) * pxPerMerc;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        node.style.visibility = "hidden";
+        return;
+      }
+      if (labelSizeRef.current.dirty) {
+        const el = node.firstElementChild as HTMLElement | null;
+        if (el && el.offsetWidth > 0) {
+          labelSizeRef.current = { w: el.offsetWidth, h: el.offsetHeight, dirty: false };
+        }
+      }
+      const { w, h } = labelSizeRef.current;
+      // 카드형은 덩어리 중심이 본문보다 7px 위 — 그만큼 내려 본문을 구역 중심에 맞춘다
+      const dy = cardZoomRef.current ? 7 : 0;
+      const tx = Math.round(x - w / 2) + w / 2;
+      const ty = Math.round(y - h / 2 - dy) + h / 2 + dy;
+      node.style.transform = `translate(${tx}px,${ty}px)`;
+      const far = x < -260 || x > cw + 260 || y < -260 || y > ch + 260;
+      node.style.visibility = far ? "hidden" : "visible";
+    };
+    placeLabel();
     placeOnMap(pinLayerRef.current, pinAtRef.current.lat, pinAtRef.current.lng);
     placeOnMap(stationLayerRef.current, stationAtRef.current.lat, stationAtRef.current.lng);
 
@@ -1005,6 +1053,25 @@ export default function KakaoZoneMap({
       }
 
       // DOM 반영 — 이번에 안 보이는 요소는 숨겨 풀에 돌리고, 새 id 만 만들어 붙인다
+      /**
+       * 이름표를 **정수 픽셀** 자리에 앉힌다.
+       *   · 예전: `translate3d(소수점px) … translate(-50%,-50%)` — 폭이 홀수인 이름표는 가운데
+       *     정렬이 .5px 에 걸려, 브라우저가 글자를 서브픽셀 위치에서 다시 그리며 뭉개졌다.
+       *     IMG_0732 에서 같은 화면의 왼쪽 뱃지는 또렷하고 ‘한남하이츠’만 흔들린 이유다.
+       *   · 이름표의 실제 DOM 폭·높이를 한 번 재어(내용이 바뀔 때만) 반 픽셀을 잘라낸 좌표를 쓴다.
+       */
+      const placeTag = (node: HTMLButtonElement, c: TagCand) => {
+        const sizeKey = node.dataset.key ?? `${c.w}|${c.h}`;
+        let sz = tagSizeRef.current.get(sizeKey);
+        if (!sz) {
+          const mw = node.offsetWidth;
+          const mh = node.offsetHeight;
+          sz = mw > 0 && mh > 0 ? { w: mw, h: mh } : { w: c.w, h: c.h };
+          if (tagSizeRef.current.size > 800) tagSizeRef.current.clear();
+          tagSizeRef.current.set(sizeKey, sz);
+        }
+        node.style.transform = `translate(${Math.round(c.x - sz.w / 2)}px,${Math.round(c.y - sz.h / 2)}px)`;
+      };
       const keep = new Set(chosen.map((c) => c.id));
       for (const [id, node] of tagElsRef.current) {
         if (keep.has(id)) continue;
@@ -1071,12 +1138,12 @@ export default function KakaoZoneMap({
           // 호버 툴팁(브라우저 기본 title 박스)도 띄우지 않는다 — 같은 전문은 눌러서 여는 상세 패널에 있다.
           //   긴 이름이 잘려도 스크린리더에는 전문이 전달되도록 aria-label 로만 남긴다.
           node.setAttribute("aria-label", c.full);
-          node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
           node.style.visibility = "visible";
           tagLayer.appendChild(node);
           tagElsRef.current.set(c.id, node);
+          placeTag(node, c);
         } else {
-          node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
+          placeTag(node, c);
           node.style.visibility = "visible";
         }
         tagBoxRef.current.set(c.id, { h: c.h });
@@ -1123,7 +1190,7 @@ export default function KakaoZoneMap({
           continue;
         }
         placedBadges.push({ x, y });
-        node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+        node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-50%)`;
         node.style.visibility = "visible";
       }
     }
@@ -1165,7 +1232,7 @@ export default function KakaoZoneMap({
           continue;
         }
         placed.push({ x, y });
-        node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-100%)`;
+        node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-100%)`;
         node.style.visibility = "visible";
         if (p.id === openId) openPos = { x, y, visible: true };
       }
@@ -1174,7 +1241,7 @@ export default function KakaoZoneMap({
       const cardEl = auctionCardElRef.current;
       if (cardEl) {
         if (openPos && openPos.visible) {
-          cardEl.style.transform = `translate3d(${Math.round(openPos.x * 10) / 10}px,${Math.round(openPos.y * 10) / 10}px,0)`;
+          cardEl.style.transform = `translate(${Math.round(openPos.x)}px,${Math.round(openPos.y)}px)`;
           cardEl.style.visibility = "visible";
         } else {
           cardEl.style.visibility = "hidden";
@@ -1217,7 +1284,7 @@ export default function KakaoZoneMap({
           continue;
         }
         placedPins.push({ x, y });
-        node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-100%)`;
+        node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-100%)`;
         node.style.visibility = "visible";
       }
     }
@@ -1234,7 +1301,7 @@ export default function KakaoZoneMap({
         if (!Number.isFinite(x) || !Number.isFinite(y) || x < -150 || x > cw + 150 || y < -150 || y > ch + 150) {
           node.style.visibility = "hidden";
         } else {
-          node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+          node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-50%)`;
           node.style.visibility = "visible";
         }
       }
@@ -1293,14 +1360,14 @@ export default function KakaoZoneMap({
         // 서울 전체 보기에서 자리가 없는 핀은 가격표 대신 작은 점으로 — 63건 위치가 모두 남는다
         if (!placed && compact) {
           if (pinEl) pinEl.dataset.dot = "1";
-          node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-50%)`;
+          node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-50%)`;
           node.style.visibility = "visible";
           node.style.zIndex = "1";
           continue;
         }
         if (pinEl) pinEl.dataset.dot = "0";
         placedMy.push({ x: x + ox, y: y + oy });
-        node.style.transform = `translate3d(${Math.round((x + ox) * 10) / 10}px,${Math.round((y + oy) * 10) / 10}px,0) translate(-50%,-100%)`;
+        node.style.transform = `translate(${Math.round(x + ox)}px,${Math.round(y + oy)}px) translate(-50%,-100%)`;
         node.style.visibility = "visible";
         node.style.zIndex = p.id === openId ? "3" : "1";
       }
@@ -1671,7 +1738,7 @@ export default function KakaoZoneMap({
             continue;
           }
           node.style.visibility = "visible";
-          node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0)`;
+          node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
         }
       }
     }
@@ -2496,6 +2563,25 @@ export default function KakaoZoneMap({
     }`;
   }, [labelZoneId, seoulZones, zones, admin?.zones, cardZoom]);
 
+  // 이름표 내용이 바뀌면 다음 draw 에서 크기를 다시 재게 한다 — 가운데 정렬을 정수 픽셀에 맞추는 근거
+  useEffect(() => {
+    labelSizeRef.current.dirty = true;
+  }, [labelHtml, cardZoom]);
+
+  // 웹 폰트가 늦게 실리면 글자 폭이 달라진다 — 실린 뒤 한 번 다시 재고 그린다
+  useEffect(() => {
+    let alive = true;
+    void document.fonts?.ready.then(() => {
+      if (!alive) return;
+      labelSizeRef.current.dirty = true;
+      tagSizeRef.current.clear();
+      draw();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [draw]);
+
   useEffect(() => {
     const k = sdkRef.current;
     const map = mapRef.current;
@@ -2955,7 +3041,7 @@ export default function KakaoZoneMap({
               background: "#fffbeb",
               color: "#7c2d12",
               fontSize: "11px",
-              fontWeight: 800,
+              fontWeight: 700,
               lineHeight: 1,
               padding: "3px 7px",
               whiteSpace: "nowrap",
@@ -3020,7 +3106,8 @@ export default function KakaoZoneMap({
                   cursor: "pointer",
                   textAlign: "center",
                   whiteSpace: "nowrap",
-                  lineHeight: 1.15,
+                  // 두 줄(11px·9px)을 정수 높이 한 줄로 잡는다 — 높이가 소수면 -100% 이동이 반 픽셀에 걸려 흐려진다
+                  lineHeight: "13px",
                 }}
               >
                 <span className="auction-pin-label">
@@ -3028,14 +3115,14 @@ export default function KakaoZoneMap({
                     style={{
                       display: "block",
                       fontSize: "11px",
-                      fontWeight: 800,
+                      fontWeight: 700,
                       color: "#7c2d12",
                       letterSpacing: "-0.02em",
                     }}
                   >
                     ⚖️ {p.priceLabel}
                   </span>
-                  <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#92400e" }}>
+                  <span style={{ display: "block", fontSize: "9px", fontWeight: 500, color: "#92400e" }}>
                     {p.subLabel}
                   </span>
                 </span>
@@ -3117,21 +3204,22 @@ export default function KakaoZoneMap({
                   cursor: "pointer",
                   textAlign: "center",
                   whiteSpace: "nowrap",
-                  lineHeight: 1.15,
+                  // 두 줄(11px·9px)을 정수 높이 한 줄로 잡는다 — 높이가 소수면 -100% 이동이 반 픽셀에 걸려 흐려진다
+                  lineHeight: "13px",
                 }}
               >
                 <span
                   style={{
                     display: "block",
                     fontSize: active ? "12px" : "11px",
-                    fontWeight: 800,
+                    fontWeight: 700,
                     color: active ? "#0054a6" : "#1A1A1A",
                     letterSpacing: "-0.02em",
                   }}
                 >
                   {p.priceLabel}
                 </span>
-                <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: active ? "#2b6b9e" : "#5B6472", letterSpacing: "-0.01em" }}>
+                <span style={{ display: "block", fontSize: "9px", fontWeight: 500, color: active ? "#2b6b9e" : "#5B6472", letterSpacing: "-0.01em" }}>
                   {active ? `${p.name}` : p.areaLabel || p.kind}
                 </span>
               </button>
@@ -3158,7 +3246,7 @@ export default function KakaoZoneMap({
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <span
-                      style={{ fontSize: "9px", fontWeight: 800, color: "#fff", background: accent, borderRadius: "3px", padding: "1px 4px" }}
+                      style={{ fontSize: "9px", fontWeight: 600, color: "#fff", background: accent, borderRadius: "3px", padding: "1px 4px" }}
                     >
                       {p.kind}
                     </span>
@@ -3268,16 +3356,17 @@ export default function KakaoZoneMap({
                   cursor: "pointer",
                   textAlign: "center",
                   whiteSpace: "nowrap",
-                  lineHeight: 1.15,
+                  // 두 줄(11px·9px)을 정수 높이 한 줄로 잡는다 — 높이가 소수면 -100% 이동이 반 픽셀에 걸려 흐려진다
+                  lineHeight: "13px",
                 }}
               >
                 <span className="my-pin-label">
-                  <span style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>
+                  <span style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "#0f172a" }}>
                     {p.priceLabel}
                   </span>
                   <span
                     className="my-pin-sub"
-                    style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#475569" }}
+                    style={{ display: "block", fontSize: "9px", fontWeight: 500, color: "#475569" }}
                   >
                     {p.propertyType}
                     {areaShort ? ` · ${areaShort}` : ""}
@@ -3310,7 +3399,7 @@ export default function KakaoZoneMap({
                     <span
                       style={{
                         fontSize: "9px",
-                        fontWeight: 800,
+                        fontWeight: 600,
                         color: "#fff",
                         background: accent,
                         borderRadius: "3px",
@@ -3346,7 +3435,7 @@ export default function KakaoZoneMap({
                     </button>
                   </div>
 
-                  <div style={{ marginTop: "3px", fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>
+                  <div style={{ marginTop: "3px", fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
                     {p.priceText}
                   </div>
 
@@ -3388,7 +3477,7 @@ export default function KakaoZoneMap({
                           borderRadius: "6px",
                           padding: "3px 4px",
                           fontSize: "10px",
-                          fontWeight: 800,
+                          fontWeight: 600,
                           cursor: "pointer",
                           whiteSpace: "nowrap",
                           overflow: "hidden",

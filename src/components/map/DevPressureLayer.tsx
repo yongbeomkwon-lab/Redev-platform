@@ -84,7 +84,8 @@ export default function DevPressureLayer({
       if (s.lng < sw.getLng() - 0.002 || s.lng > ne.getLng() + 0.002) continue;
       const p = proj.containerPointFromCoords(new sdk.maps.LatLng(s.lat, s.lng));
       if (p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) continue;
-      out.push({ spot: s, x: p.x, y: p.y });
+      // 정수 픽셀에 앉힌다 — 소수점 좌표 + translate(-50%,-50%) 는 핀 숫자를 서브픽셀에서 다시 그려 흐려진다
+      out.push({ spot: s, x: Math.round(p.x), y: Math.round(p.y) });
     }
     out.sort((a, b2) => b2.spot.score - a.spot.score);
     // 겹침 정리 — 점수 높은 핀부터 두고, 22px 안에 이미 놓인 핀이 있으면 건너뛴다
@@ -165,7 +166,7 @@ export default function DevPressureLayer({
               background: color,
               color: "#fff",
               fontSize: pin.fontSize,
-              fontWeight: 800,
+              fontWeight: 700,
               lineHeight: 1,
               letterSpacing: "-0.02em",
               whiteSpace: "nowrap",

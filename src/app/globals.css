@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+/* 작은 글씨(9~11px)용 UI 고딕 — 지마켓 산스의 굵은 획은 9~10px 에서 서로 붙어 뭉개진다.
+   시스템 고딕(Pretendard → Apple SD Gothic Neo → 맑은 고딕)의 중간 두께가 가장 또렷하게 읽힌다.
+   · 지도 뱃지·핀 라벨·단계·부제목처럼 작은 글씨에만 쓰고, 제목·본문은 지마켓 산스를 그대로 둔다. */
+:root {
+  --font-ui: "Pretendard", "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, "Malgun Gothic",
+    "Noto Sans KR", system-ui, sans-serif;
+}
+
 /* ── 카카오맵 오버레이 ─────────────────────────────────────────────────────
    구역 폴리곤 캔버스는 지도 위 CustomOverlay 에 매달린다 — 클릭·드래그를
    가로채지 않도록 항상 pointer-events:none. */
@@ -37,7 +45,9 @@
   font-weight: 700;
 }
 .zone-name-label .zone-name-sub {
-  font-weight: 600;
+  /* 작은 회색 줄은 지마켓 산스 대신 UI 고딕 500 — 10px 에서 획이 뭉개지지 않는다 */
+  font-family: var(--font-ui);
+  font-weight: 500;
   font-size: 10px;
   color: #64748b;
 }
@@ -46,8 +56,11 @@
   display: inline-block;
   padding: 1px 4px;
   border-radius: 3px;
+  /* 9px 흰 글씨 — 합성 볼드가 없는 UI 고딕 600 이 가장 또렷하다 */
+  font-family: var(--font-ui);
+  font-synthesis: none;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 11px;
   letter-spacing: -0.03em;
   color: #fff;
@@ -76,9 +89,11 @@
   height: 20px;
   padding: 0 9px;
   border-radius: 999px;
+  font-family: var(--font-ui);
+  font-synthesis: none;
   font-size: 10px;
   line-height: 20px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.02em;
   white-space: nowrap;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.35);
@@ -104,8 +119,9 @@
   color: #0f172a;
 }
 .zone-name-label.is-card .zone-name-sub {
+  font-family: var(--font-ui);
+  font-weight: 500;
   font-size: 10px;
-  font-weight: 600;
   line-height: 12px;
   letter-spacing: -0.02em;
   color: #64748b;
@@ -135,7 +151,9 @@
   cursor: pointer;
   pointer-events: auto;
   visibility: hidden;
-  will-change: transform;
+  /* will-change: transform 을 두면 이름표가 각자 GPU 레이어로 올라가, 지도 이동 중
+     소수점 좌표에서 레이어가 재샘플링되며 글자가 뭉개졌다(IMG_0732 “한남하이츠”).
+     이름표는 매 프레임 transform 만 바뀌므로 레이어 승격 없이 그려도 충분히 가볍다. */
 }
 .zone-tag b {
   font-weight: 700;
@@ -145,8 +163,11 @@
   padding: 1px 4px;
   border-radius: 3px;
   color: #fff;
+  /* 9px 흰 글씨 — 지마켓 산스 800 은 획이 붙어 뭉갰다. UI 고딕 600 으로 */
+  font-family: var(--font-ui);
+  font-synthesis: none;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 11px;
   letter-spacing: -0.03em;
 }
@@ -179,9 +200,11 @@
   height: 20px;
   padding: 0 9px;
   border-radius: 999px;
+  font-family: var(--font-ui);
+  font-synthesis: none;
   font-size: 10px;
   line-height: 20px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.02em;
   white-space: nowrap;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.35);
@@ -212,8 +235,9 @@
   color: #0f172a;
 }
 .zone-tag.is-card .zone-tag-stage {
+  font-family: var(--font-ui);
+  font-weight: 500;
   font-size: 10px;
-  font-weight: 600;
   line-height: 12px;
   letter-spacing: -0.02em;
   color: #64748b;
@@ -317,7 +341,8 @@ body {
   display: none;
 }
 .leaflet-tooltip.zone-name-label .zone-name-sub {
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-weight: 500;
   font-size: 10px;
   color: #64748b;
 }
@@ -384,6 +409,11 @@ body {
 html,
 body {
   font-family: var(--font-sans);
+  /* 지마켓 산스에는 300·500·700 세 벌만 있다 — 800·600 을 요구하면 브라우저가 획을 덧그려
+     (합성 볼드) 작은 글씨가 번진다. 합성 볼드를 끄고 폰트에 있는 웨이트만 쓰게 한다. */
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Gmarket Sans 는 자폭이 넓다 — 본문 자간을 시안(-.012em)에 맞춰 살짝 조인다 */
@@ -409,6 +439,17 @@ select,
 textarea {
   font-family: inherit;
   letter-spacing: inherit;
+}
+
+/* ── 지도 위 작은 핀 라벨은 UI 고딕으로 ─────────────────────────────────────
+   · 9~11px 가격표·부제목이 지마켓 산스 800 에서 뭉개지던 것을 시스템 고딕으로 바꿔다
+     (두께는 각 핀의 인라인 스타일에서 700/500 으로 맞춘다). */
+.tx-price-pin,
+.auction-pin-btn,
+.my-pin-btn,
+.dev-pressure-pin {
+  font-family: var(--font-ui);
+  font-synthesis: none;
 }
 
 /* 지도 플로팅 카드 공통 — 반경 12px, 테두리 한 겹, 옅은 그림자(시안 B) */
@@ -451,7 +492,9 @@ textarea {
   }
 }
 .tx-price-pin.is-active {
-  transform: scale(1.08);
+  /* 예전에는 scale(1.08) 로 키웠는데, 확대 변환이 글자를 재샘플링해 흐려졌다.
+     강조는 오레오 블루 테두리·바탕·퍼지는 그림자가 맡는다. */
+  transform: none;
   transform-origin: 50% 100%;
   position: relative;
   z-index: 4;
