@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-방배동 952-2 일대 민간도심복합(성장거점형, 서초구 방배2동) — 구역계 정밀 교정 (2026-11-22 2차)
+방배동 952-2 일대 민간도심복합(성장거점형, 서초구 방배2동) — 구역계 정밀 교정 (2026-11-22 3차)
 
 · 1차 반영(de59dbf)은 도면을 도로명만 보고 11정점으로 어림해 그려, ① 북변이 서초대로를 넘어 북측
   블록(방배마에스트로·디오슈페리움)까지 침범하고 ② 서남 426 블록(세양아르비채 남측~방배천로20길)과
   ③ 동쪽 꼬리 954·956(유니트) 블록이 통째로 빠져 있었다(사용자 지적).
-· 이번 판은 **브이월드 연속지적도(LP_PA_CBND_BUBUN) 필지 도형**을 원천으로 삼아, 사용자가 준
+· 2차 반영(791b5c1)은 **브이월드 연속지적도(LP_PA_CBND_BUBUN) 필지 도형**을 원천으로 삼아, 사용자가 준
   두 도면(IMG_0736 지적도 손표시 · IMG_0735 신축계획안 P26-140)에 표시된 구역 안 필지를 그대로
-  합집합(union)해 만든 59정점 구역계다. 필지 경계에 정확히 붙으므로 도로·아파트 단지와 겹침이 없다.
+  합집합(union)해 만든 59정점 구역계다.
 
   · 구역 안 필지(전부 포함): 방배동 **952**(-1~-9) · **421**(-1·-3·-23 등) · **422** · **423** ·
     **951**(-1~-34) · **425**(-1~-5) · **426**(-1~-21) · **954**(-1~-38) · **956**(-1~-28).
@@ -20,9 +20,17 @@
     (로드명주소·카카오 place 10397878·126.98380/37.48455). 신축계획안의 북동 모서리 '방주교회'
     표기는 별도 표기이고, 지적도 손표시·연속지적도 모두 951 블록 동측까지 구역 안으로 잡는다.
 
-· 계측 면적 **41,200㎡(약 12,463평)** — 도면에 사업면적 숫자 표기는 확인되지 않아 필지 합집합 계측값.
-· 필지 경계에 그대로 붙인 실경계형 도형이라 `geom: "추진위안내도"`, `boundaryApprox: false`.
-  (사업시행자 지정·고시 도면이 나오면 그 도면 기준으로 다시 맞춰야 한다.)
+· 3차 반영(2026-11-22, 이 스크립트) — **방배15구역과의 겹침(overlap_deg2 6.4655e-07, 약 6,300㎡) 해소**.
+  · 2차 폴리곤의 남동 꼬리(SK 956-1~-28 블록과 957·497 일부, 카카오 coord2Address로 지번 확인)가
+    **방배15구역**(`11000UQ120PS202411014101`, 서울시 고시 제2022-378호로 2022-09-08 지정, UQ120 실경계)의
+    북단 안에 들어가 있었다. 고시된 정비구역(방배15)이 우선이므로 **방배15구역 경계는 그대로 두고**,
+    952-2 폴리곤에서 방배15 경계를 **0.7m 물린 선**(경계 접합부 미세 버퍼)으로 차집합해 겹침을 **0㎡**로 만든다.
+  · 차집합은 EPSG:5179(UTM-K)에서 계산하고, 지터를 줄이려 0.25m 단순화 후 다시 한 번 차집합한다
+    (단순화로 방배15 쪽으로 파고든 부분이 생기면 그만큼 다시 깎인다 — 결과는 항상 겹침 0).
+  · 계측 면적 **34,800㎡(약 10,527평)** — 41,200㎡에서 겹친 956 블록 약 6,400㎡를 뺀 값.
+    세대수(1,526)는 신축계획안 도면 기준이라 그대로 둔다.
+  · 956 블록은 이제 방배15구역 소관이라 `alias`의 '방배동 956'은 남겨 두되(검색 유도), boundaryNote에
+    방배15구역 소속임을 밝힌다.
 
 실행: python3 scripts/apply-bangbae952-2-20261122.py [--check]   (멱등)
 """
@@ -40,10 +48,14 @@ META_KEY = "bangbae9522Mdobok20261122"
 
 ZID = "seocho-bangbae-952-2"
 
-# [lat, lng] 11정점 — 신축계획안 구역계(붉은 점선)를 도로망에 정합.
-# 동변은 서울시 실경계의 방배5구역(착공, 동쪽 블록) 서측 경계(lng 126.98610)와
-# 겹치지 않도록 동광로 서측 lng 126.9860~126.9861선에 두었다.
-RING = [
+# 겹침 상대 — 방배15구역(서울시 고시 UQ120 실경계). 이 구역 경계는 건드리지 않는다.
+TRIM_ID = "11000UQ120PS202411014101"
+TRIM_NAME = "방배15구역"
+TRIM_BUFFER_M = 0.7  # 경계 접합부 미세 버퍼(0.5~1m) — 지도에서 두 구역이 0.7m 떨어져 보인다
+TRIM_SIMPLIFY_M = 0.25  # 버퍼가 만든 잘게 부서진 모서리를 다듬는 단순화 허용오차
+
+# [lat, lng] — 연속지적도 필지 합집합 원형(2차 반영, 59정점). 이 원형에서 방배15구역을 빼서 RING을 만든다.
+BASE_RING = [
     [37.485643, 126.985829], [37.485583, 126.985922], [37.484867, 126.985925],
     [37.483673, 126.986648], [37.483556, 126.986676], [37.483548, 126.986656],
     [37.483488, 126.986656], [37.483336, 126.986288], [37.482764, 126.986656],
@@ -66,6 +78,70 @@ RING = [
     [37.485151, 126.983436], [37.485367, 126.983500],
 ]
 
+
+# ── 기하 계산 ────────────────────────────────────────────────────────────────
+def _projectors():
+    from pyproj import Transformer
+
+    fwd = Transformer.from_crs("EPSG:4326", "EPSG:5179", always_xy=True).transform
+    inv = Transformer.from_crs("EPSG:5179", "EPSG:4326", always_xy=True).transform
+    return fwd, inv
+
+
+def _trim_ring(base: list[list[float]], trim_geom: dict) -> list[list[float]]:
+    """base([lat,lng]) 에서 trim 폴리곤(+버퍼)을 빼고 [lat,lng] 링을 돌려준다."""
+    from shapely.geometry import Polygon, shape
+
+    fwd, inv = _projectors()
+    a = Polygon([(lng, lat) for lat, lng in base])
+    b = shape(trim_geom)
+    am = Polygon([fwd(*xy) for xy in a.exterior.coords])
+    bm = Polygon([fwd(*xy) for xy in b.exterior.coords])
+    cut = bm.buffer(TRIM_BUFFER_M)
+    trimmed = am.difference(cut).simplify(TRIM_SIMPLIFY_M, preserve_topology=True)
+    # 단순화가 버퍼 안쪽으로 파고들었으면 그만큼 다시 깎는다 → 겹침 항상 0
+    if trimmed.intersection(bm).area > 0:
+        trimmed = trimmed.difference(cut)
+    if trimmed.geom_type != "Polygon":
+        raise SystemExit(f"[중단] 차집합 결과가 Polygon이 아닙니다: {trimmed.geom_type}")
+    out: list[list[float]] = []
+    for x, y in list(trimmed.exterior.coords)[:-1]:
+        lng, lat = inv(x, y)
+        out.append([round(lat, 7), round(lng, 7)])
+    return out
+
+
+def load_trim_geometry() -> dict:
+    geo = json.loads(GEOJSON.read_text(encoding="utf-8"))
+    feat = next((f for f in geo["features"] if f["properties"].get("id") == TRIM_ID), None)
+    if feat is None or not feat.get("geometry"):
+        raise SystemExit(f"[중단] {TRIM_NAME}({TRIM_ID}) 도형을 zones.geojson에서 찾지 못했습니다")
+    return feat["geometry"]
+
+
+def _measured_area(ring: list[list[float]]) -> float:
+    from shapely.geometry import Polygon
+
+    p = Polygon([(lo, la) for la, lo in ring])
+    return abs(p.area) * (111320 * math.cos(math.radians(p.centroid.y))) * 110574
+
+
+def _overlap_m2(ring_lat_lng: list[list[float]], trim_geom: dict) -> float:
+    """링이 방배15구역과 겹치는 면적(㎡, EPSG:5179)."""
+    from shapely.geometry import Polygon, shape
+
+    fwd, _ = _projectors()
+    a = Polygon([fwd(lng, lat) for lat, lng in ring_lat_lng])
+    b = shape(trim_geom)
+    bm = Polygon([fwd(*xy) for xy in b.exterior.coords])
+    return a.intersection(bm).area
+
+
+_GEOM = load_trim_geometry()
+RING = _trim_ring(BASE_RING, _GEOM)
+AREA = int(round(_measured_area(RING) / 100) * 100)
+CUT_M2 = int(round(_measured_area(BASE_RING) - AREA, -2))
+
 PROPS = {
     "id": ZID,
     "name": "방배동 952-2 일대",
@@ -76,14 +152,14 @@ PROPS = {
         "방배동 952-2번지 일원", "방배동 952-2 일원",
         # 구역 안 필지(연속지적도 기준)
         "방배동 952-2번지", "방배동 421", "방배동 422", "방배동 423", "방배동 951",
-        "방배동 952", "방배동 425", "방배동 426", "방배동 954", "방배동 956",
+        "방배동 952", "방배동 425", "방배동 426", "방배동 954",
         "방배동 425-2", "방주교회", "방배2동 도심복합", "서초구 민간도심복합",
     ],
     "type": "민간도심복합(성장거점형)",
     "kind": "민간도심복합개발(성장거점형)",
     "stage": "추진준비",
     "gu": "서초구",
-    "area": 41200,
+    "area": AREA,
     "households": 1526,
     "featured": False,
     "geom": "추진위안내도",
@@ -98,23 +174,29 @@ PROPS = {
         "전용 84㎡ 1,070세대(공공임대 146·분양 924, 70%)로 구성되고, 구역 남서측에는 4~5층 관리시설 블록이 "
         "배치됩니다. 2026-10-06~07 위클리한국주택경제신문 보도로 추진위원회가 예비 사업시행자(신탁사) 선정 "
         "입찰공고를 냈습니다. 아직 혁신지구 지정 전 추진준비 단계라 법적 구역계 고시는 없으며, "
-        "인접한 방배5·방배13·방배14 등 기존 정비구역과는 별개 구역입니다."
+        "인접한 방배5·방배13·방배14 등 기존 정비구역과는 별개 구역입니다. 남동쪽 956 블록은 방배15구역에 "
+        "들어가 있어 구역계에서 제외했습니다."
     ),
     "areaNote": (
-        "구역 안 필지(952·421·422·423·951·425·426·954·956 일대)와 내부 통로를 브이월드 연속지적도 도형 그대로 "
-        "합집합해 계측한 41,200㎡(약 12,463평)입니다. 신축계획안 도면에 사업면적 숫자 표기가 확인되지 않아 "
-        "계측값으로 표기합니다. 사업시행자 지정·고시 도면이 나오면 그 면적으로 대체해야 합니다."
+        f"구역 안 필지(952·421·422·423·951·425·426·954 일대)와 내부 통로를 브이월드 연속지적도 도형 그대로 "
+        f"합집합한 41,200㎡에서, 남동쪽 956 블록(956-1~-28)이 방배15구역 고시경계 안에 들어가 있어 그 부분"
+        f"(계측 약 {CUT_M2:,}㎡)을 0.7m 물린 선으로 잘라낸 {AREA:,}㎡(약 {round(AREA / 3.3058):,}평)입니다. "
+        f"신축계획안 도면에 사업면적 숫자 표기가 확인되지 않아 계측값으로 표기합니다. 사업시행자 지정·고시 "
+        f"도면이 나오면 그 면적으로 대체해야 합니다."
     ),
     "boundaryNote": (
         "브이월드 연속지적도(LP_PA_CBND_BUBUN) 필지 도형을 그대로 이어 붙인 실경계형 경계입니다 — 사용자가 준 "
         "① 지적도 손표시(IMG_0736), ② 신축계획안 배치도(P26-140, 2026-04-30)의 사업구역계와 같은 필지 묶음입니다. "
         "북변은 952·421·422·423·951 블록 북측(서초대로 남측 도로경계선 아래), 서변은 425·426 블록 서측"
         "(이수역 5번 출구에서 남서로 휘는 동작대로·방배천로 곡선), 남서는 426 블록 하단(방배천로20길 북측), "
-        "동변은 954·956 꼬리의 동측(20M 도로 — 디에이치방배 건너편)이고 956 남단(아름빌리지 북측)까지 내려갑니다. "
+        "동변은 954 블록 동측(20M 도로 — 디에이치방배 건너편)까지입니다. "
         "안쪽 ㄷ자 홈의 방배롯데캐슬아르떼(424-28, 39,074㎡·101~111동)는 8M·12M·15M 도로를 경계로 완전히 제외했고, "
         "북측 서초대로 건너 블록과 동측 디에이치방배(949·950)도 제외입니다. 방주교회는 방배동 425-2"
-        "(방배천로24길 8)로 서쪽 425 블록 안이며 구역에 포함됩니다. 아직 고시 전 추진준비 단계라 사업시행자 지정·"
-        "고시 도면이 나오면 그것 기준으로 다시 맞춰야 합니다."
+        "(방배천로24길 8)로 서쪽 425 블록 안이며 구역에 포함됩니다. 남동쪽 956 블록(956-1~-28)과 957·497 일부는 "
+        "방배15구역(서울시 고시 제2022-378호로 2022-09-08 지정, UQ120 실경계) 안이어서, 2026-11-22 방배15 경계를 "
+        f"0.7m 물린 선으로 그 부분(계측 약 {CUT_M2:,}㎡)을 잘라냈습니다 — 방배15구역 경계는 그대로입니다. "
+        "세대수(1,526)와 사업 설명은 신축계획안 도면 기준이라 그대로 두었습니다. 아직 고시 전 추진준비 단계라 "
+        "사업시행자 지정·고시 도면이 나오면 그것 기준으로 다시 맞춰야 합니다."
     ),
     "sources": [
         {
@@ -133,24 +215,18 @@ META = {
     "asOf": "2026-11-22",
     "polygons": 1,
     "note": (
-        "방배동 952-2 일대 민간도심복합(성장거점형, 서초구) 구역계 정밀 교정 — 브이월드 연속지적도 필지 "
-        "도형을 합집합해 59정점 실경계형 경계로 교체(서초대로 남측·426 블록·954·956 꼬리 포함, "
-        "방배롯데캐슬아르떼 424-28 완전 제외). 계측 41,200㎡·1,526세대(59㎡ 456·84㎡ 1,070, 분양 1,175·공공임대 351)."
+        "방배동 952-2 일대 민간도심복합(성장거점형, 서초구) 구역계 — 브이월드 연속지적도 필지 도형을 합집합한 "
+        "실경계형 경계에서, 방배15구역(서울시 고시 UQ120)과 겹치던 남동 956 블록(약 6,400㎡)을 0.7m 물린 선으로 "
+        f"차집합(겹침 0㎡). 계측 {AREA:,}㎡·1,526세대(59㎡ 456·84㎡ 1,070, 분양 1,175·공공임대 351)."
     ),
 }
 
 
+# ── 검사/반영 ────────────────────────────────────────────────────────────────
 def _ring_lnglat() -> list[list[float]]:
     ring = [[lng, lat] for lat, lng in RING]
     ring.append(ring[0])
     return ring
-
-
-def _measured_area() -> float:
-    from shapely.geometry import Polygon
-
-    p = Polygon([(lo, la) for la, lo in RING])
-    return abs(p.area) * (111320 * math.cos(math.radians(p.centroid.y))) * 110574
 
 
 def check() -> int:
@@ -159,20 +235,28 @@ def check() -> int:
     src = json.loads(SOURCE.read_text(encoding="utf-8"))
     feat = next((f for f in geo["features"] if f["properties"].get("id") == ZID), None)
     ring = (feat.get("geometry") or {}).get("coordinates", [[[]]])[0] if feat else []
+    ring_ll = [[round(c[1], 7), round(c[0], 7)] for c in ring[:-1]] if ring else []
+    same = len(ring_ll) == len(RING) and all(
+        abs(a[0] - b[0]) < 1e-6 and abs(a[1] - b[1]) < 1e-6 for a, b in zip(ring_ll, RING)
+    )
+    overlap = _overlap_m2(RING, _GEOM)
     ok = (
         bool(feat)
         and (feat.get("geometry") or {}).get("type") == "Polygon"
         and len(ring) == len(RING) + 1
         and ring[0] == ring[-1]
+        and same
         and feat["properties"].get("geom") == PROPS["geom"]
         and feat["properties"].get("boundaryApprox") is False
         and feat["properties"].get("households") == 1526
-        and abs((feat["properties"].get("area") or 0) - PROPS["area"]) < 0.01
+        and abs((feat["properties"].get("area") or 0) - AREA) < 0.01
+        and overlap < 0.01
     )
     print(
         f"[{'OK' if ok else 'FAIL'}] geojson {ZID} geom={feat['properties'].get('geom') if feat else None} "
-        f"verts={len(ring) - 1 if ring else 0} area={feat['properties'].get('area') if feat else None} "
-        f"households={feat['properties'].get('households') if feat else None}"
+        f"verts={len(ring) - 1 if ring else 0}(기대 {len(RING)}) area={feat['properties'].get('area') if feat else None}"
+        f"(기대 {AREA}) households={feat['properties'].get('households') if feat else None} "
+        f"ring일치={same} {TRIM_NAME}겹침={overlap:.4f}㎡"
     )
     bad += 0 if ok else 1
 
@@ -182,11 +266,11 @@ def check() -> int:
         and len(entry.get("polygon") or []) == len(RING)
         and entry.get("geom") == PROPS["geom"]
         and entry.get("households") == 1526
-        and abs((entry.get("area") or 0) - PROPS["area"]) < 0.01
+        and abs((entry.get("area") or 0) - AREA) < 0.01
     )
     print(
-        f"[{'OK' if ok2 else 'FAIL'}] seoul-zones {ZID} polygon={len(entry.get('polygon') or []) if entry else 0} "
-        f"geom={entry.get('geom') if entry else None}"
+        f"[{'OK' if ok2 else 'FAIL'}] seoul-zones {ZID} polygon={len(entry.get('polygon') or []) if entry else 0}"
+        f"(기대 {len(RING)}) geom={entry.get('geom') if entry else None} area={entry.get('area') if entry else None}"
     )
     bad += 0 if ok2 else 1
 
@@ -224,10 +308,9 @@ def apply() -> int:
     entry.pop("parts", None)
     entry.pop("holes", None)
 
-    area = _measured_area()
-    print(f"[반영] {ZID} — {len(RING)}정점, area={PROPS['area']}, geom={PROPS['geom']}, "
-          f"households={PROPS['households']}")
-    print(f"    계측 면적: {area:,.1f}㎡")
+    print(f"[반영] {ZID} — {len(RING)}정점, area={AREA}, geom={PROPS['geom']}, households={PROPS['households']}")
+    print(f"    원형 계측 {_measured_area(BASE_RING):,.1f}㎡ − {TRIM_NAME} 겹침·버퍼 → {_measured_area(RING):,.1f}㎡")
+    print(f"    {TRIM_NAME} 겹침: {_overlap_m2(RING, _GEOM):.4f}㎡ (0이어야 함)")
 
     geo["metadata"][META_KEY] = META
     geo["metadata"]["count"] = len(geo["features"])
