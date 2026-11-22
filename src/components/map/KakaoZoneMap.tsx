@@ -1480,7 +1480,12 @@ export default function KakaoZoneMap({
     }
     ctx.setLineDash([]);
 
-    // 3) 구역계 미고시 후보지(예: 사당21구역) — 점선 원 + 흰 점
+    // 3) 구역계 미고시 후보지(예: 사당21구역) — 줌 레벨에 따라 표현을 바꾼다
+    //    · 광역 줌아웃(레벨 7 이상): 선택·호버만 강조하고, 나머지는 작은 **위치 점**(반지름 3.5px,
+    //      얇은 흰 테두리 + 유형 색)만 찍는다. 예전에는 이 레벨에서도 반지름 9px 점선 원이 그려져
+    //      실제 경계가 있는 정상 폴리곤 구역들까지 동그라미에 덮인 것처럼 보였다(2026-11-22 지적).
+    //    · 동네 확대(레벨 6 이하): 기존처럼 점선 원(반지름 8~9px) + 흰 점 — 경계 미고시임을 한눈에.
+    const pointsFarOut = map.getLevel() >= 7;
     for (const z of data.points) {
       const x = p0x + (z.center[1] - lng0) * pxPerLng;
       const y = p0y + (mercator(z.center[0]) - m0) * pxPerMerc;
@@ -1488,6 +1493,17 @@ export default function KakaoZoneMap({
       const isSel = z.id === selId;
       const isHover = !isSel && z.id === hoverId;
       const color = TYPE_COLORS[z.type] ?? "#7c3aed";
+      if (pointsFarOut && !isSel && !isHover) {
+        // 위치 점 — 240곳이 모여도 지도·정상 구역 폴리곤을 가리지 않게
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(color, 0.92);
+        ctx.fill();
+        ctx.lineWidth = 1.1;
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.stroke();
+        continue;
+      }
       ctx.beginPath();
       ctx.arc(x, y, isSel ? 13 : isHover ? 11 : 9, 0, Math.PI * 2);
       ctx.setLineDash([4, 3]);
@@ -1940,6 +1956,8 @@ export default function KakaoZoneMap({
         }
         let hit: SeoulZone | undefined = hitTestZones(data, lat, lng);
         // 점으로 표시한 후보지 — 화면 반경 13px 안이면 잡는다
+        //   (광역 줌아웃에서는 점이 3.5px 로 작아지지만, 클릭 반경은 13px 그대로 두어
+        //    작은 점을 정확히 겨냥하지 않아도 선택된다 — 폴리곤 판정이 먼저라 정상 구역 클릭은 방해하지 않는다)
         if (!hit && view && point) {
           let bestD = 13 * 13;
           for (const z of data.points) {

@@ -749,28 +749,58 @@ export default function LeafletZoneMap({
         ));
       })}
 
-      {/* ── 경계 미고시 후보지 (점) ── */}
-      {pointZones.map((z) => (
-        <CircleMarker
-          key={`pt-${z.id}`}
-          center={z.center}
-          radius={z.id === selectedZoneId ? 12 : 9}
-          pathOptions={{
-            color: TYPE_COLORS[z.type] ?? "#7c3aed",
-            weight: z.id === selectedZoneId ? 3 : 2,
-            opacity: 1,
-            fillColor: TYPE_COLORS[z.type] ?? "#7c3aed",
-            fillOpacity: z.id === selectedZoneId ? 0.55 : 0.3,
-            dashArray: "4 3",
-          }}
-          eventHandlers={{ click: () => onSelectZone(z.id) }}
-        >
-          <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
-            <b>{z.name}</b>
-            <span className="zone-name-sub"> · {z.stage} · 경계 미고시</span>
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      {/* ── 경계 미고시 후보지 (점) ──
+           · 광역 줌아웃(줌 13 이하 = 카카오 레벨 7 이상): 작은 위치 점(반지름 4px, 흰 테두리)만 —
+             정상 폴리곤 구역을 큰 점선 원으로 덮지 않게
+           · 동네 확대(줌 14 이상): 기존처럼 점선 원(반지름 9px) */}
+      {pointZones.map((z) => {
+        const sel = z.id === selectedZoneId;
+        const farOut = zoom <= 13;
+        const color = TYPE_COLORS[z.type] ?? "#7c3aed";
+        if (farOut && !sel) {
+          return (
+            <CircleMarker
+              key={`pt-${z.id}`}
+              center={z.center}
+              radius={4}
+              pathOptions={{
+                color: "#ffffff",
+                weight: 1.1,
+                opacity: 0.9,
+                fillColor: color,
+                fillOpacity: 0.92,
+              }}
+              eventHandlers={{ click: () => onSelectZone(z.id) }}
+            >
+              <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
+                <b>{z.name}</b>
+                <span className="zone-name-sub"> · {z.stage} · 경계 미고시</span>
+              </Tooltip>
+            </CircleMarker>
+          );
+        }
+        return (
+          <CircleMarker
+            key={`pt-${z.id}`}
+            center={z.center}
+            radius={sel ? 12 : 9}
+            pathOptions={{
+              color,
+              weight: sel ? 3 : 2,
+              opacity: 1,
+              fillColor: color,
+              fillOpacity: sel ? 0.55 : 0.3,
+              dashArray: "4 3",
+            }}
+            eventHandlers={{ click: () => onSelectZone(z.id) }}
+          >
+            <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
+              <b>{z.name}</b>
+              <span className="zone-name-sub"> · {z.stage} · 경계 미고시</span>
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
 
       {/* ── 매물 배지 — 카카오맵과 같은 `🏠 매물 N` ── */}
       <ListingBadges zones={seoulZones} counts={listingCounts} onSelect={onSelectZone} />
