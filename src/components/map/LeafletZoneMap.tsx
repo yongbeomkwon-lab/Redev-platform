@@ -48,12 +48,6 @@ const TILE_ADAPTERS = {
   },
 };
 
-/** 툴팁 한 줄: 신림1구역 · 재정비촉진구역 · 사업시행인가 · 22.3만㎡ (관악구) */
-function labelLine(z: { name: string; kind: string; stage: string; area: number; gu?: string }) {
-  const area = z.area >= 10000 ? `${(z.area / 10000).toFixed(1)}만㎡` : `${z.area.toLocaleString()}㎡`;
-  return `${z.name} · ${z.kind} · ${z.stage} · ${area}${z.gu ? ` (${z.gu})` : ""}`;
-}
-
 /** 지도 이동/선택 구역 확대 — 폴리곤 구역은 경계에 맞추고, 경계 미고시 후보지는 점으로 이동 */
 function FitSelected({
   ring,
@@ -502,7 +496,7 @@ function SeoulZoneLayer({
           L.DomEvent.stopPropagation(e);
           onSelectRef.current(p.id);
         });
-        lyr.bindTooltip(labelLine(p), { direction: "top", sticky: true, opacity: 0.95 });
+        // 호버 툴팁은 두지 않는다(2026-11-22 사용자 요청) — 같은 정보는 오른쪽 상세 패널에 있다.
       },
     }).addTo(map);    layerRef.current = layer;
     return () => {
@@ -538,7 +532,6 @@ function SeoulZoneLayer({
   useEffect(() => {
     const layer = layerRef.current;
     if (!layer || prevSelRef.current === selectedId) return;
-    const prev = prevSelRef.current;
     prevSelRef.current = selectedId;
     layer.eachLayer((l) => {
       const path = l as L.Path & { feature?: GeoJSON.Feature };
@@ -570,9 +563,9 @@ function SeoulZoneLayer({
           }
         );
         path.openTooltip();
-      } else if (p.id === prev || path.getTooltip()?.options.permanent) {
+      } else if (path.getTooltip()) {
+        // 선택을 풀면 고정 이름표만 걷는다 — 구역 위 호버 툴팁은 두지 않는다(오른쪽 상세 패널에 같은 정보).
         path.unbindTooltip();
-        path.bindTooltip(labelLine(p), { direction: "top", sticky: true, opacity: 0.95 });
       }
     });
   }, [selectedId, collection]);
@@ -667,11 +660,7 @@ export default function LeafletZoneMap({
             positions={ring}
             pathOptions={zoneStyle(zone.type, active, true, zoom)}
             eventHandlers={{ click: () => onSelectZone(zone.id) }}
-          >
-            <Tooltip direction="top" sticky>
-              <b>{zone.name}</b> · {zone.type} · {zone.stage}
-            </Tooltip>
-          </Polygon>
+          />
         ));
       })}
 

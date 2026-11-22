@@ -351,7 +351,7 @@ function tagTypeText(type?: string | null): string {
   return TAG_TYPE_TEXT[type] ?? (type.length > 5 ? type.slice(0, 5) : type);
 }
 
-/** 이름표에 넣을 구역명 — 긴 공식 명칭은 줄이고, 전문은 hover title 로 보여 준다 */
+/** 이름표에 넣을 구역명 — 긴 공식 명칭은 줄이고, 전문은 aria-label(스크린리더)로만 남긴다 */
 function tagName(name: string): string {
   const s = name.trim();
   return s.length > 14 ? `${s.slice(0, 13)}…` : s;
@@ -522,7 +522,6 @@ export default function KakaoZoneMap({
   /** 이름표·화면 맞춤을 마지막으로 적용한 구역 — 핀만 바뀐 경우(핀 지우기) 화면을 흔들지 않으려고 */
   const lastLabelZoneRef = useRef<string | undefined>(undefined);
   const labelAtRef = useRef<{ lat: number; lng: number }>({ lat: NaN, lng: NaN });
-  const tipRef = useRef<HTMLDivElement | null>(null);
   const bufRef = useRef<Float32Array>(new Float32Array(4096));
   const viewRef = useRef<View | null>(null);
   const hoverRef = useRef<string | null>(null);
@@ -1020,7 +1019,9 @@ export default function KakaoZoneMap({
                   ? `<span class="zone-tag-chip" style="background:${c.color}">${escapeHtml(c.typeText)}</span>`
                   : "") + `<b>${escapeHtml(c.name)}</b>`;
           }
-          node.title = c.full;
+          // 호버 툴팁(브라우저 기본 title 박스)도 띄우지 않는다 — 같은 전문은 눌러서 여는 상세 패널에 있다.
+          //   긴 이름이 잘려도 스크린리더에는 전문이 전달되도록 aria-label 로만 남긴다.
+          node.setAttribute("aria-label", c.full);
           node.style.transform = `translate3d(${Math.round(c.x * 10) / 10}px,${Math.round(c.y * 10) / 10}px,0) translate(-50%,-50%)`;
           node.style.visibility = "visible";
           tagLayer.appendChild(node);
@@ -1810,8 +1811,11 @@ export default function KakaoZoneMap({
       pump(450);
     });
 
-    const hideTip = () => {
-      if (tipRef.current) tipRef.current.style.display = "none";
+    /**
+     * 구역 호버 툴팁은 두지 않는다(2026-11-22 사용자 요청 — “검은 바탕 박스가 2단 뱃지를 가리고,
+     *   같은 정보가 오른쪽 상세 패널에 이미 있다”). 커서만 되돌리고, 폴리곤 하이라이트(hoverRef)는 남긴다.
+     */
+    const clearHoverCursor = () => {
       el.style.cursor = "";
     };
 
@@ -1845,13 +1849,12 @@ export default function KakaoZoneMap({
           }
         }
 
-        const tip = tipRef.current;
         if (!hit) {
           if (hoverRef.current !== null) {
             hoverRef.current = null;
             draw();
           }
-          hideTip();
+          clearHoverCursor();
           if (adminRef.current?.adding) el.style.cursor = "crosshair";
           return;
         }
@@ -1859,16 +1862,6 @@ export default function KakaoZoneMap({
         if (hoverRef.current !== hit.id) {
           hoverRef.current = hit.id;
           draw();
-        }
-        if (tip) {
-          tip.innerHTML = escapeHtml(labelLine(hit));
-          tip.style.display = "block";
-          const rect = el.getBoundingClientRect();
-          const x = point ? point.x : 0;
-          const y = point ? point.y : 0;
-          const tw = tip.offsetWidth || 240;
-          tip.style.left = `${Math.max(6, Math.min(x + 14, rect.width - tw - 8))}px`;
-          tip.style.top = `${Math.max(6, y - 34)}px`;
         }
         el.style.cursor = adminRef.current?.adding ? "crosshair" : "pointer";
       });
@@ -1887,12 +1880,12 @@ export default function KakaoZoneMap({
           const fx = view0.p0x + (first[1] - view0.cLng) * view0.pxPerLng;
           const fy = view0.p0y + (mercator(first[0]) - view0.m0) * view0.pxPerMerc;
           if (Math.hypot(pt0.x - fx, pt0.y - fy) <= 18) {
-            hideTip();
+            clearHoverCursor();
             adm.onFinishByFirstPoint();
             return;
           }
         }
-        hideTip();
+        clearHoverCursor();
         // 더블클릭의 두 번째 클릭 — 같은 자리에서 곧바로 또 찍힌 점은 버린다.
         //   (첫 클릭이 마지막 꼭짓점이 되고, 이어지는 dblclick 이 완료를 부른다)
         const px = e.point;
@@ -1912,7 +1905,7 @@ export default function KakaoZoneMap({
           if (z.ring.length >= 3 && ringContainsLatLng(z.ring, lat, lng)) hitCustom = z.id;
         }
         if (hitCustom) {
-          hideTip();
+          clearHoverCursor();
           adm.onSelectZone(hitCustom);
           return;
         }
@@ -1921,7 +1914,7 @@ export default function KakaoZoneMap({
       // ── 지번 찍기 모드: 구역 선택 대신 클릭한 자리에 지번 핀을 꽂는다 ──
       const pick = pickRef.current;
       if (pick.on && pick.pick) {
-        hideTip();
+        clearHoverCursor();
         pick.pick(lat, lng);
         return;
       }
@@ -1941,7 +1934,7 @@ export default function KakaoZoneMap({
         }
       }
       if (hit) {
-        hideTip();
+        clearHoverCursor();
         // 지도에서 직접 누른 선택 — 선택 효과에서 줌·이동을 하지 않도록 표시해 둔다.
         mapClickZoneRef.current = { id: hit.id, t: Date.now() };
         onSelectRef.current(hit.id);
@@ -1949,7 +1942,7 @@ export default function KakaoZoneMap({
       }
       // 구역 밖을 눌렀다 — 기본 모드에서도 그 자리의 지번을 찍어 준다(편의)
       if (pick.pick) {
-        hideTip();
+        clearHoverCursor();
         pick.pick(lat, lng);
       }
     };
@@ -1957,7 +1950,7 @@ export default function KakaoZoneMap({
     passthroughRef.current = { click: onMapClick, move: onMousemove };
     k.maps.event.addListener(map, "mousemove", onMousemove);
     k.maps.event.addListener(map, "click", onMapClick);
-    k.maps.event.addListener(map, "dragstart", hideTip);
+    k.maps.event.addListener(map, "dragstart", clearHoverCursor);
 
     // ── 관리자 그리기: ‘그 자리에서 완료’(더블클릭·우클릭) + 고무줄 선 정리 ─────────
     //   카카오 SDK 이벤트에는 dblclick·contextmenu 가 없어 지도 컨테이너 DOM 에 직접 건다.
@@ -3217,13 +3210,6 @@ export default function KakaoZoneMap({
           />
         )}
       </div>
-
-      {/* 호버 툴팁 */}
-      <div
-        ref={tipRef}
-        className="pointer-events-none absolute z-[700] hidden max-w-[300px] rounded-md bg-slate-900/90 px-2 py-1 text-[11px] font-semibold text-white shadow-lg"
-        style={{ display: "none" }}
-      />
 
       {/* ── 관리자 그리기 안내 — 도구 막대가 숨는 좁은 화면(xl 미만)에서도 조작법을 보여준다 ── */}
       {admin?.adding && adminDraft && adminDraft.length > 0 && (
