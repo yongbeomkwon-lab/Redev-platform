@@ -80,7 +80,7 @@ function koError(message: string): string {
     return "이미 가입된 이메일입니다. 로그인해 주세요.";
   if (m.includes("password should be at least")) return "비밀번호가 너무 짧습니다(6자 이상).";
   if (m.includes("rate limit") || m.includes("too many")) return "요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요.";
-  if (m.includes("invalid email")) return "이메일 주소 형식이 올바르지 않습니다.";
+  if (m.includes("invalid email") || m.includes("is invalid")) return "이메일 주소 형식이 올바르지 않습니다.";
   if (m.includes("signups not allowed")) return "지금은 새 가입을 받지 않고 있습니다.";
   return message;
 }
@@ -208,8 +208,47 @@ export async function ensureSession(session: AuthSession | null): Promise<AuthSe
   }
 }
 
-/** 인증이 필요한 요청 — 토큰을 붙이고, 401 이면 세션을 지운다 */
-export async function authFetch(
+/**
+ * 이메일 확인 링크로 돌아왔을 때(#access_token=…)의 세션을 읽어 저장한다.
+ *   · Supabase 확인 메일은 `emailRedirectTo/community#access_token=…&refresh_token=…` 로 돌려보낸다.
+ *   · 주소의 토큰은 읽은 뒤 지운다(새로고침·공유 시 토큰이 주소창에 남지 않게).
+ *   · 돌아온 세션이 없으면 null — 평소처럼 저장된 세션을 쓴다.
+ */
+export async function sessionFromUrlHash(): Promise<AuthSession | null> {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+  if (!hash || !hash.includes("access_token=")) return null;
+  const p = new URLSearchParams(hash);
+  const access = p.get("access_token");
+  const refresh = p.get("refresh_token");
+  if (!access || !refresh) return null;
+  const expiresIn = Number(p.get("expires_in") ?? 3600) || 3600;
+
+  const session: AuthSession = {
+    access_token: access,
+    refresh_token: refresh,
+    expires_at: Date.now() + expiresIn * 1000,
+    user: { id: "", email: "", nickname: "" },
+  };
+  const me = await fetchNickname(access);
+  if (me) session.user.nickname = me.nickname;
+  try {
+    const payload = JSON.parse(atob(access.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
+      sub?: string;
+      email?: string;
+    };
+    session.user.id = payload.sub ?? "";
+    session.user.email = payload.email ?? "";
+  } catch {
+    /* 토큰 본문을 못 읽어도 세션은 쓸 수 있다 */
+  }
+  if (!session.user.nickname) session.user.nickname = session.user.email.split("@")[0] || "회원";
+  saveSession(session);
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  return session;
+}
+
+/** 인증이 필요한 요청 — 토큰을 붙이고, 401 이면 세션을 지운다 */export async function authFetch(
   path: string,
   session: AuthSession | null,
   init: RequestInit = {}

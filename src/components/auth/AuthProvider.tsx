@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { AuthSession } from "@/lib/auth-client";
-import { ensureSession, readSession, saveSession, signIn as apiSignIn, signOutNow, signUp as apiSignUp } from "@/lib/auth-client";
+import { ensureSession, readSession, saveSession, sessionFromUrlHash, signIn as apiSignIn, signOutNow, signUp as apiSignUp } from "@/lib/auth-client";
 
 type AuthMode = "login" | "signup";
 
@@ -54,24 +54,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mode: "login",
   });
 
-  // 첫 마운트 — 저장된 세션을 읽고, 만료됐으면 조용히 갱신한다
+  // 첫 마운트 — ① 이메일 확인 링크로 돌아온 세션(#access_token) ② 저장된 세션 순서로 본다
   useEffect(() => {
     let alive = true;
-    const stored = readSession();
-    if (!stored) {
+    const boot = async () => {
+      const fromHash = await sessionFromUrlHash();
+      if (!alive) return;
+      if (fromHash) {
+        setSession(fromHash);
+        setReady(true);
+        setVersion((v) => v + 1);
+        return;
+      }
+      const stored = readSession();
+      if (!stored) {
+        setReady(true);
+        return;
+      }
+      setSession(stored);
       setReady(true);
-      return;
-    }
-    setSession(stored);
-    setReady(true);
-    ensureSession(stored).then((fresh) => {
+      const fresh = await ensureSession(stored);
       if (!alive) return;
       if (fresh) setSession(fresh);
       else {
         setSession(null);
         setVersion((v) => v + 1);
       }
-    });
+    };
+    boot();
     return () => {
       alive = false;
     };
@@ -291,6 +301,12 @@ function AuthModal({
               className="w-full rounded-lg border border-line px-3 py-2 text-[13px] outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </label>
+
+          {mode === "signup" && (
+            <p className="text-[10.5px] leading-relaxed text-slate-500">
+              가입하면 확인 메일이 갑니다. 메일의 확인 링크를 누르면 바로 로그인됩니다(스팸함도 확인해 주세요).
+            </p>
+          )}
 
           {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose-700">{error}</p>}
           {notice && <p className="rounded-lg bg-brand-tint px-3 py-2 text-[11.5px] leading-relaxed text-brand">{notice}</p>}
