@@ -35,7 +35,7 @@ import {
 } from "@/lib/building-age";
 import { TYPE_COLORS, badgeColor, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
-import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
+import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { clipZoneToBox, hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
@@ -1000,7 +1000,7 @@ export default function KakaoZoneMap({
        * 후보 하나 — 1줄 칩으로 둘지 2단 카드로 그릴지 판단하는 곳은 여기 한 군데뿐이다
        * (폴리곤 구역과 점으로 그리는 미고시 후보지가 같은 규칙으로 그려진다).
        */
-      const pushCand = (z: SeoulZone, x: number, y: number, sw: number, sh: number) => {
+      const pushCand = (z: SeoulZone, x: number, y: number, sw: number, sh: number, keepInside = false) => {
         // 카드는 구역이 화면에서 카드만큼 자리를 가질 때만 띄운다 — 골목 안 작은 구역에
         // 100px짜리 카드를 얹으면 지도가 카드로 덮인다. 그 구역은 더 확대하면 카드로 나타난다.
         //   · 기준은 배율에 따라 낮아진다(cardMin) — 광역 화면에서 구역이 몇 px 이어도 대표
@@ -1018,10 +1018,20 @@ export default function KakaoZoneMap({
         const size = card ? cardSizeOf(name, typeText, stageText) : { w: widthOf(name, typeText), h: TAG_H };
         // 캡슐이 카드 위로 걸쳐 있어 덩어리 중심이 카드 본문보다 7px 위다 — 본문이 구역 중심에 오게 올린다
         const dy = card ? CARD_BODY_TOP / 2 : 0;
+        // 화면 밖으로 밀려 있던 이름표를 교집합 중심으로 끌어온 경우에는,
+        //   이름표가 화면 가장자리에서 잘리지 않도록 안쪽으로 붙여 둔다(글자 반쪽만 남는 꼴 방지).
+        let px = x;
+        let py = y - dy;
+        if (keepInside) {
+          const halfW = size.w / 2 + 3;
+          const halfH = size.h / 2 + 3;
+          px = Math.min(Math.max(px, halfW), Math.max(halfW, cw - halfW));
+          py = Math.min(Math.max(py, halfH), Math.max(halfH, ch - halfH));
+        }
         cands.push({
           id: z.id,
-          x,
-          y: y - dy,
+          x: px,
+          y: py,
           w: size.w,
           h: size.h,
           area: z.area || 0,
@@ -1033,6 +1043,13 @@ export default function KakaoZoneMap({
           full: labelLine(z),
         });
       };
+      // 화면과 폴리곤의 교집합을 구할 때 쓰는 보이는 사각형(여백 없이)
+      const visBox = {
+        minLat: Math.min(tLat0, tLat1),
+        maxLat: Math.max(tLat0, tLat1),
+        minLng: Math.min(tLng0, tLng1),
+        maxLng: Math.max(tLng0, tLng1),
+      };
       for (const pz of districtMode ? [] : prepRef.current.zones) {
         if (pz.maxLat < tMinLat || pz.minLat > tMaxLat || pz.maxLng < tMinLng || pz.minLng > tMaxLng) continue;
         const z = pz.zone;
@@ -1043,12 +1060,27 @@ export default function KakaoZoneMap({
         const sw = (pz.maxLng - pz.minLng) * pxPerLng;
         const sh = (mercator(pz.minLat) - mercator(pz.maxLat)) * pxPerMerc;
         if (sw < TAG_MIN_W || sh < TAG_MIN_H) continue;
-        const cLat = z.center && Number.isFinite(z.center[0]) ? z.center[0] : (pz.minLat + pz.maxLat) / 2;
-        const cLng = z.center && Number.isFinite(z.center[1]) ? z.center[1] : (pz.minLng + pz.maxLng) / 2;
-        const x = p0x + (cLng - lng0) * pxPerLng;
-        const y = p0y + (mercator(cLat) - m0) * pxPerMerc;
-        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) continue;
-        pushCand(z, x, y, sw, sh);
+        const cLat0 = z.center && Number.isFinite(z.center[0]) ? z.center[0] : (pz.minLat + pz.maxLat) / 2;
+        const cLng0 = z.center && Number.isFinite(z.center[1]) ? z.center[1] : (pz.minLng + pz.maxLng) / 2;
+        let x = p0x + (cLng0 - lng0) * pxPerLng;
+        let y = p0y + (mercator(cLat0) - m0) * pxPerMerc;
+        let pulledIn = false;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) {
+          // ── 구역 중심이 화면 밖 — 폴리곤이 화면에 걸쳐 있으면 교집합의 중심으로 이름표를 끌어온다 ──
+          //   · 예전에는 여기서 그냥 건너뛰어, 큰 구역의 끝부분만 화면에 걸릴 때 경계는 보이는데
+          //     이름표가 통째로 사라졌다(사용자 지적: (가칭)제기동 137-2 가로주택 구역).
+          const piece = clipZoneToBox(pz, visBox);
+          if (!piece) continue;
+          const vw = (piece.maxLng - piece.minLng) * pxPerLng;
+          const vh = (mercator(piece.minLat) - mercator(piece.maxLat)) * pxPerMerc;
+          // 화면에 걸친 부분이 손톱만 하면 이름표를 얹지 않는다(가장자리에 글자만 붙는 꼴)
+          if (vw < 28 || vh < 18) continue;
+          x = p0x + (piece.lng - lng0) * pxPerLng;
+          y = p0y + (mercator(piece.lat) - m0) * pxPerMerc;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          pulledIn = true;
+        }
+        pushCand(z, x, y, sw, sh, pulledIn);
       }
       // 경계 미고시 후보지(사당21 등) — 점으로 그려지는 구역도 이름은 늘 보이게
       //   (구 뱃지 화면에서는 개별 이름표를 깔지 않는다 — 구 카드가 그 자리를 대신한다)

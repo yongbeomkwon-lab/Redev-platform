@@ -162,6 +162,113 @@ export function prepareZones(list: SeoulZone[]): PreparedZones {
   return { zones, points };
 }
 
+/** 화면 사각형(경위도) — 지금 보이는 지도 영역 */
+export type ClipBox = { minLat: number; maxLat: number; minLng: number; maxLng: number };
+
+export type ClippedZone = {
+  /** 화면과 겹친 조각의 면적중심(경위도) — 이름표를 여기에 앉힌다 */
+  lat: number;
+  lng: number;
+  /** 겹친 조각의 경위도 경계 — 화면에서 얼마나 크게 걸쳤는지 재는 데 쓴다 */
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+  /** 겹친 조각의 면적(deg²) — 링(조각)끼리 넓이를 비교할 때만 쓴다 */
+  area: number;
+};
+
+/** 다각형을 반평면(경도 또는 위도 한쪽)으로 자른다 — Sutherland–Hodgman */
+function clipHalf(poly: number[], axis: 0 | 1, bound: number, keepGreater: boolean): number[] {
+  const n = poly.length / 2;
+  if (n < 3) return [];
+  const out: number[] = [];
+  const val = (i: number) => poly[(i % n) * 2 + axis];
+  const inside = (v: number) => (keepGreater ? v >= bound : v <= bound);
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + n - 1) % n;
+    const vi = val(i);
+    const vj = val(j);
+    const inI = inside(vi);
+    const inJ = inside(vj);
+    if (inI !== inJ && vi !== vj) {
+      // 경계와 만나는 점 — 다른 축 값은 선형보간
+      const t = (bound - vj) / (vi - vj);
+      const other = 1 - axis;
+      const oi = poly[(i % n) * 2 + other];
+      const oj = poly[(j % n) * 2 + other];
+      const p = [0, 0];
+      p[axis] = bound;
+      p[other] = oj + (oi - oj) * t;
+      out.push(p[0], p[1]);
+    }
+    if (inI) out.push(poly[(i % n) * 2], poly[(i % n) * 2 + 1]);
+  }
+  return out;
+}
+
+/** 다각형(평면 [lat,lng,...])의 면적과 면적중심 */
+function polyAreaCentroid(poly: number[]): { area: number; lat: number; lng: number } {
+  const n = poly.length / 2;
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + 1) % n;
+    const y1 = poly[i * 2];
+    const x1 = poly[i * 2 + 1];
+    const y2 = poly[j * 2];
+    const x2 = poly[j * 2 + 1];
+    const cross = x1 * y2 - x2 * y1;
+    a += cross;
+    cx += (x1 + x2) * cross;
+    cy += (y1 + y2) * cross;
+  }
+  a *= 0.5;
+  if (!Number.isFinite(a) || a === 0) return { area: 0, lat: 0, lng: 0 };
+  return { area: Math.abs(a), lat: cy / (6 * a), lng: cx / (6 * a) };
+}
+
+/**
+ * 구역 폴리곤과 지금 화면의 **교집합** 조각 — 가장 넓은 조각의 면적중심을 돌려준다.
+ *
+ *   · 왜 필요한가: 이름표는 구역 중심(center)에 앉는데, 구역이 커서 중심이 화면 밖에 있으면
+ *     화면에 경계만 보이고 이름표는 사라진다(사용자 지적: 제기동 137-2 아래쪽).
+ *   · 여러 조각(MultiPolygon)이면 화면에 가장 넓게 걸친 조각을 고른다.
+ *   · 화면과 전혀 겹치지 않으면 null — 부르는 쪽이 그 구역을 건너뛴다.
+ */
+export function clipZoneToBox(z: PreparedZone, box: ClipBox): ClippedZone | null {
+  let best: ClippedZone | null = null;
+  for (const ring of z.rings) {
+    if (ring.maxLat < box.minLat || ring.minLat > box.maxLat) continue;
+    if (ring.maxLng < box.minLng || ring.minLng > box.maxLng) continue;
+    let poly: number[] = Array.from(ring.pts);
+    poly = clipHalf(poly, 0, box.minLat, true);
+    poly = clipHalf(poly, 0, box.maxLat, false);
+    poly = clipHalf(poly, 1, box.minLng, true);
+    poly = clipHalf(poly, 1, box.maxLng, false);
+    if (poly.length < 6) continue;
+    const c = polyAreaCentroid(poly);
+    if (!(c.area > 0)) continue;
+    let minLat = 90;
+    let maxLat = -90;
+    let minLng = 180;
+    let maxLng = -180;
+    for (let i = 0; i < poly.length; i += 2) {
+      const lat = poly[i];
+      const lng = poly[i + 1];
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    }
+    if (!best || c.area > best.area) {
+      best = { lat: c.lat, lng: c.lng, minLat, maxLat, minLng, maxLng, area: c.area };
+    }
+  }
+  return best;
+}
+
 /** 광선 교차 판정 — pts 는 [lat, lng, ...] */
 function ringContains(pts: Float64Array, lat: number, lng: number): boolean {
   let inside = false;
