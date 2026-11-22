@@ -45,6 +45,8 @@ import { reverseGeocode } from "@/lib/kakao-address";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
+import ZoneAuctions from "@/components/ZoneAuctions";
+import { formatWon, formatSaleDate, loadAuctions, type AuctionItem, type AuctionsData } from "@/lib/auctions";
 import {
   LISTINGS_CHANGED_EVENT,
   listingCountsByZoneId,
@@ -190,6 +192,12 @@ export default function ZoneExplorer() {
   const [dpTop, setDpTop] = useState<DevHotspot[]>([]);
   /** ⚡ 최근 변동 구역 — public/data/recent-zones.json (scripts/build-recent-zones.py) */
   const [recentZones, setRecentZones] = useState<RecentZone[]>([]);
+  // ── 구역 내 법원경매 물건 (public/data/auctions.json) ─────────────
+  //   대법원 법원경매정보에서 받아 지번 좌표로 구역 경계와 매칭해 둔 데이터.
+  //   구역 상세 패널에 「⚖️ 구역 내 진행 경매 N건」으로 붙고, 지도에는 고른 물건만 핀으로 찍는다.
+  const [auctions, setAuctions] = useState<AuctionsData | null>(null);
+  /** 지도에 위치를 보여 줄 경매 물건(「📍 지도 위치」를 누른 것) */
+  const [auctionFocus, setAuctionFocus] = useState<AuctionItem | null>(null);
   const [jibunPickOn, setJibunPickOn] = useState(false);
   const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
   const [jibunProbing, setJibunProbing] = useState(false);
@@ -384,18 +392,49 @@ export default function ZoneExplorer() {
     [zones, typeFilter, stageFilter]
   );
 
+  // 경매 데이터 — 한 번만 받아 둔다(없으면 섹션을 그리지 않는다)
+  useEffect(() => {
+    let alive = true;
+    loadAuctions().then((d) => {
+      if (alive) setAuctions(d);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const selected = zones.find((z) => z.id === selectedId);
   // 대표 구역이 아닌 구역 — 서울시 고시 데이터만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
-  // 구역을 바꾸거나 닫으면 이전 구역의 실거래 핀을 지도에서 지운다
+  // 구역을 바꾸거나 닫으면 이전 구역의 실거래 핀·경매 위치 핀을 지도에서 지운다
   useEffect(() => {
     setTxPins([]);
+    setAuctionFocus(null);
   }, [selectedId]);
   // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
   const selectedListings = listings.filter((l) =>
     listingMatchesZone(l, selectedId, selectedSeoul?.name ?? selected?.name, selectedSeoul?.alias)
   );
+  // 선택 구역에 매칭된 경매 물건 — 없으면 빈 배열(섹션을 그리지 않는다)
+  const selectedAuctions: AuctionItem[] =
+    selectedId && auctions ? auctions.byZone[selectedId] ?? [] : [];
+  // 경매 물건이 있는 구역 상위 목록 — 첫 화면(패널)에서 바로 들어간다
+  const auctionTop = useMemo(() => {
+    if (!auctions) return [];
+    return Object.entries(auctions.byZone)
+      .map(([id, list]) => ({
+        id,
+        name: list[0]?.zoneName ?? id,
+        count: list.length,
+        nearest: list[0],
+      }))
+      .sort((a, b) =>
+        b.count - a.count ||
+        (a.nearest?.saleDate || "99999999").localeCompare(b.nearest?.saleDate || "99999999")
+      )
+      .slice(0, 5);
+  }, [auctions]);
 
   // ── 매물 조건 필터 ────────────────────────────────────────────────────────
   //   · 지도 배지 숫자·‘매물 있는 구역’ 필터 모두 **같은 목록**에서 센다 —
@@ -879,6 +918,17 @@ export default function ZoneExplorer() {
   }
 
   const addressPin: AddressPin | null = useMemo(() => {
+    // 경매 물건 위치를 눌렀으면 그 지점을 먼저 보여 준다(주소 판정 핀보다 우선)
+    if (auctionFocus) {
+      return {
+        lat: auctionFocus.lat,
+        lng: auctionFocus.lng,
+        label: `⚖️ ${auctionFocus.caseNoPrint.replace(auctionFocus.court, "").trim() || auctionFocus.caseNo}`,
+        status: "inside" as const,
+        message: `${auctionFocus.usage || "경매"} · 최저 ${formatWon(auctionFocus.minimum)} · 매각 ${formatSaleDate(auctionFocus.saleDate)}`,
+        zoneId: auctionFocus.zoneId,
+      };
+    }
     if (!addrVerdict) return null;
     return {
       lat: addrVerdict.address.lat,
@@ -893,7 +943,7 @@ export default function ZoneExplorer() {
             ? addrVerdict.completedHits[0].zone.id
             : undefined,
     };
-  }, [addrVerdict]);
+  }, [addrVerdict, auctionFocus]);
 
   /** 역 핀 — 역 검색으로 고른 역을 지도에 찍는다(주소 핀과 동시에 뜨지 않는다) */
   const stationPin: StationPin | null = useMemo(() => {
@@ -921,6 +971,7 @@ export default function ZoneExplorer() {
   function pickZone(id: string) {
     setSelectedId(id);
     setPanelOpen(true);
+    setAuctionFocus(null);
     // 유형 필터가 켜져 있어 고른 구역이 지도 레이어에서 빠져 있으면 지도에서 사라진 것처럼 보인다
     // → 필터를 풀어 경계를 다시 그린다(검색·주소 판정은 필터와 무관하게 전체를 본다).
     if (typeFilter !== "전체") {
@@ -2230,6 +2281,16 @@ export default function ZoneExplorer() {
                 {/* 검증 매물 — 실거래가 위에 '지금 나온 물건'을 먼저 */}
                 <ZoneListingCards listings={selectedListings} zoneId={selected.id} zoneName={selected.name} />
 
+                {/* 구역 내 법원경매 물건 — 매물 카드 바로 아래에 붙여 ‘지금 법원에 걸린 물건’을 함께 본다 */}
+                <ZoneAuctions
+                  items={selectedAuctions}
+                  meta={auctions?.meta ?? null}
+                  onLocate={(it) => {
+                    setAuctionFocus(it);
+                    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+                  }}
+                />
+
                 {/* 국토부 실거래가 — 샘플 거래와 별개로 실제 신고 거래를 함께 보여준다 */}
                 <ZoneTransactions
                   gu={selected.district}
@@ -2333,6 +2394,12 @@ export default function ZoneExplorer() {
               <ZoneOfficialPanel
                 zone={selectedSeoul}
                 listings={selectedListings}
+                auctions={selectedAuctions}
+                auctionsMeta={auctions?.meta ?? null}
+                onLocateAuction={(it) => {
+                  setAuctionFocus(it);
+                  if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+                }}
                 onTxPins={setTxPins}
                 onOpenBuilding={setBuildingTarget}
                 meta={
@@ -2396,8 +2463,39 @@ export default function ZoneExplorer() {
                   </div>
                 </section>
 
-                <section data-testid="recent-zones" className="rounded-xl border border-slate-200 bg-white p-2.5">
-                  <div className="mb-1 flex items-baseline gap-1.5">
+                {auctionTop.length > 0 && (
+                  <section data-testid="auction-zone-top" className="rounded-xl border border-slate-200 bg-white p-2.5">
+                    <div className="mb-1 flex items-baseline gap-1.5">
+                      <b className="text-[12.5px] font-bold text-slate-900">⚖️ 경매 물건 있는 구역</b>
+                      <span className="text-[10px] text-slate-500">법원에 공고된 진행 물건</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {auctionTop.map((z) => (
+                        <button
+                          key={z.id}
+                          type="button"
+                          onClick={() => pickZone(z.id)}
+                          data-testid="auction-zone-item"
+                          data-zone-id={z.id}
+                          title={`${z.name} · 경매 ${z.count}건 — 누르면 구역 상세가 열립니다`}
+                          className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-slate-100"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12px] font-bold text-slate-900">{z.name}</span>
+                            <span className="mt-[1px] block truncate text-[10px] text-slate-500">
+                              {z.nearest ? `${z.nearest.usage || "경매"} · 최저 ${formatWon(z.nearest.minimum)} · ${formatSaleDate(z.nearest.saleDate)}` : ""}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-full bg-slate-800 px-1.5 py-[2px] text-[10px] font-extrabold text-white">
+                            {z.count}건
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <section data-testid="recent-zones" className="rounded-xl border border-slate-200 bg-white p-2.5">                  <div className="mb-1 flex items-baseline gap-1.5">
                     <b className="text-[12.5px] font-bold text-slate-900">⚡ 최근 변동 구역</b>
                     <span className="text-[10px] text-slate-500">고시·공람·단계가 새로 반영된 곳</span>
                   </div>

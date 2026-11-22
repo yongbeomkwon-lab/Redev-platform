@@ -40,6 +40,15 @@ const nextConfig: NextConfig = {
           { key: "Vercel-CDN-Cache-Control", value: "no-store" },
         ],
       },
+      {
+        // 구역 내 법원경매 물건 — 수집·매칭이 갱신되면 배포 없이도 최신을 보게 한다
+        source: "/data/auctions.json",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+        ],
+      },
     ];
   },
 };

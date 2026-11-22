@@ -1,0 +1,11 @@
+# 이 폴더는 법원경매 수집 스크립트의 **작업 캐시**다 — 저장소에는 필요한 것만 남긴다.
+#
+#   · raw/            대법원 응답 원본(법원·페이지별) — 매번 다시 받는 값. 저장하지 않는다(9MB).
+#   · latest.json     raw 를 정규화한 물건 목록 — 스크립트가 만든다. 화면에 나가는 값은
+#                     public/data/auctions.json 이므로 여기서는 빼 둔다(2.9MB).
+#   · geocode.json    주소→좌표 캐시 — 다음 갱신에서 같은 지번을 다시 부르지 않게 **남긴다**.
+#   · cookies.txt     사이트 세션 쿠키 — 절대 저장하지 않는다.
+raw/
+latest.json
+cookies.txt
+blocks.json

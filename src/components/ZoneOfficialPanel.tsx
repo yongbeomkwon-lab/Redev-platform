@@ -20,6 +20,8 @@ import { ZoneListingCards } from "./ZoneListingCards";
 import LandPermitNotice from "./LandPermitNotice";
 import type { TxMapPin } from "./map/props";
 import type { BuildingTradeTarget } from "@/lib/molit";
+import type { AuctionItem, AuctionsMeta } from "@/lib/auctions";
+import ZoneAuctions from "./ZoneAuctions";
 
 const PYEONG = 3.305785;
 
@@ -28,6 +30,9 @@ export default function ZoneOfficialPanel({
   meta,
   onClose,
   listings = [],
+  auctions = [],
+  auctionsMeta = null,
+  onLocateAuction,
   onTxPins,
   onOpenBuilding,
 }: {
@@ -36,6 +41,11 @@ export default function ZoneOfficialPanel({
   onClose: () => void;
   /** 이 구역의 매물(zoneId 또는 zoneName 매칭) — 있으면 고시 데이터 아래에 카드로 붙는다 */
   listings?: Listing[];
+  /** 이 구역 경계 안의 법원경매 물건 — 있으면 「⚖️ 구역 내 진행 경매 N건」 섹션을 그린다 */
+  auctions?: AuctionItem[];
+  auctionsMeta?: AuctionsMeta | null;
+  /** 경매 물건 위치를 지도에 찍는다 */
+  onLocateAuction?: (item: AuctionItem) => void;
   /** 실거래 좌표를 지도 가격 핀으로 넘긴다 */
   onTxPins?: (pins: TxMapPin[]) => void;
   /** 실거래 행을 누를 때 그 단지·건물의 5년 이력을 연다 */
@@ -223,6 +233,9 @@ export default function ZoneOfficialPanel({
 
       {/* 검증 매물 — 실거래가 위에 붙여 '지금 나온 물건'을 먼저 보여준다 */}
       <ZoneListingCards listings={listings} zoneId={zone.id} zoneName={zone.name} />
+
+      {/* 구역 내 법원경매 물건 — 매물 카드 아래, 실거래 위 */}
+      <ZoneAuctions items={auctions} meta={auctionsMeta} onLocate={onLocateAuction} />
 
       {/* 국토부 실거래가 — 서울시 고시 데이터 바로 아래에 붙여 경계·면적과 시세를 함께 본다 */}
       <ZoneTransactions
