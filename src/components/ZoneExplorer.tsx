@@ -107,6 +107,18 @@ const LEGEND_GROUPS: { label: string; color: string; types: MapZoneType[] }[] = 
   { label: "장기전세", color: TYPE_COLORS["장기전세"], types: ["장기전세"] },
 ];
 
+/**
+ * YYYYMM 이 지금부터 몇 달 전인가 — `/api/transactions/building` 의 `offset` 과 같은 셈법(0 = 이번 달).
+ *   국토부 호출 한도로 비어 버린 달을 그 달만 다시 물어볼 때 쓴다.
+ */
+function monthOffsetOf(ym: string): number {
+  const y = Number(ym.slice(0, 4));
+  const m = Number(ym.slice(4, 6));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return -1;
+  const now = new Date();
+  return now.getFullYear() * 12 + now.getMonth() - (y * 12 + (m - 1));
+}
+
 export default function ZoneExplorer() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -643,11 +655,11 @@ export default function ZoneExplorer() {
           return {
             ok: !!json.ok,
             rows: json.transactions ?? [],
-            // 국토부 호출 한도로 일부 달을 못 받은 응답 — '거래 없음'으로 단정하지 않는다
-            partial: !json.ok || !!json.partial,
+            // 국토부 호출 한도(429)·오류로 받지 못한 달 — '거래 없음'으로 단정하지 않는다
+            failedMonths: json.failedMonths ?? [],
           };
         } catch {
-          return { ok: false, rows: [] as MolitTransaction[], partial: true };
+          return { ok: false, rows: [] as MolitTransaction[], failedMonths: [] as string[] };
         }
       };
       /** 가장 최근 계약일 — 유형을 고를 때 거래 건수가 같으면 최신 쪽을 고른다 */
@@ -655,7 +667,10 @@ export default function ZoneExplorer() {
         rows.reduce((acc, r) => (r.dealDate > acc ? r.dealDate : acc), "");
 
       let anyAnswered = false;
-      let incomplete = false;
+      /** 통째로 응답을 못 받은 호출 수 — 이게 있으면 '거래 없음'이라고 단정하지 않는다 */
+      let failedCalls = 0;
+      /** 429 등으로 비어 버린 달(YYYYMM) — 마지막에 한 달씩 다시 물어본다 */
+      const missing = new Set<string>();
       let found: { kind: BuildingTradeKind; rows: MolitTransaction[] } | null = null;
       const chunks: [number, number][] = [
         [24, 0], // 최근 2년
@@ -666,7 +681,10 @@ export default function ZoneExplorer() {
           kinds.map(async (kind) => ({ kind, ...(await ask(kind, months, offset)) }))
         );
         if (results.some((r) => r.ok)) anyAnswered = true;
-        if (results.some((r) => r.partial)) incomplete = true;
+        for (const r of results) {
+          if (!r.ok) failedCalls += 1;
+          for (const ym of r.failedMonths) missing.add(ym);
+        }
         // 거래가 많은 유형을 고르고, 같으면 최근 거래가 있는 유형을 고른다
         const hit = results
           .filter((r) => r.rows.length > 0)
@@ -680,9 +698,32 @@ export default function ZoneExplorer() {
         }
       }
 
+      // 한도(429)로 비어 버린 달은 **한 달씩** 다시 물어본다 — 호출이 적어 성공률이 높다
+      // (단지 이력 창도 같은 방식으로 빈 달을 메우므로, 여기서 뚫리면 창에서도 메워진다)
+      if (!found && missing.size > 0) {
+        for (const ym of [...missing]) {
+          const off = monthOffsetOf(ym);
+          if (off < 0 || off >= 60) {
+            missing.delete(ym);
+            continue;
+          }
+          let answered = false;
+          for (const kind of kinds) {
+            const r = await ask(kind, 1, off);
+            if (r.ok) answered = true;
+            if (r.ok && r.rows.length > 0) {
+              found = { kind, rows: r.rows };
+              break;
+            }
+          }
+          if (answered) missing.delete(ym);
+          if (found) break;
+        }
+      }
+
       if (!found) {
         say(
-          incomplete
+          failedCalls > 0 || missing.size > 0
             ? "실거래를 일부만 불러왔습니다(국토부 호출 한도). 잠시 뒤 다시 시도해 주세요."
             : anyAnswered
               ? "이 지번에는 최근 5년 공동주택(아파트·연립다세대) 신고 거래가 없습니다."
