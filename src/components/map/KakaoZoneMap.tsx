@@ -394,6 +394,7 @@ const CARD_PILL_FONT = `600 10px ${UI_FONT_STACK}`;
  *   · 색은 폴리곤과 같은 TYPE_COLORS 를 쓰므로 지도 아래 범례와 그대로 맞는다.
  */
 const TAG_TYPE_TEXT: Record<string, string> = {
+  재건축: "재건축",
   신통기획: "신통기획",
   모아타운: "모아타운",
   도공복: "도공복",

@@ -70,10 +70,13 @@ export type SeoulZone = {
 };
 
 /**
- * 사업유형 정규화 — 레코드의 소분류(kind)가 민간도심복합개발이면 지도 분류를 유형별로 가른다.
+ * 사업유형 정규화 — 레코드의 소분류(kind)가 사업유형을 더 정확히 말해 줄 때 지도 분류를 바로잡는다.
  *   · 서울플랜+ 레코드는 type 이 옛 분류(예: '일반재개발')로 들어오거나 비어 있을 수 있다.
  *   · 성장거점형·주거중심형은 사용자가 따로 보고 싶어 하는 구분이라 kind 이름에서 읽어 정한다.
  *     (kind 에 유형이 없으면 레코드의 type 을 그대로 둔다 — 없는 유형을 지어내지 않는다)
+ *   · 재건축(단독·공동)은 옛 6색 분류에서 '일반재개발'로 묶여 지도에 '재개발'로 보였다 —
+ *     소분류가 재건축이면 '재건축'으로 되돌린다(2026-11-23). 원본 데이터가 다시 예전 값으로
+ *     들어와도 화면이 재개발로 되돌아가지 않게 하는 안전장치다.
  */
 export function resolveZoneType(type: string | undefined, kind: string | undefined): MapZoneType {
   const k = kind ?? "";
@@ -81,6 +84,8 @@ export function resolveZoneType(type: string | undefined, kind: string | undefin
     if (k.includes("성장거점")) return "민간도심복합(성장거점형)";
     if (k.includes("주거중심")) return "민간도심복합(주거중심형)";
   }
+  if (k.startsWith("재건축")) return "재건축";
+  if (k === "공공재개발") return "공공재개발";
   return (type as MapZoneType) || "일반재개발";
 }
 

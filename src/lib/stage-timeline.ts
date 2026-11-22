@@ -156,6 +156,8 @@ export function pickFamily(type: MapZoneType | string, kind: string | undefined,
     return s.includes("모아타운") ? "moa" : "small";
   }
   if (type === "일반재개발") return k.includes("재건축") ? "rebuild" : "redev";
+  // 재건축은 따로 분류된 뒤에도 소분류(kind)를 함께 본다 — 소분류 없이 들어온 재건축 레코드는 재건축 사다리로
+  if (type === "재건축") return "rebuild";
   if (type === "신통기획" || type === "공공재개발") return "redev";
   if (type === "도공복" || (type ?? "").startsWith("민간도심복합")) return "doum";
   if (type === "역세권" || type === "장기전세") {

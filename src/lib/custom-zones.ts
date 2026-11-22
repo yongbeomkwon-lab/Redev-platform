@@ -17,8 +17,9 @@ import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS } from "@/components/map/colors";
 import { ZONE_TYPE_KIND, zoneFromRow, type ZoneRecord } from "@/lib/db-mapping";
 
-/** 사업유형 — 기존 8분류 + 민간도심복합 2유형 + 기타(직접 입력 구역) */
+/** 사업유형 — 기존 8분류 + 민간도심복합 2유형 + 재건축 + 기타(직접 입력 구역) */
 export const CUSTOM_ZONE_TYPES = [
+  "재건축",
   "신통기획",
   "모아타운",
   "일반재개발",

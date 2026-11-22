@@ -3,12 +3,14 @@
 import type { MapZoneType } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 사업유형 9색 팔레트 (2026-11-21 리디자인 확정본)
+// 사업유형 10색 팔레트 (2026-11-21 리디자인 확정본 + 2026-11-23 재건축 분리)
 //
-//  · 9색 = 일반재개발 · 공공재개발 · 신통기획 · 모아타운 · 도공복 · 민간도심복합 ·
-//          가로주택·소규모 · 역세권 · 장기전세
+//  · 10색 = 재건축 · 일반재개발 · 공공재개발 · 신통기획 · 모아타운 · 도공복 · 민간도심복합 ·
+//           가로주택·소규모 · 역세권 · 장기전세
 //  · 같은 사업의 소분류는 한 색으로 묶는다 — 민간도심복합(성장거점형·주거중심형) 한 색,
 //    가로주택·소규모 한 색. 색은 지도 폴리곤·지도 칩·범례·상세 뱃지가 모두 공유한다.
+//  · 재건축(인디고)은 재개발(초록)과 사업 성격이 달라 따로 둔다 — 서울플랜+ 소분류
+//    재건축(단독 BZ104·공동 BZ105)이 옛 6색 분류로 '일반재개발'에 섞여 '재개발'로 보이던 것을 고쳤다.
 //  · 신통기획만 테두리를 진한 자주(#4B286D)로 따로 둔다 — 채움(#C05CC9)이 밝아
 //    베이스맵 위에서 경계가 풀리지 않게(시안 확정본과 같은 처리).
 //  · TYPE_LINE = 폴리곤 테두리(같은 색을 22% 어둡게), TYPE_INK·TYPE_TINT = 흰 배경 위
@@ -17,6 +19,7 @@ import type { MapZoneType } from "@/lib/types";
 
 /** 9색 원색 — 지도 채움·지도 위 칩·범례 점 */
 export const TYPE_COLORS: Record<MapZoneType, string> = {
+  재건축: "#4155C4",
   일반재개발: "#5B8C3A",
   공공재개발: "#1697A6",
   신통기획: "#C05CC9",
@@ -32,6 +35,7 @@ export const TYPE_COLORS: Record<MapZoneType, string> = {
 
 /** 폴리곤 테두리 — 채움색을 22% 어둡게(신통기획은 시안 확정값 #4B286D) */
 export const TYPE_LINE: Record<string, string> = {
+  재건축: "#2F3F94",
   일반재개발: "#476D2D",
   공공재개발: "#117681",
   신통기획: "#4B286D",
@@ -47,6 +51,7 @@ export const TYPE_LINE: Record<string, string> = {
 
 /** 흰 배경 위 뱃지 글자색 — 원색을 42% 눌러 본문 크기에서도 읽히게 */
 export const TYPE_INK: Record<string, string> = {
+  재건축: "#2B3880",
   일반재개발: "#355122",
   공공재개발: "#0D5860",
   신통기획: "#6F3575",
@@ -62,6 +67,7 @@ export const TYPE_INK: Record<string, string> = {
 
 /** 흰 배경 위 뱃지 바탕 — 원색을 90% 흰색으로 희석 */
 export const TYPE_TINT: Record<string, string> = {
+  재건축: "#EDEFFB",
   일반재개발: "#EFF4EB",
   공공재개발: "#E8F5F6",
   신통기획: "#F9EFFA",
@@ -104,8 +110,9 @@ export function typeLine(type?: string | null): string {
   return (type && TYPE_LINE[type]) || NEUTRAL_LINE;
 }
 
-/** 범례 노출 순서 — 9색(같은 색으로 묶인 소분류는 대표 이름 하나) */
+/** 범례 노출 순서 — 10색(같은 색으로 묶인 소분류는 대표 이름 하나) */
 export const TYPE_ORDER: MapZoneType[] = [
+  "재건축",
   "일반재개발",
   "공공재개발",
   "신통기획",
