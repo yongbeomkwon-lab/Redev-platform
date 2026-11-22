@@ -13,7 +13,9 @@
 결과: `public/data/dev-pressure-blocks.json`
   { id, areaM2, pyeong, oldPct, bldCount, aptCount, zones, center, polygon:[[lat,lng],…], holes:[[[lat,lng],…]] }
 
-  ★ 이 경계는 **참고용 추정**이다. 고시된 구역계가 아니므로 지도에서도 점선으로만 그린다.
+  ★ 이 경계는 **참고용 추정**이다. 고시된 구역계가 아니다.
+    지도에는 이 폴리곤을 더 이상 그리지 않는다(2026-11-23) — 대신 이 덩어리 안쪽에
+    동심원(생활권)을 놓는 바탕으로만 쓴다: `scripts/build-dev-pressure-areas.py`.
 
   python3 scripts/build-dev-pressure-blocks.py [--top 80] [--review 140] [--verbose] [--ids id1,id2]
 """

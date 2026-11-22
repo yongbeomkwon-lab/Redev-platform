@@ -2,18 +2,18 @@
 // 개발압력 핫스팟 카드 — 지도의 🔥 핀을 눌렀을 때 뜬다.
 //   · 추정 위치(구·법정동·행정동), 점수·등급, 포위 유형, 인접 정비구역, 노후도
 //   · 「주변 정비구역 바로가기」 = 구역 상세 열기, 「지번·실거래 보기」 = 그 자리 지번 핀(실거래 5년)
-import { DEV_GRADE_COLOR, formatBlockArea, type DevBlock, type DevHotspot } from "@/lib/dev-pressure";
+import { DEV_GRADE_COLOR, roadClassLabel, type DevArea, type DevHotspot } from "@/lib/dev-pressure";
 
 export default function DevPressureCard({
   spot,
-  block,
+  area,
   onClose,
   onOpenZone,
   onPickJibun,
 }: {
   spot: DevHotspot;
-  /** 이 핫스팟의 가상 구역경계(추정) — 없으면 카드에 그 칸을 그리지 않는다 */
-  block?: DevBlock | null;
+  /** 이 핫스팟의 생활권(동심원, 추정) — 대로변에 붙어 원을 안 그린 곳은 null */
+  area?: DevArea | null;
   onClose: () => void;
   onOpenZone?: (zoneId: string) => void;
   onPickJibun?: (lat: number, lng: number) => void;
@@ -77,49 +77,61 @@ export default function DevPressureCard({
 
       <div className="px-3 pb-2 text-[10.5px] leading-[1.45] text-slate-600">{spot.reason}</div>
 
-      {/* 가상 구역경계(추정) — 점선 폴리곤의 면적·노후·동수·포위 현황 */}
-      {block && (
+      {/* 생활권(동심원, 추정) — 지도에 그린 원의 반경·면적·노후·동수와 대로 이격 */}
+      {area && (
         <div
-          data-testid="dev-block-card"
+          data-testid="dev-area-card"
           className="mx-3 mb-2 rounded-lg border border-orange-200 bg-orange-50/70 px-2 py-1.5"
         >
           <div className="flex items-center justify-between gap-1">
             <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-orange-700">
-              <svg width="16" height="8" aria-hidden>
-                <line x1="0" y1="4" x2="16" y2="4" stroke="#f97316" strokeWidth="2.5" strokeDasharray="5 3" />
+              <svg width="14" height="14" aria-hidden>
+                <circle cx="7" cy="7" r="6" fill="rgba(249,115,22,0.18)" stroke="#f97316" strokeWidth="1.3" />
+                <circle cx="7" cy="7" r="2.6" fill="none" stroke="#fb923c" strokeWidth="0.9" strokeDasharray="1.8 1.4" />
+                <circle cx="7" cy="7" r="1" fill="#ea580c" />
               </svg>
-              가상 구역경계
+              생활권 (추정)
             </span>
-            <span className="text-[11.5px] font-extrabold text-ink">{formatBlockArea(block.areaM2)}</span>
+            <span className="text-[11.5px] font-extrabold text-ink">반경 {area.radiusM}m</span>
           </div>
           <div className="mt-1 grid grid-cols-3 gap-1 text-center">
             <div>
-              <div className="text-[8.5px] text-slate-400">예상 면적</div>
+              <div className="text-[8.5px] text-slate-400">생활권 면적</div>
               <div className="text-[10.5px] font-bold leading-tight text-ink">
-                {Math.round(block.pyeong).toLocaleString()}평
+                {Math.round(area.pyeong).toLocaleString()}평
               </div>
             </div>
             <div>
-              <div className="text-[8.5px] text-slate-400">경계 안 노후</div>
-              <div className="text-[10.5px] font-bold leading-tight text-ink">{block.oldPct}%</div>
+              <div className="text-[8.5px] text-slate-400">생활권 노후</div>
+              <div className="text-[10.5px] font-bold leading-tight text-ink">{area.oldPct}%</div>
             </div>
             <div>
-              <div className="text-[8.5px] text-slate-400">경계 안 동수</div>
-              <div className="text-[10.5px] font-bold leading-tight text-ink">{block.bldCount}동</div>
+              <div className="text-[8.5px] text-slate-400">생활권 동수</div>
+              <div className="text-[10.5px] font-bold leading-tight text-ink">{area.bldCount}동</div>
             </div>
           </div>
           <div className="mt-1 text-[9px] leading-[1.4] text-slate-500">
-            {spot.zones.length > 0 && (
+            {area.zones.length > 0 && (
               <>
-                주변 정비구역 <b className="font-semibold text-slate-700">{spot.zones.length}곳</b> · 
+                주변 정비구역 <b className="font-semibold text-slate-700">{area.zones.length}곳</b> ·{" "}
               </>
             )}
-            아파트 <b className="font-semibold text-slate-700">{block.aptCount}동</b>에 둘러싸인 저층지
-            {block.station ? ` · ${block.station.name}역 ${block.station.dist}m` : ""}
+            아파트 <b className="font-semibold text-slate-700">{area.aptCount}동</b>에 둘러싸인 저층지
+            {area.station ? ` · ${area.station.name}역 ${area.station.dist}m` : ""}
+            {area.road && area.road.name && (
+              <>
+                <br />
+                <span className="text-slate-600">
+                  ⇢ {roadClassLabel(area.road.cls)} <b className="font-semibold text-slate-700">{area.road.name}</b>까지{" "}
+                  {area.road.dist}m{area.road.clearM > 0 ? ` · 도로 끝에서 ${area.road.clearM}m 여유` : " · 도로 바로 옆"}
+                </span>
+              </>
+            )}
             <br />
             <span className="text-orange-700/80">
-              ⚠ 참고용 <b className="font-semibold">AI 추정</b> 가상 경계입니다 — 고시된 구역계가 아니며,
-              기존 구역·아파트 단지는 빼고 그렸습니다.
+              ⚠ 참고용 <b className="font-semibold">AI 추정</b> 저층 주거지 개발압력 생활권입니다 — 고시된 구역계가
+              아니며, 대로변·상업지와
+              기존 구역·아파트 단지는 빼고 저층 주거지 안쪽에 원을 그렸습니다.
             </span>
           </div>
         </div>
