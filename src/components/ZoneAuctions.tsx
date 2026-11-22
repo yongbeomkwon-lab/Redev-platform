@@ -6,8 +6,9 @@
 //    (매칭은 scripts/build-auction-zones.py 가 지번 좌표 → 폴리곤 Point-in-Polygon 으로 미리 계산)
 //  · 실무에서 먼저 보는 순서로 적는다: 용도·사건번호 → 감정가 → 최저가(감정가 대비 %) →
 //    유찰횟수 → 매각기일 → 면적·비고 → 대법원 원문.
+//  · 같은 사건에 물건(호실)이 여러 개면 사건 한 줄로 묶고, 그 아래에 물건을 3건까지 펼친다.
+//    (예: 쌍문동 에드가쌍문 한 사건에 109개 호실 — 사건 목록이 109줄로 늘어서지 않게)
 //  · 물건이 없으면 섹션 자체를 그리지 않는다(빈 상자를 늘어놓지 않는다).
-//  · 건물 한 채에 호실이 수십 개 걸린 사건(예: 쌍문동 에드가쌍문 109건)은 접어서 보여준다.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useMemo, useState } from "react";
 import {
@@ -17,8 +18,12 @@ import {
   type AuctionItem,
 } from "@/lib/auctions";
 
-/** 접었을 때 처음 보여 주는 건수 */
-const PREVIEW = 3;
+/** 사건 묶음 하나에서 기본으로 펼쳐 보여 주는 물건 수 */
+const ITEMS_PER_CASE = 2;
+/** 접었을 때 처음 보여 주는 사건 수 */
+const CASES_PREVIEW = 4;
+
+type CaseGroup = { key: string; items: AuctionItem[] };
 
 export default function ZoneAuctions({
   items,
@@ -31,9 +36,11 @@ export default function ZoneAuctions({
   /** 지도에서 이 물건 위치를 보여 준다 */
   onLocate?: (item: AuctionItem) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  // 사건별로 묶는다 — 같은 사건의 여러 호실은 한 줄로 접어 보여 준다
-  const groups = useMemo(() => {
+  const [casesOpen, setCasesOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  // 사건(법원+사건번호)별로 묶는다 — 물건(호실)은 그 안에서 매각기일·최저가 순
+  const groups = useMemo<CaseGroup[]>(() => {
     const m = new Map<string, AuctionItem[]>();
     for (const it of items) {
       const key = `${it.courtCode}|${it.caseNo}`;
@@ -41,129 +48,154 @@ export default function ZoneAuctions({
       if (arr) arr.push(it);
       else m.set(key, [it]);
     }
-    return [...m.values()].sort(
+    const out = [...m.entries()].map(([key, list]) => ({
+      key,
+      items: [...list].sort(
+        (a, b) =>
+          (a.saleDate || "99999999").localeCompare(b.saleDate || "99999999") ||
+          (a.minimum ?? Infinity) - (b.minimum ?? Infinity)
+      ),
+    }));
+    return out.sort(
       (a, b) =>
-        (a[0].saleDate || "99999999").localeCompare(b[0].saleDate || "99999999") ||
-        (a[0].minimum ?? Infinity) - (b[0].minimum ?? Infinity)
+        (a.items[0].saleDate || "99999999").localeCompare(b.items[0].saleDate || "99999999") ||
+        (a.items[0].minimum ?? Infinity) - (b.items[0].minimum ?? Infinity)
     );
   }, [items]);
 
   if (items.length === 0) return null;
 
-  const shown = open ? groups : groups.slice(0, PREVIEW);
-  const hidden = groups.length - shown.length;
+  const shown = casesOpen ? groups : groups.slice(0, CASES_PREVIEW);
   const asOf = meta?.collectedAt ? meta.collectedAt.slice(0, 10) : null;
+  const toggleGroup = (key: string) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
-    <section
-      data-testid="zone-auctions"
-      className="rounded-xl border border-slate-300 bg-white p-3"
-    >
+    <section data-testid="zone-auctions" className="rounded-xl border border-slate-300 bg-white p-3">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
-        <h3 className="text-xs font-bold text-slate-800">
-          ⚖️ 구역 내 진행 경매 {items.length}건
-        </h3>
+        <h3 className="text-xs font-bold text-slate-800">⚖️ 구역 내 진행 경매 {items.length}건</h3>
         <span className="text-[10px] text-slate-500">대법원 법원경매정보</span>
         {asOf && <span className="ml-auto text-[10px] text-slate-400">{asOf} 수집</span>}
       </div>
 
       <ul className="space-y-2">
-        {shown.map((group) => {
-          const it = group[0];
-          const left = daysUntilSale(it.saleDate);
+        {shown.map((g) => {
+          const head = g.items[0];
+          const open = openGroups.has(g.key);
+          const visible = open ? g.items : g.items.slice(0, ITEMS_PER_CASE);
+          const hidden = g.items.length - visible.length;
           return (
             <li
-              key={`${it.courtCode}-${it.caseNo}`}
+              key={g.key}
               data-testid="zone-auction-item"
               className="rounded-lg border border-slate-200 bg-slate-50/60 p-2"
             >
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                 <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                  {it.usage || "용도 미상"}
+                  {head.usage || "용도 미상"}
                 </span>
-                <span className="text-[11px] font-semibold text-slate-800">
-                  {it.caseYear && it.casePart && it.caseSerial
-                    ? `${it.caseYear}${it.casePart}${it.caseSerial}`
-                    : it.caseNoPrint.replace(it.court, "").trim() || it.caseNo}
-                </span>
-                <span className="text-[10px] text-slate-500">{it.court.replace("지방법원", "")}</span>
-                {group.length > 1 && (
+                <b className="text-[11px] font-semibold text-slate-800">
+                  {head.caseYear && head.casePart && head.caseSerial
+                    ? `${head.caseYear}${head.casePart}${head.caseSerial}`
+                    : head.caseNoPrint.replace(head.court, "").trim() || head.caseNo}
+                </b>
+                <span className="text-[10px] text-slate-500">{head.court.replace("지방법원", "")}</span>
+                {g.items.length > 1 && (
                   <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
-                    이 사건 물건 {group.length}건
+                    물건 {g.items.length}건
                   </span>
                 )}
               </div>
 
-              <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-600">{it.address}</p>
+              <ul className="mt-1 space-y-1.5">
+                {visible.map((it) => {
+                  const left = daysUntilSale(it.saleDate);
+                  return (
+                    <li key={it.id} className="rounded border border-slate-200 bg-white p-1.5">
+                      <p className="line-clamp-2 text-[11px] leading-snug text-slate-600">{it.address}</p>
+                      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+                        <span className="text-slate-500">
+                          감정 <b className="font-semibold text-slate-700">{formatWon(it.appraised)}</b>
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="text-slate-500">
+                          최저 <b className="font-extrabold text-rose-700">{formatWon(it.minimum)}</b>
+                          {it.minimumRate != null && (
+                            <span className="ml-0.5 text-[10px] font-semibold text-rose-600">
+                              {it.minimumRate}%
+                            </span>
+                          )}
+                        </span>
+                        {it.failCount != null && it.failCount > 0 && (
+                          <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">
+                            유찰 {it.failCount}회
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
+                        <span className="font-semibold text-slate-700">
+                          매각 {formatSaleDate(it.saleDate)} {it.saleTime}
+                        </span>
+                        {left != null && left >= 0 && left <= 7 && (
+                          <span className="rounded bg-rose-50 px-1 py-0.5 font-semibold text-rose-700">
+                            {left === 0 ? "오늘" : `${left}일 뒤`}
+                          </span>
+                        )}
+                        {it.area && <span>{it.area}</span>}
+                        {it.note && (
+                          <span className="rounded bg-slate-200/80 px-1 py-0.5 font-medium text-slate-700">
+                            {it.note.length > 20 ? it.note.slice(0, 20) + "…" : it.note}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        {onLocate && (
+                          <button
+                            onClick={() => onLocate(it)}
+                            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-slate-500 hover:text-slate-900"
+                          >
+                            📍 지도 위치
+                          </button>
+                        )}
+                        <a
+                          href={it.detailUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`${it.court} ${it.caseYear}${it.casePart}${it.caseSerial} — 대법원 사건검색 화면이 열립니다(법원·연도·번호를 그대로 넣으세요)`}
+                          className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-slate-500 hover:text-slate-900"
+                        >
+                          대법원에서 사건 조회 ↗
+                        </a>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
 
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
-                <span className="text-slate-500">
-                  감정 <b className="font-semibold text-slate-700">{formatWon(it.appraised)}</b>
-                </span>
-                <span className="text-slate-400">→</span>
-                <span className="text-slate-500">
-                  최저{" "}
-                  <b className="font-extrabold text-rose-700">{formatWon(it.minimum)}</b>
-                  {it.minimumRate != null && (
-                    <span className="ml-0.5 text-[10px] font-semibold text-rose-600">
-                      {it.minimumRate}%
-                    </span>
-                  )}
-                </span>
-                {it.failCount != null && it.failCount > 0 && (
-                  <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">
-                    유찰 {it.failCount}회
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
-                <span className="font-semibold text-slate-700">
-                  매각 {formatSaleDate(it.saleDate)} {it.saleTime}
-                </span>
-                {left != null && left >= 0 && left <= 7 && (
-                  <span className="rounded bg-rose-50 px-1 py-0.5 font-semibold text-rose-700">
-                    {left === 0 ? "오늘" : `${left}일 뒤`}
-                  </span>
-                )}
-                {it.area && <span>{it.area}</span>}
-                {it.note && (
-                  <span className="rounded bg-slate-200/80 px-1 py-0.5 font-medium text-slate-700">
-                    {it.note.length > 24 ? it.note.slice(0, 24) + "…" : it.note}
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-1.5 flex items-center gap-1.5">
-                {onLocate && (
-                  <button
-                    onClick={() => onLocate(it)}
-                    className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-slate-500 hover:text-slate-900"
-                  >
-                    📍 지도 위치
-                  </button>
-                )}
-                <a
-                  href={it.detailUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`${it.court} ${it.caseYear}${it.casePart}${it.caseSerial} — 대법원 사건검색 화면이 열립니다(법원·연도·번호를 그대로 넣으세요)`}
-                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-slate-500 hover:text-slate-900"
+              {hidden > 0 && (
+                <button
+                  onClick={() => toggleGroup(g.key)}
+                  className="mt-1.5 w-full rounded border border-slate-200 py-0.5 text-[10px] font-medium text-slate-500 hover:border-slate-400 hover:text-slate-800"
                 >
-                  대법원에서 사건 조회 ↗
-                </a>
-              </div>
+                  이 사건 물건 {g.items.length}건 {open ? "접기" : `모두 보기 (+${hidden})`}
+                </button>
+              )}
             </li>
           );
         })}
       </ul>
 
-      {groups.length > PREVIEW && (
+      {groups.length > CASES_PREVIEW && (
         <button
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setCasesOpen((v) => !v)}
           className="mt-2 w-full rounded-lg border border-slate-200 py-1 text-[10px] font-medium text-slate-500 hover:border-slate-400 hover:text-slate-800"
         >
-          {open ? "접기" : `사건 ${groups.length}개 모두 보기 (+${hidden})`}
+          {casesOpen ? "접기" : `사건 ${groups.length}개 모두 보기 (+${groups.length - CASES_PREVIEW})`}
         </button>
       )}
 
