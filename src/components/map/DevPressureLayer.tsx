@@ -25,8 +25,9 @@ type Mark = { spot: DevHotspot; x: number; y: number };
 const BLOCK_UNIT = 1e6;
 const BLOCK_REF_LAT = 37.55;
 const BLOCK_REF_LNG = 126.9;
-/** 이 배율보다 멀리 보면 가상 경계는 그리지 않는다 — 서울 전체에서 80개 폴리곤이 지도를 덮지 않게 */
-const BLOCK_MAX_LEVEL = 6;
+/** 이 배율보다 멀리 보면 가상 경계는 그리지 않는다 — 넓게 볼 때 80개 폴리곤이 구역 이름표와 겹쳐
+ *  지도가 어지러워진다(레벨 6 실사, 2026-11-22). 동네 단위(레벨 5 이하)로 당겼을 때만 보여 준다. */
+const BLOCK_MAX_LEVEL = 5;
 
 function blockPathD(block: DevBlock): string {
   const toX = (lng: number) => ((lng - BLOCK_REF_LNG) * BLOCK_UNIT).toFixed(1);
