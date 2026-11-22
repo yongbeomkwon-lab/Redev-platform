@@ -44,7 +44,7 @@ export default function ZoneOfficialPanel({
   const color = TYPE_COLORS[zone.type] ?? "#64748b";
   const pyeong = Math.round(zone.area / PYEONG);
   const aliases = (zone.alias ?? []).filter((a) => a !== zone.name);
-  const boundaryMissing = !zone.polygon || zone.geom === "미고시";
+  const boundaryMissing = !zone.polygon || zone.geom === "미고시" || zone.geom === "고시미반영";
   const sources = [...(zone.sources ?? []), ...(zone.nameSources ?? [])].filter(
     (s, i, arr) => arr.findIndex((x) => x.url === s.url && x.label === s.label) === i
   );
@@ -160,6 +160,12 @@ export default function ZoneOfficialPanel({
               <>
                 미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다
                 {zone.centerLabel && <span className="text-emerald-700/70"> · 지도 표시: {zone.centerLabel}</span>}
+              </>
+            ) : zone.geom === "고시미반영" ? (
+              <>
+                정비구역 지정 고시 완료 — 고시 도면 경계는 아직 반영하지 않았습니다
+                {zone.centerLabel && <span className="text-emerald-700/70"> · 지도 표시: {zone.centerLabel}</span>}
+                {zone.boundaryNote && <span className="text-emerald-700/70"> · {zone.boundaryNote}</span>}
               </>
             ) : zone.geom === "UQ120보정" ? (
               <>
