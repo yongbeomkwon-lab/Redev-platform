@@ -35,7 +35,17 @@ import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import SubwayLayer from "./SubwayLayer";
-import { SEOUL_BOUNDS, txPinKey, type AddressPin, type JibunPin, type StationPin, type LeafletZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import {
+  SEOUL_BOUNDS,
+  txPinKey,
+  type AddressPin,
+  type DistrictStat,
+  type JibunPin,
+  type StationPin,
+  type LeafletZoneMapProps,
+  type MyListingPin,
+  type TxMapPin,
+} from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
 import { addressPinHtml, stationPinHtml } from "./address-pin";
@@ -137,6 +147,51 @@ function StationPinMarker({ pin }: { pin?: StationPin | null }) {
   return (
     <Pane name="redevStationPin" style={{ zIndex: 901 }}>
       <Marker position={[pin.lat, pin.lng]} icon={icon} interactive={false} keyboard={false} />
+    </Pane>
+  );
+}
+
+/**
+ * 자치구 총 개수 뱃지 — 카카오맵(광역 레벨 7 이상)과 같은 규칙의 OSM 폴백.
+ *   · 줌 13 이하(카카오 레벨 7 이상 = 서울 전체가 보이는 화면)에서만 깔린다.
+ *   · 카드 모양은 카카오맵과 같게 — 흰 위 칸에 구 이름, 오레오 블루 아래 칸에 총 개수.
+ *   · 누르면 그 구의 구역들이 펼쳐지는 줌 14로 부드럽게 확대한다.
+ */
+function leafletDistrictScale(zoom: number): number {
+  if (zoom >= 12) return 1;
+  if (zoom === 11) return 0.8;
+  if (zoom === 10) return 0.65;
+  return 0.55;
+}
+
+function DistrictBadges({ stats, zoom }: { stats: DistrictStat[]; zoom: number }) {
+  const map = useMap();
+  if (zoom > 13 || stats.length === 0) return null;
+  const s = leafletDistrictScale(zoom);
+  const w = Math.round(62 * s);
+  const h = Math.round(46 * s);
+  return (
+    <Pane name="redevDistrictBadges" style={{ zIndex: 690 }}>
+      {stats.map((d) => (
+        <Marker
+          key={d.gu}
+          position={[d.lat, d.lng]}
+          icon={L.divIcon({
+            className: "redev-district-badge",
+            html: `<div data-testid="district-badge" data-gu="${d.gu}" data-count="${d.count}" style="width:${w}px;height:${h}px;display:flex;flex-direction:column;border-radius:9px;overflow:hidden;background:#fff;box-shadow:0 2px 7px rgba(15,23,42,.28),0 0 0 1px rgba(15,23,42,.08);cursor:pointer;font-family:'Gmarket Sans','Apple SD Gothic Neo',sans-serif;"><span style="display:flex;align-items:center;justify-content:center;height:${Math.round(24 * s)}px;font-size:${Math.round(12 * s)}px;font-weight:700;letter-spacing:-0.03em;color:#0f172a;background:#fff;white-space:nowrap;">${d.gu}</span><span style="display:flex;align-items:center;justify-content:center;height:${Math.round(22 * s)}px;font-size:${Math.round(13 * s)}px;font-weight:700;line-height:1;color:#fff;background:#0054a6;">${d.count}</span></div>`,
+            iconSize: [w, h],
+            iconAnchor: [w / 2, h / 2],
+          })}
+          eventHandlers={{
+            click: () => {
+              // 구역들이 실제로 펼쳐지는 배율(카카오 레벨 6 ≈ 줌 14)로
+              map.flyTo([d.lat, d.lng], 14, { duration: 0.6 });
+            },
+          }}
+          keyboard={false}
+          title={`${d.gu} · 정비구역 ${d.count}곳 — 누르면 ${d.gu}로 확대`}
+        />
+      ))}
     </Pane>
   );
 }
@@ -497,11 +552,14 @@ function SeoulZoneLayer({
   zones,
   selectedId,
   zoom,
+  districtMode = false,
   onSelect,
 }: {
   zones: SeoulZone[];
   selectedId?: string;
   zoom: number;
+  /** 구 뱃지 화면(광역) — 고른 구역 말고는 경계를 걷는다 */
+  districtMode?: boolean;
   onSelect: (id: string) => void;
 }) {
   const map = useMap();
@@ -509,6 +567,8 @@ function SeoulZoneLayer({
   const selectedRef = useRef<string | undefined>(selectedId);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+  const districtRef = useRef(districtMode);
+  districtRef.current = districtMode;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
@@ -536,6 +596,8 @@ function SeoulZoneLayer({
       style: (f) => {
         const p = f?.properties as { id?: string; type?: string; stage?: string; boundaryApprox?: boolean; approxCircle?: boolean } | undefined;
         const active = p?.id === selectedRef.current;
+        // 구 뱃지 화면(광역) — 경계를 모두 걷는다(고른 구역만 남긴다). 지도에는 구 카드만 깔린다.
+        if (districtRef.current && !active) return hiddenApproxCircleStyle();
         // 위치 참고용 근사원(DDP 1·2·3구역 등) — 광역(줌 13 이하 = 카카오 레벨 7 이상)에서는
         //   큰 점선 원을 아예 그리지 않는다(작은 점도 없음 — 카카오맵과 같은 규칙). 실제 구역계 다각형은 그대로.
         if (p?.approxCircle && !active && zoomRef.current <= 13) return hiddenApproxCircleStyle();
@@ -573,6 +635,10 @@ function SeoulZoneLayer({
       const p = (l as L.Path & { feature?: GeoJSON.Feature }).feature?.properties;
       if (!p) return;
       const selected = p.id === selectedId;
+      if (districtMode && !selected) {
+        (l as L.Path).setStyle(hiddenApproxCircleStyle());
+        return;
+      }
       if (p.approxCircle && !selected && zoom <= 13) {
         (l as L.Path).setStyle(hiddenApproxCircleStyle());
         return;
@@ -588,7 +654,7 @@ function SeoulZoneLayer({
         )
       );
     });
-  }, [selectedId, zoom]);
+  }, [selectedId, zoom, districtMode]);
 
   // 선택 구역만 이름표를 고정 표시 — 경계만으로는 어느 구역인지 읽기 어렵다
   const prevSelRef = useRef<string | undefined>(undefined);
@@ -639,6 +705,7 @@ function SeoulZoneLayer({
 export default function LeafletZoneMap({
   zones,
   seoulZones,
+  districtStats = [],
   selectedZoneId,
   onSelectZone,
   showCompleted = false,
@@ -679,6 +746,12 @@ export default function LeafletZoneMap({
   //    클릭·호버를 가로챈다(아래 캔버스의 구역은 클릭이 안 됨). 그래서 지도 옵션으로 하나만 준다.
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
   const [zoom, setZoom] = useState(11);
+  /**
+   * 구 뱃지 화면인가 — 줌 13 이하(카카오 레벨 7 이상 = 서울 전체가 보이는 화면)이고
+   * 구역 하나하나를 보는 특수 화면(「내 매물만 보기」·관리자 그리기)이 아닐 때.
+   *   · 카카오맵과 같은 규칙: 구역 경계·개별 뱃지·경매 핀을 걷고 구 카드만 깐다.
+   */
+  const districtMode = zoom <= 13 && !myPinsOn && !admin;
   // 지하철 노선·역명 레이어 — 재개발 상담에서 “역세권인지”가 첫 질문이라 기본 ON
   const [showSubway, setShowSubway] = useState(true);
 
@@ -716,12 +789,20 @@ export default function LeafletZoneMap({
 
       {/* ── 서울시 정비구역 전수 (Canvas) ── */}
       <ZoomWatcher onChange={setZoom} />
-      <SeoulZoneLayer zones={seoulZones} selectedId={selectedZoneId} zoom={zoom} onSelect={onSelectZone} />
+      <SeoulZoneLayer
+        zones={seoulZones}
+        selectedId={selectedZoneId}
+        zoom={zoom}
+        districtMode={districtMode}
+        onSelect={onSelectZone}
+      />
 
       {/* ── 대표 구역 (상세 데이터 있는 6곳 — 굵은 테두리로 강조) ── */}
       {zones.map((zone) => {
         const active = zone.id === selectedZoneId;
         const rings = [zone.polygon, ...(zone.parts ?? [])];
+        // 구 뱃지 화면에서는 고른 구역만 그린다(카카오맵과 같은 규칙)
+        if (districtMode && !active) return null;
         return rings.map((ring, i) => (
           <Polygon
             key={`fg-${zone.id}-${i}`}
@@ -769,6 +850,9 @@ export default function LeafletZoneMap({
            · 줌 13 이하: 아예 그리지 않는다 — 위 전수 레이어가 투명 스타일로 감춘다(점도 안 찍음)
            · 줌 14 이상·선택: 전수 레이어의 점선 원 그대로 — 여기서 따로 그릴 것이 없다 */}
 
+      {/* ── 자치구 총 개수 뱃지 — 광역(줌 13 이하)에서 구역 대신 깔린다 ── */}
+      <DistrictBadges stats={districtStats} zoom={zoom} />
+
       {/* ── 매물 배지 — 카카오맵과 같은 `🏠 매물 N` ── */}
       <ListingBadges zones={seoulZones} counts={listingCounts} onSelect={onSelectZone} />
 
@@ -783,9 +867,10 @@ export default function LeafletZoneMap({
         activeKey={activeTxPin ? txPinKey(activeTxPin.umdNm, activeTxPin.jibun) : ""}
       />
 
-      {/* ── ⚖️ 경매 물건 핀 — 구역 안(광역이면 매칭된 전체) 법원경매 물건 ── */}
+      {/* ── ⚖️ 경매 물건 핀 — 구역 안(광역이면 매칭된 전체) 법원경매 물건 ──
+           · 구 뱃지 화면(광역)에서는 걷는다 — 지도에는 구 카드만 남긴다 */}
       <AuctionPins
-        pins={auctionPinsOn ? auctionPins : []}
+        pins={auctionPinsOn && !districtMode ? auctionPins : []}
         onSelectPin={onSelectAuctionPin}
         activeId={activeAuctionPinId ?? null}
       />

@@ -38,7 +38,15 @@ import {
   verdictHeadline,
   type AddressVerdict,
 } from "@/lib/address-verdict";
-import type { AddressPin, AdminMapConfig, AdminZoneShape, JibunPin, StationPin, TxMapPin } from "@/components/map/props";
+import type {
+  AddressPin,
+  AdminMapConfig,
+  AdminZoneShape,
+  DistrictStat,
+  JibunPin,
+  StationPin,
+  TxMapPin,
+} from "@/components/map/props";
 import BuildingTradeHistory from "@/components/BuildingTradeHistory";
 import type { BuildingHistoryResponse, BuildingTradeKind, BuildingTradeTarget, MolitTransaction } from "@/lib/molit";
 import { reverseGeocode } from "@/lib/kakao-address";
@@ -1033,6 +1041,48 @@ export default function ZoneExplorer() {
     return m;
   }, [mapSeoulZones]);
 
+  /**
+   * 자치구별 총 구역 수 — 광역(초기 화면)에서 개별 구역 뱃지 대신 깔리는 `구 + 개수` 카드.
+   *   · 개수는 **지도에 실제로 깔린 목록(mapSeoulZones)** 에서 센다 → 유형 필터·‘준공 포함’·
+   *     ‘매물 있는 구역’ 을 모두 반영하고, 합계가 범례 총계(mapSeoulZones.length)와 정확히 같다.
+   *   · 자리는 **전체 목록(seoulZones)** 의 경계 상자 중심에서 잡는다 — 필터를 바꿀 때마다
+   *     뱃지가 이리저리 움직이지 않고, 준공 구역이 많은 구의 중심도 실제 구 한가운데에 온다.
+   */
+  const districtStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const z of mapSeoulZones) counts.set(z.gu, (counts.get(z.gu) ?? 0) + 1);
+    const box = new Map<string, { minLat: number; maxLat: number; minLng: number; maxLng: number }>();
+    const grow = (gu: string, lat: number, lng: number) => {
+      const b = box.get(gu);
+      if (!b) {
+        box.set(gu, { minLat: lat, maxLat: lat, minLng: lng, maxLng: lng });
+        return;
+      }
+      if (lat < b.minLat) b.minLat = lat;
+      if (lat > b.maxLat) b.maxLat = lat;
+      if (lng < b.minLng) b.minLng = lng;
+      if (lng > b.maxLng) b.maxLng = lng;
+    };
+    for (const z of seoulZones) {
+      if (!z.center || !Number.isFinite(z.center[0]) || !Number.isFinite(z.center[1])) continue;
+      grow(z.gu, z.center[0], z.center[1]);
+    }
+    const rows: DistrictStat[] = [];
+    for (const [gu, count] of counts) {
+      const b = box.get(gu);
+      if (!b) continue;
+      rows.push({
+        gu,
+        count,
+        lat: (b.minLat + b.maxLat) / 2,
+        lng: (b.minLng + b.maxLng) / 2,
+      });
+    }
+    // 많이 담긴 구부터 — 지도가 자리를 잡을 때 큰 뱃지가 먼저 앉는다
+    rows.sort((a, b) => b.count - a.count);
+    return rows;
+  }, [mapSeoulZones, seoulZones]);
+
   function unlock(id: string) {
     setUnlocked((prev) => new Set(prev).add(id));
   }
@@ -1435,6 +1485,7 @@ export default function ZoneExplorer() {
         <MapPanel
           zones={mapFeaturedZones}
           seoulZones={mapSeoulZones}
+          districtStats={districtStats}
           selectedZoneId={selectedId}
           onSelectZone={pickZone}
           showCompleted={showCompleted}
@@ -2206,7 +2257,8 @@ export default function ZoneExplorer() {
               도심복합개발(도공복의 민간판) · 성장거점형·주거중심형을 한 색으로 묶었습니다
             </p>
             <p className="text-[10px] leading-snug text-slate-400">
-              구역을 클릭하면 서울시 고시 데이터가 열립니다 · 지도를 움직여 둘러보세요
+              구역을 클릭하면 서울시 고시 데이터가 열립니다 · 지도를 움직여 둘러보세요 ·{" "}
+              멀리서 보면 <b>자치구 총 개수 뱃지</b>가 뜨고, 구 뱃지를 누르면 그 구로 확대됩니다
             </p>
           </div>
         )}

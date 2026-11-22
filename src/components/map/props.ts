@@ -19,7 +19,26 @@ export const SEOUL_BOUNDS: [[number, number], [number, number]] = [
  */
 export type ZoneListingCounts = Record<string, number>;
 
+/**
+ * 자치구(구) 단위 총 구역 수 — 광역 화면(초기 서울 전체)에서 개별 구역 뱃지 대신 깔리는
+ * `구 이름 + 총 개수` 2단 카드.
+ *   · count 는 **지금 지도에 깔린 목록**에서 센 값이라, 사업유형 필터·‘준공 포함’ 토글·
+ *     ‘매물 있는 구역’ 필터가 바뀌면 함께 바뀌고 좌측 범례의 총계와 합이 정확히 맞는다.
+ *   · lat·lng 는 그 구역들이 몰려 있는 곳의 가운데(구 전체 구역의 경계 상자 중심) —
+ *     뱃지를 앉히는 자리이자, 눌렀을 때 확대해 보여 줄 중심이다.
+ */
+export type DistrictStat = {
+  /** 자치구 이름 (예: 서초구) */
+  gu: string;
+  /** 지금 필터에 걸린 구역 수 */
+  count: number;
+  lat: number;
+  lng: number;
+};
+
 export type ZoneMapProps = {
+  /** 자치구별 총 구역 수 — 광역 화면에서 개별 구역 뱃지 자리에 깔린다 */
+  districtStats?: DistrictStat[];
   /** 대표 구역 (상세 데이터 보유 — 실거래·매물 포함) */
   zones: Zone[];
   /** 서울시 정비구역 전수 (호출측이 표시 범위만 걸러서 넘긴다 — 준공 숨김 등) */

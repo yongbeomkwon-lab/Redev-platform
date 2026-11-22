@@ -36,7 +36,7 @@ import {
 import { TYPE_COLORS, badgeColor, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
-import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
 import DevPressureLayer from "./DevPressureLayer";
@@ -285,6 +285,21 @@ const ZONE_TAG_LAYER_STYLE = {
   pointerEvents: "none" as const,
 };
 
+/**
+ * 자치구 총 개수 뱃지 레이어 — 광역 화면(레벨 7 이상)의 유일한 지도 표시(z-index 92).
+ *   · 이름표(90)보다 위에 두어 겹쳐도 카드가 가려지지 않게 한다(구역 이름표는 이 화면에서 숨긴다).
+ *   · 레이어는 클릭을 통과시키고, 뱃지 버튼만 pointerEvents: auto 로 받는다.
+ */
+const DISTRICT_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 92,
+  pointerEvents: "none" as const,
+};
+
 /** 이름표를 띄우는 구역의 최소 화면 크기(px) — 이보다 작은 구역은 확대하면 자연히 나타난다 */
 const TAG_MIN_W = 6;
 const TAG_MIN_H = 5;
@@ -295,6 +310,30 @@ const TAG_MIN_H = 5;
  */
 const TAG_MAX_DESKTOP = 32;
 const TAG_MAX_MOBILE = 16;
+// ── 자치구 총 구역 수 뱃지 (2026-11-22 사용자 요청 — IMG_0737 재개발닷컴 참고) ────────
+//   초기 화면(서울 전체, 카카오 레벨 8)에서는 구역 폴리곤·개별 구역 뱃지·⚖️ 경매 핀이
+//   지도를 덮는다. 사용자는 이 화면에서 **구 단위로 어디에 몇 곳이 있는지**를 먼저 본다.
+//   → 광역(레벨 7 이상)에서는 그것들을 모두 걷어 내고 `구 이름 + 총 개수` 2단 카드만 깐다.
+//   · 7 이상: 구 뱃지 화면 · 6 이하: 기존처럼 구역 경계·이름표·경매 핀
+//   · 노후도·개발압력 오버레이, 「내 매물만 보기」 는 구역 하나하나가 주인공인 화면이라
+//     구 뱃지 화면을 켜지 않는다(기존 동작 그대로).
+//   · 검색·클릭으로 구역을 골랐으면 그 구역 경계와 이름표는 그대로 보인다(선택은 늘 우선).
+const DISTRICT_LEVEL_MIN = 7;
+/** 구 뱃지 카드 크기(px) — 흰 윗칸(구 이름) + 오레오 블루 아랫칸(개수) */
+const DISTRICT_W = 62;
+const DISTRICT_H = 46;
+/**
+ * 배율별 구 뱃지 크기 비율 — 레벨 9 이상으로 더 물러나면 서울이 화면에서 작아져
+ * 25개 카드가 서로 겹친다. 글자는 카드 안에서 함께 줄어들되(transform scale),
+ * 레벨 8(기본 화면)에서는 원래 크기 그대로다.
+ */
+function districtScale(level: number): number {
+  if (level <= 8) return 1;
+  if (level === 9) return 0.8;
+  if (level === 10) return 0.65;
+  return 0.55;
+}
+
 /** 작은 글씨용 UI 고딕 스택 — globals.css 의 --font-ui 와 같은 순서로 맞춘다(측정 폭 = 화면 폭) */
 const UI_FONT_STACK =
   "'Pretendard', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', system-ui, sans-serif";
@@ -424,6 +463,7 @@ type AgeStats = {
 export default function KakaoZoneMap({
   zones,
   seoulZones,
+  districtStats,
   selectedZoneId,
   onSelectZone,
   showCompleted = false,
@@ -502,6 +542,21 @@ export default function KakaoZoneMap({
   const tagMsRef = useRef(0);
   /** 이번 프레임에 놓인 이름표의 사각형(구역 id → 높이) — 매물 배지가 위로 비켜 놓는다 */
   const tagBoxRef = useRef<Map<string, { h: number }>>(new Map());
+  /**
+   * 자치구 총 개수 뱃지 — 광역(레벨 7 이상)에서만 깔린다.
+   *   · stats 는 ZoneExplorer 가 필터·준공 토글을 반영해 넘긴다(합계 = 범례 총계).
+   *   · 요소는 React 가 그리지만(카드 25개, onClick 이 필요), 위치와 표시 여부는 draw 가 정한다.
+   */
+  const districtLayerRef = useRef<HTMLDivElement | null>(null);
+  const districtElsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const districtStatsRef = useRef<DistrictStat[]>([]);
+  /** 이번 프레임이 구 뱃지 화면인가 — 지도 클릭·호버 핸들러도 이 값을 본다 */
+  const districtModeRef = useRef(false);
+  /** draw 가 읽는 최신 prop 값(그리기는 ref 로만 본다 — draw 는 클로저를 만들지 않는다) */
+  const devPressureRef = useRef(false);
+  devPressureRef.current = !!devPressureOn;
+  const myPinsOnRef = useRef(false);
+  myPinsOnRef.current = !!myPinsOn;
   /** 매물 배지 레이어 + 배지 요소(구역 id → 버튼) — draw 가 매 프레임 좌표를 맞춘다 */
   const badgeLayerRef = useRef<HTMLDivElement | null>(null);
   const badgeElsRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -682,6 +737,21 @@ export default function KakaoZoneMap({
     const cLng = center.getLng();
     const now = performance.now();
 
+    const mapLevel = map.getLevel();
+    const wideOut = mapLevel >= 7;
+    /**
+     * 구 뱃지 화면인가 — 초기 서울 전체(레벨 8)에서 구역 대신 `구 이름 + 총 개수` 카드만 깐다.
+     *   · 노후도·개발압력 오버레이, 「내 매물만 보기」 는 구역 하나하나를 보는 화면이라 기존 그대로 둔다.
+     *   · 관리자 모드(경계 그리기·수정)도 기존 그림이 필요하다 — 켜 두지 않는다.
+     */
+    const districtMode =
+      mapLevel >= DISTRICT_LEVEL_MIN &&
+      !agingRef.current &&
+      !devPressureRef.current &&
+      !myPinsOnRef.current &&
+      !adminRef.current;
+    districtModeRef.current = districtMode;
+
     // ── 지도 변환 읽기 ① 기준점(anchor) — 카카오가 방금 그린 실제 화면 좌표 ──────────
     //   p0x/p0y + (경도·메르카토르y)×배율 만 알면 되므로, 서로 먼 두 점의 화면 위치에서
     //   배율과 기준점을 동시에 얻는다(축별로 따로 — 메르카토르는 등각이라 두 값이 거의 같다).
@@ -843,7 +913,7 @@ export default function KakaoZoneMap({
       const tagLayer = tagLayerRef.current;
       const selTag = selectedRef.current;
       // 카드형 뱃지를 쓰는 배율인지 — 이제 사실상 모든 배율에서 카드가 기본이다
-      const level = map.getLevel();
+      const level = mapLevel;
       const cardMode = level <= CARD_LEVEL_MAX;
       // 이번 배율에서 카드를 앉힐 수 있는 구역의 최소 화면 크기 — 물러날수록 기준이 낮아진다
       const cardMin = cardMinSize(level);
@@ -962,7 +1032,7 @@ export default function KakaoZoneMap({
           full: labelLine(z),
         });
       };
-      for (const pz of prepRef.current.zones) {
+      for (const pz of districtMode ? [] : prepRef.current.zones) {
         if (pz.maxLat < tMinLat || pz.minLat > tMaxLat || pz.maxLng < tMinLng || pz.minLng > tMaxLng) continue;
         const z = pz.zone;
         // 선택 구역은 큰 이름표(유형·단계·지번)가 따로 떠 있다 — 기본 이름표를 겹치지 않게 걷어낸다.
@@ -980,7 +1050,8 @@ export default function KakaoZoneMap({
         pushCand(z, x, y, sw, sh);
       }
       // 경계 미고시 후보지(사당21 등) — 점으로 그려지는 구역도 이름은 늘 보이게
-      for (const z of prepRef.current.points) {
+      //   (구 뱃지 화면에서는 개별 이름표를 깔지 않는다 — 구 카드가 그 자리를 대신한다)
+      for (const z of districtMode ? [] : prepRef.current.points) {
         if (!z.center) continue;
         if (z.center[0] < tMinLat || z.center[0] > tMaxLat || z.center[1] < tMinLng || z.center[1] > tMaxLng) continue;
         if (z.id === selTag) continue;
@@ -1138,6 +1209,60 @@ export default function KakaoZoneMap({
       tagMsRef.current = performance.now() - tagT0;
     }
 
+    // ── 자치구 총 개수 뱃지 — 광역(레벨 7 이상) 화면의 주인공 ─────────────────────
+    //   · 흰 위 칸에 구 이름, 오레오 블루 아래 칸에 지금 필터의 구역 수(IMG_0737 참고).
+    //   · 자리: 구역들이 몰려 있는 곳의 가운데(ZoneExplorer 가 넘긴 lat·lng). 지도와 같은
+    //     변환으로 매 프레임 옮기고, 서로 겹치면 위·아래·좌·우로 한 칸씩 비켜 앉힌다.
+    //   · 레벨 9 이상으로 더 물러나면 서울이 작아져 카드가 겹친다 → 배율만큼 줄여 그린다.
+    if (districtLayerRef.current) {
+      const layer = districtLayerRef.current;
+      const stats = districtStatsRef.current;
+      if (!districtMode || stats.length === 0) {
+        layer.style.display = "none";
+      } else {
+        layer.style.display = "";
+        const s = districtScale(mapLevel);
+        const bw = DISTRICT_W * s;
+        const bh = DISTRICT_H * s;
+        const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+        // 구역이 많은 구부터 앉힌다 — 자리가 모자랄 때 큰 카드가 먼저 제자리를 잡는다
+        const ordered = [...stats].sort((a, b) => b.count - a.count);
+        for (const d of ordered) {
+          const node = districtElsRef.current.get(d.gu);
+          if (!node) continue;
+          const x = p0x + (d.lng - lng0) * pxPerLng;
+          const y = p0y + (mercator(d.lat) - m0) * pxPerMerc;
+          if (!Number.isFinite(x) || !Number.isFinite(y) || x < -80 || x > cw + 80 || y < -60 || y > ch + 60) {
+            node.style.visibility = "hidden";
+            continue;
+          }
+          const cands: [number, number][] = [[0, 0]];
+          for (let k = 1; k <= 4; k += 1) {
+            cands.push([0, -(bh + 4) * k], [0, (bh + 4) * k], [-(bw + 4) * k, 0], [(bw + 4) * k, 0]);
+          }
+          let spot: { x: number; y: number } | null = null;
+          for (const [dx, dy] of cands) {
+            const x0 = x + dx - bw / 2;
+            const y0 = y + dy - bh / 2;
+            const x1 = x0 + bw;
+            const y1 = y0 + bh;
+            // 화면에 반쯤 걸친 카드는 잘려 보인다 — 통째로 들어오는 자리만 쓴다
+            if (x0 < 2 || x1 > cw - 2 || y0 < 2 || y1 > ch - 2) continue;
+            if (placed.some((b) => x0 < b.x1 && x1 > b.x0 && y0 < b.y1 && y1 > b.y0)) continue;
+            spot = { x: x0, y: y0 };
+            break;
+          }
+          if (!spot) {
+            node.style.visibility = "hidden";
+            continue;
+          }
+          placed.push({ x0: spot.x, y0: spot.y, x1: spot.x + bw, y1: spot.y + bh });
+          node.style.transform = `translate(${Math.round(spot.x)}px,${Math.round(spot.y)}px) scale(${s})`;
+          node.style.visibility = "visible";
+        }
+      }
+    }
+
     // 매물 배지 — 구역 중심에 `🏠 매물 N`. 지도와 같은 변환으로 매 프레임 좌표를 맞추고,
     // 가까이서 겹치는 배지는 숨긴다(도시 전체 보기에서 글자가 뭉개지지 않게).
     //   · **선택한 구역 배지를 가장 먼저** 놓는다 — 옆 구역 배지에 밀려 사라지지 않게.
@@ -1183,14 +1308,16 @@ export default function KakaoZoneMap({
     //   · 사용자 요구(2026-11-22): **구역 안 물건은 하나도 빠짐없이 다 보여야 한다.**
     //     그래서 겹친다고 숨기지 않고, 위로 한 칸씩 쌓아(stack) 밀어 올린다 — 왼쪽 창에서 보고 있는 핀은 맨 앞.
     if (auctionLayerRef.current) {
+      // 구 뱃지 화면(광역) — ⚖️ 경매 핀·점을 모두 걷는다(지도에는 구 카드만 남긴다)
+      auctionLayerRef.current.style.display = districtMode ? "none" : "";
       const placed: { x: number; y: number }[] = [];
       const activeId = activeAuctionPinRef.current;
       // 서울 전체(레벨 8 이상)처럼 멀리서 볼 때는 가격표 대신 작은 앰버 점으로 찍는다
-      const compact = map.getLevel() >= 8;
+      const compact = mapLevel >= 8;
       auctionLayerRef.current.dataset.compact = compact ? "1" : "0";
-      const ordered = [...auctionAtRef.current].sort(
-        (a, b) => (a.id === activeId ? 0 : 1) - (b.id === activeId ? 0 : 1)
-      );
+      const ordered = districtMode
+        ? []
+        : [...auctionAtRef.current].sort((a, b) => (a.id === activeId ? 0 : 1) - (b.id === activeId ? 0 : 1));
       const limW = compact ? 18 : 52;
       const limH = compact ? 16 : 26;
       const stepY = compact ? 12 : 24;
@@ -1410,7 +1537,6 @@ export default function KakaoZoneMap({
       fillOpacity: number;
       dash: number[] | null;
     }[] = [];
-    const wideOut = map.getLevel() >= 7;
 
     let buf = bufRef.current;
 
@@ -1420,6 +1546,10 @@ export default function KakaoZoneMap({
       const z = pz.zone;
       const isSel = z.id === selId;
       const isHover = !isSel && z.id === hoverId;
+
+      // 구 뱃지 화면(광역) — 구역 경계는 걷어 낸다. 다만 **검색·클릭으로 고른 구역**의 경계는
+      //   그대로 그린다(선택한 곳이 어디인지 보여야 한다).
+      if (districtMode && !isSel) continue;
 
       // 위치 참고용 근사원(DDP 1·2·3구역 등) — 정점이 원형인 점선 원이다.
       //   · 광역 줌아웃(레벨 7 이상): 실제 구역계가 아니므로 **아예 그리지 않는다**(점도 안 찍음).
@@ -1539,6 +1669,8 @@ export default function KakaoZoneMap({
       const isHover = !isSel && z.id === hoverId;
       const color = TYPE_COLORS[z.type] ?? "#7c3aed";
       if (pointsFarOut && !isSel && !isHover) continue;
+      // 구 뱃지 화면에서는 선택한 후보지만 점으로 보여 준다(나머지는 지도를 깨끗하게)
+      if (districtMode && !isSel) continue;
       ctx.beginPath();
       ctx.arc(x, y, isSel ? 13 : isHover ? 11 : 9, 0, Math.PI * 2);
       ctx.setLineDash([4, 3]);
@@ -1990,6 +2122,16 @@ export default function KakaoZoneMap({
           draw();
         }
         let hit: SeoulZone | undefined = hitTestZones(data, lat, lng);
+        // 구 뱃지 화면(광역)에서는 구역 하이라이트도 두지 않는다 — 보이지 않는 경계가
+        //   마우스를 따라다니면 지도가 어수선해진다.
+        if (districtModeRef.current) {
+          if (hoverRef.current !== null) {
+            hoverRef.current = null;
+            draw();
+          }
+          clearHoverCursor();
+          return;
+        }
         // 점으로 표시한 후보지 — 화면 반경 13px 안이면 잡는다
         //   (광역 줌아웃에서는 점이 3.5px 로 작아지지만, 클릭 반경은 13px 그대로 두어
         //    작은 점을 정확히 겨냥하지 않아도 선택된다 — 폴리곤 판정이 먼저라 정상 구역 클릭은 방해하지 않는다)
@@ -2073,6 +2215,13 @@ export default function KakaoZoneMap({
       if (pick.on && pick.pick) {
         clearHoverCursor();
         pick.pick(lat, lng);
+        return;
+      }
+      // ── 구 뱃지 화면(광역): 지도 클릭으로 구역을 고르지 않는다 ──────────────
+      //   경계를 걷어 낸 화면이라 ‘보이지 않는 구역’이 골라지면 엉뚱한 상세 창이 열린다.
+      //   구 단위로 보려면 지도 위 구 뱃지를 누르면 된다(그 뱃지는 길 6으로 확대된다).
+      if (districtModeRef.current) {
+        clearHoverCursor();
         return;
       }
       let hit: SeoulZone | undefined = hitTestZones(data, lat, lng);
@@ -2276,6 +2425,20 @@ export default function KakaoZoneMap({
     prepRef.current = prep;
     draw();
   }, [prep, draw]);
+
+  // ── 자치구 뱃지 통계·특수 오버레이 변경 → 다시 그리기 ────────────────────────
+  //   · 필터나 ‘준공 포함’ 이 바뀌면 구별 개수가 즉시 바뀌어야 한다(범례 합계와 일치).
+  //   · 노후도·개발압력·내 매물만 보기가 켜지면 구 뱃지 화면을 끄고 기존 화면으로 돌아간다.
+  useEffect(() => {
+    districtStatsRef.current = districtStats ?? [];
+    draw();
+  }, [districtStats, draw]);
+
+  useEffect(() => {
+    devPressureRef.current = !!devPressureOn;
+    myPinsOnRef.current = !!myPinsOn;
+    draw();
+  }, [devPressureOn, myPinsOn, draw]);
 
   useEffect(() => {
     selectedRef.current = selectedZoneId;
@@ -2942,6 +3105,56 @@ export default function KakaoZoneMap({
   /** 관리자 초안 — JSX 에서 좁힌 타입으로 쓰기 위해 변수로 꺼내 둔다 */
   const adminDraft = admin?.draft ?? null;
 
+  /**
+   * 자치구 뱃지를 눌렀을 때 — 그 구의 구역들이 화면을 채우도록 부드럽게 확대한다.
+   *   · 화면을 구역 경계 상자에 맞춰 레벨을 정하되 **5~6** 으로 묶는다. 6 이면 구 하나가
+   *     화면에 꽉 차고, 그 아래(7 이상)는 구 뱃지 화면으로 돌아가 버리기 때문이다.
+   *   · 확대·이동은 jump(animate) — 휠 줌처럼 경계·이름표가 같은 프레임에 따라온다.
+   */
+  const focusDistrict = useCallback(
+    (d: DistrictStat) => {
+      const k = sdkRef.current;
+      const map = mapRef.current;
+      if (!k || !map) return;
+      let minLat = 90;
+      let maxLat = -90;
+      let minLng = 180;
+      let maxLng = -180;
+      for (const pz of prepRef.current.zones) {
+        if (pz.zone.gu !== d.gu) continue;
+        if (pz.minLat < minLat) minLat = pz.minLat;
+        if (pz.maxLat > maxLat) maxLat = pz.maxLat;
+        if (pz.minLng < minLng) minLng = pz.minLng;
+        if (pz.maxLng > maxLng) maxLng = pz.maxLng;
+      }
+      for (const z of prepRef.current.points) {
+        if (z.gu !== d.gu || !z.center) continue;
+        if (z.center[0] < minLat) minLat = z.center[0];
+        if (z.center[0] > maxLat) maxLat = z.center[0];
+        if (z.center[1] < minLng) minLng = z.center[1];
+        if (z.center[1] > maxLng) maxLng = z.center[1];
+      }
+      if (!Number.isFinite(minLat) || minLat > maxLat) return;
+      // 구역 상자가 화면의 78% 를 차지하는 배율 → 레벨. 경계 계산은 카카오 투영에 맡긴다
+      const proj = map.getProjection();
+      const sw = proj.containerPointFromCoords(new k.maps.LatLng(minLat, minLng));
+      const ne = proj.containerPointFromCoords(new k.maps.LatLng(maxLat, maxLng));
+      const cw = mapElRef.current?.clientWidth ?? 1200;
+      const ch = mapElRef.current?.clientHeight ?? 800;
+      const wPx = Math.max(1, Math.abs(ne.x - sw.x));
+      const hPx = Math.max(1, Math.abs(ne.y - sw.y));
+      const fit = Math.min((cw * 0.78) / wPx, (ch * 0.78) / hPx);
+      const level = Math.max(5, Math.min(6, map.getLevel() - Math.round(Math.log2(Math.max(fit, 0.05)))));
+      map.jump(
+        new k.maps.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2),
+        level,
+        { animate: { duration: 380 } }
+      );
+      settleView();
+    },
+    [settleView]
+  );
+
   return (
     <div
       ref={wrapRef}
@@ -2973,6 +3186,41 @@ export default function KakaoZoneMap({
       {/* ── 기본 구역 이름표 — `구역명 + 사업유형` (z-index 90, 매물 배지 아래) ──
              요소는 draw 가 직접 만들어 붙인다(이동할 때마다 리렌더하지 않게). */}
       <div ref={tagLayerRef} style={ZONE_TAG_LAYER_STYLE} data-testid="zone-tag-layer" />
+
+      {/* ── 자치구 총 개수 뱃지 — 광역(레벨 7 이상) 화면의 유일한 지도 표시 (z-index 92) ──
+             ・ 흰 위 칸에 구 이름, 오레오 블루 아래 칸에 지금 필터의 구역 수(IMG_0737 참고).
+             ・ 요소는 React 가 그리지만(눌러서 확대), 자리와 표시 여부는 draw 가 매 프레임 정한다. */}
+      <div
+        ref={districtLayerRef}
+        style={{ ...DISTRICT_LAYER_STYLE, display: "none" }}
+        data-testid="district-badge-layer"
+      >
+        {(districtStats ?? []).map((d) => (
+          <button
+            key={d.gu}
+            type="button"
+            ref={(el) => {
+              if (el) districtElsRef.current.set(d.gu, el);
+              else districtElsRef.current.delete(d.gu);
+            }}
+            className="district-badge"
+            data-testid="district-badge"
+            data-gu={d.gu}
+            data-count={d.count}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              focusDistrict(d);
+            }}
+            title={`${d.gu} · 정비구역 ${d.count.toLocaleString()}곳 — 누르면 ${d.gu}로 확대합니다`}
+            aria-label={`${d.gu} 정비구역 ${d.count}곳 — 누르면 ${d.gu}로 확대`}
+            style={{ width: `${DISTRICT_W}px`, height: `${DISTRICT_H}px`, visibility: "hidden" }}
+          >
+            <span className="district-badge-name">{d.gu}</span>
+            <span className="district-badge-count">{d.count.toLocaleString()}</span>
+          </button>
+        ))}
+      </div>
 
       {/* ── 매물 배지 — `🏠 매물 N` (z-index 100 우리 레이어, 폴리곤 위) ── */}
       <div ref={badgeLayerRef} style={BADGE_LAYER_STYLE}>
