@@ -5,7 +5,7 @@
 //   · 구역을 연결하면 「구역별 이야기」에도 함께 모이고, 카드에서 그 구역으로 바로 갈 수 있다.
 //   · 처음 열 때 구역을 미리 정해 둘 수 있다(지도에서 「이 구역에 글쓰기」로 들어온 경우).
 // ─────────────────────────────────────────────────────────────────────────────
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ZonePicker, { type ZoneRef } from "@/components/community/ZonePicker";
 import type { CommunityCategory, CommunityPost } from "@/lib/community";
@@ -42,12 +42,19 @@ export default function WriteForm({
     if (!open) return;
     setZone(presetZone ?? null);
     setError("");
+  }, [open, presetZone]);
+
+  // Esc 로 닫기 — 구역 고르기 창이 떠 있을 때는 그 창만 닫는다
+  const pickerOpen = useRef(false);
+  pickerOpen.current = picker;
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !picker) onClose();
+      if (e.key === "Escape" && !pickerOpen.current) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, presetZone, onClose, picker]);
+  }, [open, onClose]);
 
   if (!open) return null;
 

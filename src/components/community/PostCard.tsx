@@ -66,8 +66,8 @@ export default function PostCard({
         <h3 className="text-[14.5px] font-extrabold leading-[1.4] tracking-[-0.02em] text-ink hover:text-brand">
           {post.title}
         </h3>
-        <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[12.5px] leading-[1.6] text-slate-600">
-          {post.content}
+        <p className="mt-1 line-clamp-2 text-[12.5px] leading-[1.6] text-slate-600">
+          {post.content.replace(/\s+/g, " ")}
         </p>
       </button>
 
