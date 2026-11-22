@@ -3209,7 +3209,11 @@ export default function KakaoZoneMap({
               width: "max-content",
               // 기본 이름표(.zone-tag)와 같은 자리(앵커 가운데)에 놓는다 — 누를 때 뱃지가 튀지 않게
               //   카드형은 덩어리 중심이 카드 본문보다 5px 위라 그만큼 내려 본문을 가운데에 맞춘다
-              transform: cardZoom ? "translate(-50%, calc(50% - 7px))" : "translate(-50%, 50%)",
+              //   · 이 구역 경매 핀이 떠 있으면 이름표를 핀 위로 34px 올린다 — 작은 구역(예: 쌍문동
+              //     507-1일원 3,110㎡)은 핀이 구역 중심에 찍혀 이름표 글자를 덮어 버린다.
+              transform: cardZoom
+                ? `translate(-50%, calc(50% - ${7 + (visibleAuctionPins.length ? 34 : 0)}px))`
+                : `translate(-50%, calc(50% - ${visibleAuctionPins.length ? 34 : 0}px))`,
             }}
             dangerouslySetInnerHTML={{ __html: labelHtml }}
           />
