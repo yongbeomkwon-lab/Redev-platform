@@ -92,6 +92,10 @@ export default function ZoneOfficialPanel({
         </button>
       </div>
 
+      {/* 사업 진행단계 — 지금이 어느 단계인지, 지나온 단계·남은 단계까지 한눈에.
+          별칭·지번 목록보다 위에 둔다(지번이 많은 구역에서도 스크롤 없이 바로 보이도록) */}
+      <StageTimeline zone={zone} />
+
       {aliases.length > 0 && (
         <p className="text-[11px] leading-relaxed text-slate-500">
           <span className="font-semibold text-slate-600">별칭·지번</span>{" "}
@@ -103,9 +107,6 @@ export default function ZoneOfficialPanel({
           <span className="text-slate-400">· 검색창에서 어느 표기로도 찾을 수 있습니다</span>
         </p>
       )}
-
-      {/* 사업 진행단계 — 지금이 어느 단계인지, 지나온 단계·남은 단계까지 한눈에 */}
-      <StageTimeline zone={zone} />
 
       {/* 서울시 고시 데이터 — 1단. 라벨은 줄바꿈 금지, 값은 칸 안에서만 감싼다 */}
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
