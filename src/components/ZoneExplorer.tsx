@@ -46,8 +46,9 @@ import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
 import ZoneAuctions from "@/components/ZoneAuctions";
+import AuctionDetailCard from "@/components/AuctionDetailCard";
 import { formatWon, formatSaleDate, loadAuctions, type AuctionItem, type AuctionsData } from "@/lib/auctions";
-import { buildAuctionPins } from "@/lib/auction-pins";
+import { buildAuctionPins, type AuctionMapPin } from "@/lib/auction-pins";
 import {
   LISTINGS_CHANGED_EVENT,
   listingCountsByZoneId,
@@ -200,8 +201,22 @@ export default function ZoneExplorer() {
   /** 지도에 위치를 보여 줄 경매 물건(「📍 지도 위치」를 누른 것) */
   const [auctionFocus, setAuctionFocus] = useState<AuctionItem | null>(null);
   /**
-   * ⚖️ 지도 경매 핀 표시 — `null` 이면 ‘자동’(구역을 골랐을 때만 ON, 광역에서는 OFF).
-   *   사용자가 지도 위 토글을 누르면 true/false 로 굳히고, 구역을 바꾸면 다시 자동으로 돌린다.
+   * ⚖️ 왼쪽 대시보드 창에 띄운 경매 물건 — 지도 핀을 누르면 그 핀의 물건 묶음이 들어온다.
+   *   · 예전의 지도 말풍선 카드(AuctionPinCard)를 대신한다. 닫으면 null.
+   *   · items 는 같은 좌표에 묶인 물건 전부(카드 안에서 전환), activeId 는 지금 펼친 물건.
+   */
+  const [auctionDetail, setAuctionDetail] = useState<{
+    pinId: string;
+    zoneId: string;
+    items: AuctionItem[];
+    activeId: string;
+  } | null>(null);
+  /** 오른쪽 패널의 경매 목록에서 강조·스크롤할 물건 — 「구역 경매 목록에서 보기」가 정한다 */
+  const [auctionListFocus, setAuctionListFocus] = useState<{ id: string; token: number } | null>(null);
+  /**
+   * ⚖️ 지도 경매 핀 표시 — `null` 이면 ‘자동’(첫 화면부터 ON).
+   *   사용자 요구(2026-11-22): 구역을 고르기 전 서울 전체 화면에서도 구역 안 경매 핀이 기본으로 보여야 한다.
+   *   사용자가 지도 위 토글을 누르면 true/false 로 굳히고, 구역을 바꾸면 다시 자동(ON)으로 돌린다.
    */
   const [auctionPinsChoice, setAuctionPinsChoice] = useState<boolean | null>(null);
   const [jibunPickOn, setJibunPickOn] = useState(false);
@@ -417,8 +432,11 @@ export default function ZoneExplorer() {
   useEffect(() => {
     setTxPins([]);
     setAuctionFocus(null);
-    // 경매 핀 토글도 ‘자동’(구역 선택 시 ON)으로 돌린다
+    setAuctionListFocus(null);
+    // 경매 핀 토글도 ‘자동’(ON)으로 돌린다
     setAuctionPinsChoice(null);
+    // 왼쪽 창의 경매 상세는 **그 구역의 물건일 때만** 남긴다(핀을 눌러 들어온 경우)
+    setAuctionDetail((d) => (d && d.zoneId === selectedId ? d : null));
   }, [selectedId]);
   // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
   const selectedListings = listings.filter((l) =>
@@ -437,7 +455,39 @@ export default function ZoneExplorer() {
     [auctions]
   );
   const mapAuctionPins = selectedId ? zoneAuctionPins : allAuctionPins;
-  const auctionPinsOn = auctionPinsChoice ?? !!selectedId;
+  /** 경매 핀 기본 ON — 첫 화면(광역)에서도 구역 안 물건이 바로 보인다(사용자 요구 2026-11-22) */
+  const auctionPinsOn = auctionPinsChoice ?? true;
+
+  /**
+   * ⚖️ 지도 경매 핀 클릭 — 그 핀의 물건들을 왼쪽 창에 띄우고, 그 구역을 오른쪽 패널에 연다.
+   *   · 말풍선 카드 대신 왼쪽 카드가 열린다(사용자 요구).
+   *   · 이미 그 구역이 열려 있으면 지도 화면은 그대로 두고 카드만 갱신한다.
+   */
+  function openAuctionPin(pin: AuctionMapPin) {
+    const zoneId = pin.lead.zoneId;
+    setAuctionDetail({ pinId: pin.id, zoneId, items: pin.items, activeId: pin.lead.id });
+    setAuctionFocus(null);
+    setAuctionListFocus(null);
+    if (zoneId && zoneId !== selectedId) pickZone(zoneId);
+    else if (zoneId) setPanelOpen(true);
+    // 좁은 화면에서는 왼쪽 카드가 화면을 덮으므로 오른쪽 패널을 접는다
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
+
+  /** 경매 목록·카드에서 「상세」 — 그 물건을 왼쪽 창에 연다(같은 좌표의 형제 물건도 함께) */
+  function openAuctionItem(item: AuctionItem) {
+    const siblings = item.lat && item.lng
+      ? selectedAuctions.filter((x) => Math.abs(x.lat - item.lat) < 1e-5 && Math.abs(x.lng - item.lng) < 1e-5)
+      : [item];
+    const pinId = `${item.lat.toFixed(5)},${item.lng.toFixed(5)}`;
+    setAuctionDetail({
+      pinId,
+      zoneId: selectedId ?? item.zoneId,
+      items: siblings.length ? siblings : [item],
+      activeId: item.id,
+    });
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
   // 경매 물건이 있는 구역 상위 목록 — 첫 화면(패널)에서 바로 들어간다
   const auctionTop = useMemo(() => {
     if (!auctions) return [];
@@ -1406,7 +1456,8 @@ export default function ZoneExplorer() {
           auctionPins={mapAuctionPins}
           auctionPinsOn={auctionPinsOn}
           onToggleAuctionPins={() => setAuctionPinsChoice(!auctionPinsOn)}
-          onOpenAuctionZone={(id) => pickZone(id)}
+          onSelectAuctionPin={openAuctionPin}
+          activeAuctionPinId={auctionDetail?.pinId ?? null}
           onSelectTxPin={(pin) =>
             setBuildingTarget({
               gu: selected?.district ?? selectedSeoul?.gu ?? "",
@@ -1472,7 +1523,7 @@ export default function ZoneExplorer() {
         </div>
       )}
 
-      {/* ── 좌상단: 검색 + 필터 ─────────────────────────────────────────────── */}
+      {/* ── 좌상단: 검색 + 필터 + ⚖️ 경매 물건 상세 ──────────────────────────── */}
       <div className="pointer-events-none absolute left-2 top-2 z-[620] flex w-[min(94vw,382px)] flex-col gap-2 sm:left-3 sm:top-3">
         <div className="pointer-events-auto relative z-[650] ui-float">
           <div className="flex items-center gap-2 px-3 py-2.5">
@@ -1679,6 +1730,28 @@ export default function ZoneExplorer() {
             </div>
           )}
         </div>
+
+        {/* ── ⚖️ 경매 물건 상세 — 지도 핀을 누르면 이 자리에 열린다(말풍선 대신) ── */}
+        {auctionDetail && (
+          <AuctionDetailCard
+            items={auctionDetail.items}
+            activeId={auctionDetail.activeId}
+            onSelect={(id) =>
+              setAuctionDetail((d) => (d ? { ...d, activeId: id } : d))
+            }
+            onClose={() => setAuctionDetail(null)}
+            onLocate={(it) => {
+              setAuctionFocus(it);
+              if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+            }}
+            onOpenList={(it) => {
+              setPanelOpen(true);
+              setAuctionListFocus({ id: it.id, token: Date.now() });
+            }}
+            zoneName={auctionDetail.items[0]?.zoneName}
+            collectedAt={auctions?.meta?.collectedAt ?? null}
+          />
+        )}
 
         {/* ── 역 카드 — 고른 역과 그 주변 정비구역(골라서 바로 이동) ── */}
         {stationPick && (
@@ -2312,6 +2385,11 @@ export default function ZoneExplorer() {
                     setAuctionFocus(it);
                     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
                   }}
+                  onSelectItem={openAuctionItem}
+                  highlightId={
+                    auctionDetail && auctionDetail.zoneId === selectedId ? auctionDetail.activeId : null
+                  }
+                  scrollToken={auctionListFocus?.token ?? null}
                 />
 
                 {/* 국토부 실거래가 — 샘플 거래와 별개로 실제 신고 거래를 함께 보여준다 */}
@@ -2423,6 +2501,11 @@ export default function ZoneExplorer() {
                   setAuctionFocus(it);
                   if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
                 }}
+                onSelectAuction={openAuctionItem}
+                auctionHighlightId={
+                  auctionDetail && auctionDetail.zoneId === selectedId ? auctionDetail.activeId : null
+                }
+                auctionScrollToken={auctionListFocus?.token ?? null}
                 onTxPins={setTxPins}
                 onOpenBuilding={setBuildingTarget}
                 meta={

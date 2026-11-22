@@ -4,7 +4,9 @@
 //   · 출처: 대법원 법원경매정보(courtauction.go.kr) 부동산 물건검색
 //     (scripts/fetch-court-auctions.py → 지번 좌표 scripts/geocode-auctions.py
 //      → 구역 경계 매칭 scripts/build-auction-zones.py)
-//   · 사이트 검색이 기본으로 돌려주는 **공고중 물건**(매각기일이 앞으로 약 2주)만 담는다.
+//   · 서울 5개 지방법원(중앙·동부·남부·북부·서부)의 **진행 중 물건**을 담는다.
+//     검색조건 두 가지(0004601 부동산 일반 · 0004602 부동산 전체)를 합쳐
+//     매각기일 범위가 약 2달(2026-11-23 ~ 2027-01-28)까지 넓어졌다 — 서부지법도 포함.
 //     그래서 meta.saleDateFrom ~ saleDateTo 를 화면에 함께 적는다 — '진행 중'의 범위를 숨기지 않는다.
 //   · 한 물건이 여러 구역에 걸치면 면적이 가장 작은 구역을 대표로 두고 zoneIds 에 전부 남긴다
 //     (구역 상세는 byZone[zoneId] 만 보면 된다).
@@ -40,6 +42,14 @@ export type AuctionItem = {
   saleDate: string;
   /** 매각시각 HH:MM */
   saleTime: string;
+  /** 매각장소 — 예: 제4별관제211호법정(2층) */
+  salePlace?: string;
+  /** 매각결정기일 YYYYMMDD */
+  decisionDate?: string;
+  /** 경매계 — 예: 경매4계 */
+  courtDept?: string;
+  /** 법원 경매계 전화 */
+  courtTel?: string;
   area: string;
   landCategory: string;
   /** 비고 — 지분매각·일괄매각 등 법원 원문 */
@@ -63,6 +73,8 @@ export type AuctionsMeta = {
   saleDateFrom: string;
   saleDateTo: string;
   courts?: Record<string, { name: string; pages: number }>;
+  /** 법원별 물건 수 */
+  courtsItems?: Record<string, { name: string; count: number }>;
   seoulItems?: number;
   geocoded?: number;
   matched?: number;

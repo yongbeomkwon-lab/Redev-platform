@@ -2,15 +2,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ZoneAuctions — 구역 상세 패널의 「⚖️ 구역 내 진행 경매 N건」
 //
-//  · 대법원 법원경매정보에서 받은 공고중 물건 중 **이 구역 경계 안**에 있는 것만 보여준다.
+//  · 대법원 법원경매정보에서 받은 진행 중 물건 중 **이 구역 경계 안**에 있는 것만 보여준다.
 //    (매칭은 scripts/build-auction-zones.py 가 지번 좌표 → 폴리곤 Point-in-Polygon 으로 미리 계산)
 //  · 실무에서 먼저 보는 순서로 적는다: 용도·사건번호 → 감정가 → 최저가(감정가 대비 %) →
-//    유찰횟수 → 매각기일 → 면적·비고 → 대법원 원문.
-//  · 같은 사건에 물건(호실)이 여러 개면 사건 한 줄로 묶고, 그 아래에 물건을 3건까지 펼친다.
-//    (예: 쌍문동 에드가쌍문 한 사건에 109개 호실 — 사건 목록이 109줄로 늘어서지 않게)
+//    유찰횟수 → 매각기일 → 면적·비고.
+//  · 같은 사건에 물건(호실)이 여러 개면 사건 한 줄로 묶고, 그 아래에 물건을 2건까지 펼친다.
+//    (예: 쌍문동 507-1일원 한 사건에 109개 호실 — 사건 목록이 109줄로 늘어서지 않게)
+//  · **대법원 외부 링크는 두지 않는다**(사용자 요구 2026-11-22). 물건을 누르면 왼쪽 창에
+//    그 물건의 상세가 열린다 — 판단에 필요한 값은 왼쪽 카드 안에서 다 보인다.
 //  · 물건이 없으면 섹션 자체를 그리지 않는다(빈 상자를 늘어놓지 않는다).
 // ─────────────────────────────────────────────────────────────────────────────
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   daysUntilSale,
   formatSaleDate,
@@ -29,15 +31,25 @@ export default function ZoneAuctions({
   items,
   meta,
   onLocate,
+  onSelectItem,
+  highlightId,
+  scrollToken,
 }: {
   items: AuctionItem[];
   /** 수집 기준일·기일 범위 — 캡션에 그대로 적는다 */
   meta?: { collectedAt?: string; saleDateFrom?: string; saleDateTo?: string } | null;
   /** 지도에서 이 물건 위치를 보여 준다 */
   onLocate?: (item: AuctionItem) => void;
+  /** 이 물건을 왼쪽 창(경매 물건 상세)에서 연다 */
+  onSelectItem?: (item: AuctionItem) => void;
+  /** 왼쪽 창에서 보고 있는 물건 — 이 줄을 강조하고, 필요하면 펼친다 */
+  highlightId?: string | null;
+  /** 값이 바뀔 때마다 강조한 줄로 스크롤한다(왼쪽 카드의 「구역 경매 목록에서 보기」) */
+  scrollToken?: number | null;
 }) {
   const [casesOpen, setCasesOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const rootRef = useRef<HTMLElement | null>(null);
 
   // 사건(법원+사건번호)별로 묶는다 — 물건(호실)은 그 안에서 매각기일·최저가 순
   const groups = useMemo<CaseGroup[]>(() => {
@@ -63,6 +75,28 @@ export default function ZoneAuctions({
     );
   }, [items]);
 
+  // 강조할 물건이 들어오면 그 사건 묶음을 펼치고 사건 목록도 전체로 연다
+  const highlightGroupKey = useMemo(() => {
+    if (!highlightId) return null;
+    const g = groups.find((gr) => gr.items.some((it) => it.id === highlightId));
+    return g?.key ?? null;
+  }, [groups, highlightId]);
+
+  useEffect(() => {
+    if (!highlightGroupKey) return;
+    setCasesOpen(true);
+    setOpenGroups((prev) => (prev.has(highlightGroupKey) ? prev : new Set(prev).add(highlightGroupKey)));
+  }, [highlightGroupKey]);
+
+  // 「구역 경매 목록에서 보기」 — 그 줄을 화면 가운데로 부드럽게 옮긴다
+  useEffect(() => {
+    if (!scrollToken || !highlightId) return;
+    const el = rootRef.current?.querySelector<HTMLElement>(
+      `[data-auction-item-id="${highlightId}"]`
+    );
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [scrollToken, highlightId]);
+
   if (items.length === 0) return null;
 
   const shown = casesOpen ? groups : groups.slice(0, CASES_PREVIEW);
@@ -76,7 +110,11 @@ export default function ZoneAuctions({
     });
 
   return (
-    <section data-testid="zone-auctions" className="rounded-xl border border-slate-300 bg-white p-3">
+    <section
+      ref={rootRef}
+      data-testid="zone-auctions"
+      className="rounded-xl border border-slate-300 bg-white p-3"
+    >
       <div className="mb-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
         <h3 className="text-xs font-bold text-slate-800">⚖️ 구역 내 진행 경매 {items.length}건</h3>
         <span className="text-[10px] text-slate-500">대법원 법원경매정보</span>
@@ -115,8 +153,19 @@ export default function ZoneAuctions({
               <ul className="mt-1 space-y-1.5">
                 {visible.map((it) => {
                   const left = daysUntilSale(it.saleDate);
+                  const on = highlightId === it.id;
                   return (
-                    <li key={it.id} className="rounded border border-slate-200 bg-white p-1.5">
+                    <li
+                      key={it.id}
+                      data-auction-item-id={it.id}
+                      data-highlighted={on ? "1" : undefined}
+                      className={
+                        "rounded border p-1.5 transition " +
+                        (on
+                          ? "border-amber-400 bg-amber-50 ring-1 ring-amber-300"
+                          : "border-slate-200 bg-white")
+                      }
+                    >
                       <p className="line-clamp-2 text-[11px] leading-snug text-slate-600">{it.address}</p>
                       <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
                         <span className="text-slate-500">
@@ -154,6 +203,19 @@ export default function ZoneAuctions({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5">
+                        {onSelectItem && (
+                          <button
+                            onClick={() => onSelectItem(it)}
+                            className={
+                              "rounded px-1.5 py-0.5 text-[10px] font-semibold " +
+                              (on
+                                ? "border border-amber-600 bg-amber-600 text-white hover:bg-amber-700"
+                                : "border border-amber-300 bg-white text-amber-800 hover:border-amber-500 hover:bg-amber-50")
+                            }
+                          >
+                            {on ? "왼쪽 창에 열림" : "⚖️ 상세 보기"}
+                          </button>
+                        )}
                         {onLocate && (
                           <button
                             onClick={() => onLocate(it)}
@@ -162,15 +224,6 @@ export default function ZoneAuctions({
                             📍 지도 위치
                           </button>
                         )}
-                        <a
-                          href={it.detailUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={`${it.court} ${it.caseYear}${it.casePart}${it.caseSerial} — 대법원 사건검색 화면이 열립니다(법원·연도·번호를 그대로 넣으세요)`}
-                          className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-slate-500 hover:text-slate-900"
-                        >
-                          대법원에서 사건 조회 ↗
-                        </a>
                       </div>
                     </li>
                   );
@@ -200,13 +253,13 @@ export default function ZoneAuctions({
       )}
 
       <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-        감정가·최저가·기일은 대법원 법원경매정보 원문 기준입니다. 매각기일이 앞으로 약 2주인
-        공고중 물건만 담았고
+        감정가·최저가·기일은 대법원 법원경매정보 원문 기준입니다. 서울 5개 지방법원(서부지법 포함)의
+        진행 중 물건을 담았고
         {meta?.saleDateFrom && meta?.saleDateTo
-          ? ` (기일 ${formatSaleDate(meta.saleDateFrom)}~${formatSaleDate(meta.saleDateTo)})`
+          ? ` (매각기일 ${formatSaleDate(meta.saleDateFrom)}~${formatSaleDate(meta.saleDateTo)})`
           : ""}
-        , 같은 사건의 다른 호실·지분매각은 각각 한 건으로 셉니다. 입찰 전 권리분석은 원문과
-        매각물건명세서로 확인하세요.
+        , 같은 사건의 다른 호실·지분매각은 각각 한 건으로 셉니다. 입찰 전 권리분석은 매각물건명세서로
+        확인하세요.
       </p>
     </section>
   );

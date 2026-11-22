@@ -38,7 +38,6 @@ import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
-import AuctionPinCard from "./AuctionPinCard";
 import JibunPinCard from "./JibunPinCard";
 import DevPressureLayer from "./DevPressureLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
@@ -106,20 +105,6 @@ const AUCTION_PIN_LAYER_STYLE = {
   width: "100%",
   height: "100%",
   zIndex: 96,
-  pointerEvents: "none" as const,
-};
-
-/**
- * ⚖️ 열어 둔 경매 카드 레이어 — 구역 이름표·매물 배지(100)와 내 매물 핀(102) 위(z-index 103).
- *   · 카드가 구역 이름표에 가리지 않게 별도 레이어에 둔다.
- */
-const AUCTION_CARD_LAYER_STYLE = {
-  position: "absolute" as const,
-  left: 0,
-  top: 0,
-  width: "100%",
-  height: "100%",
-  zIndex: 103,
   pointerEvents: "none" as const,
 };
 
@@ -456,7 +441,8 @@ export default function KakaoZoneMap({
   auctionPins = [],
   auctionPinsOn = false,
   onToggleAuctionPins,
-  onOpenAuctionZone,
+  onSelectAuctionPin,
+  activeAuctionPinId,
   jibunPickOn = false,
   onToggleJibunPick,
   onPickJibun,
@@ -534,12 +520,8 @@ export default function KakaoZoneMap({
   const auctionAtRef = useRef<AuctionMapPin[]>([]);
   /** draw 가 이번 프레임에 놓은 경매 핀 자리 — 실거래 핀이 그 위에 겹치지 않게 비킨다 */
   const auctionPlacedRef = useRef<{ x: number; y: number }[]>([]);
-  /** 지금 펼쳐 둔 경매 핀 카드 레이어·요소 — draw 가 카드를 핀 자리로 옮긴다 */
-  const auctionCardLayerRef = useRef<HTMLDivElement | null>(null);
-  const auctionCardElRef = useRef<HTMLDivElement | null>(null);
-  /** 지금 펼쳐 둔 경매 핀 카드(좌표 키) — 하나만 열린다 */
-  const [openAuctionId, setOpenAuctionId] = useState<string | null>(null);
-  const openAuctionRef = useRef<string | null>(null);
+  /** 왼쪽 창에서 보고 있는 핀 — draw 가 이 핀을 맨 앞·강조로 놓는다 */
+  const activeAuctionPinRef = useRef<string | null>(null);
   /** 「지번 찍기」로 꽂은 핀 레이어·요소 — draw 가 매 프레임 좌표를 맞춘다 */
   const jibunLayerRef = useRef<HTMLDivElement | null>(null);
   const jibunElRef = useRef<HTMLDivElement | null>(null);
@@ -1197,56 +1179,42 @@ export default function KakaoZoneMap({
 
     // ⚖️ 경매 물건 핀 — 실거래 핀보다 **먼저** 자리를 잡는다.
     //   · 그러면 아래 실거래 핀 고리가 이 경매 핀과 겹치면 비켜서고, 경매 핀이 실거래 핀에 가려지지 않는다.
-    //   · 아래쪽 끝이 물건 지점에 닿게 translate(-50%,-100%). 겹치면 뒤에 오는 핀을 숨긴다(펼친 카드는 항상 우선).
+    //   · 아래쪽 끝이 물건 지점에 닿게 translate(-50%,-100%).
+    //   · 사용자 요구(2026-11-22): **구역 안 물건은 하나도 빠짐없이 다 보여야 한다.**
+    //     그래서 겹친다고 숨기지 않고, 위로 한 칸씩 쌓아(stack) 밀어 올린다 — 왼쪽 창에서 보고 있는 핀은 맨 앞.
     if (auctionLayerRef.current) {
       const placed: { x: number; y: number }[] = [];
-      const openId = openAuctionRef.current;
+      const activeId = activeAuctionPinRef.current;
       // 서울 전체(레벨 8 이상)처럼 멀리서 볼 때는 가격표 대신 작은 앰버 점으로 찍는다
       const compact = map.getLevel() >= 8;
       auctionLayerRef.current.dataset.compact = compact ? "1" : "0";
-      let openPos: { x: number; y: number; visible: boolean } | null = null;
       const ordered = [...auctionAtRef.current].sort(
-        (a, b) => (a.id === openId ? 0 : 1) - (b.id === openId ? 0 : 1)
+        (a, b) => (a.id === activeId ? 0 : 1) - (b.id === activeId ? 0 : 1)
       );
+      const limW = compact ? 18 : 52;
+      const limH = compact ? 16 : 26;
+      const stepY = compact ? 12 : 24;
       for (const p of ordered) {
         const node = auctionElsRef.current.get(p.id);
         if (!node) continue;
         const x = p0x + (p.lng - lng0) * pxPerLng;
-        const y = p0y + (mercator(p.lat) - m0) * pxPerMerc;
-        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -100 || x > cw + 100 || y < -80 || y > ch + 80) {
-          node.style.visibility = "hidden";
-          if (p.id === openId) openPos = { x, y, visible: false };
-          continue;
-        }
-        let clash = false;
-        for (const q of placed) {
-          const limW = compact ? 18 : 52;
-          const limH = compact ? 16 : 26;
-          if (Math.abs(q.x - x) < limW && Math.abs(q.y - y) < limH) {
-            clash = true;
-            break;
-          }
-        }
-        if (clash && p.id !== openId) {
+        const baseY = p0y + (mercator(p.lat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(baseY) || x < -100 || x > cw + 100 || baseY < -80 || baseY > ch + 80) {
           node.style.visibility = "hidden";
           continue;
+        }
+        // 겹치면 위로 한 칸씩 올려 모든 핀이 화면에 남게 한다(최대 6칸, 그 뒤로는 그 자리에 그대로)
+        let y = baseY;
+        for (let k = 0; k < 6; k += 1) {
+          if (!placed.some((q) => Math.abs(q.x - x) < limW && Math.abs(q.y - y) < limH)) break;
+          y = baseY - stepY * (k + 1);
         }
         placed.push({ x, y });
+        node.dataset.stacked = y !== baseY ? "1" : "0";
         node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-100%)`;
         node.style.visibility = "visible";
-        if (p.id === openId) openPos = { x, y, visible: true };
       }
       auctionPlacedRef.current = placed;
-      // 열어 둔 카드도 같은 자리로 — 핀이 화면 밖이면 카드도 감춘다
-      const cardEl = auctionCardElRef.current;
-      if (cardEl) {
-        if (openPos && openPos.visible) {
-          cardEl.style.transform = `translate(${Math.round(openPos.x)}px,${Math.round(openPos.y)}px)`;
-          cardEl.style.visibility = "visible";
-        } else {
-          cardEl.style.visibility = "hidden";
-        }
-      }
     }
 
     // 실거래 가격 핀 — 같은 변환으로 좌표를 맞춘다.
@@ -2449,20 +2417,13 @@ export default function KakaoZoneMap({
     [auctionPins, auctionPinsOn]
   );
   auctionAtRef.current = visibleAuctionPins;
-  openAuctionRef.current = openAuctionId;
-  /** 열어 둔 카드의 핀 — 카드 레이어가 이것을 그린다 */
-  const openAuctionPin = openAuctionId
-    ? visibleAuctionPins.find((p) => p.id === openAuctionId) ?? null
-    : null;
-
-  // 핀 목록이 바뀌면(구역 이동·토글) 펼친 경매 카드를 닫는다
-  useEffect(() => {
-    setOpenAuctionId(null);
-  }, [visibleAuctionPins]);
+  /** 왼쪽 창에서 보고 있는 핀 — 강조 + 맨 앞 배치 */
+  const activeAuctionId = activeAuctionPinId ?? null;
+  activeAuctionPinRef.current = activeAuctionId;
   useEffect(() => {
     if (!auctionLayerRef.current) return;
     draw();
-  }, [visibleAuctionPins, openAuctionId, draw]);
+  }, [visibleAuctionPins, activeAuctionId, draw]);
 
   // 핀 목록이 바뀌면(구역 이동·토글) 자리를 다시 그린다 — 펼친 카드는 닫는다
   useEffect(() => {
@@ -3068,7 +3029,7 @@ export default function KakaoZoneMap({
         data-testid="auction-pin-layer"
       >
         {visibleAuctionPins.map((p) => {
-          const open = openAuctionId === p.id;
+          const open = activeAuctionId === p.id;
           const lead = p.lead;
           const many = p.items.length > 1;
           return (
@@ -3086,14 +3047,16 @@ export default function KakaoZoneMap({
                 data-testid="auction-pin"
                 data-auction-id={p.id}
                 data-auction-zone={lead.zoneId}
+                data-active={open ? "1" : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setOpenAuctionId((v) => (v === p.id ? null : p.id));
+                  // 지도 말풍선 대신 **왼쪽 대시보드 창**에 이 핀의 물건들을 띄운다
+                  onSelectAuctionPin?.(p);
                 }}
                 title={
                   many
-                    ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 내용이 열립니다`
-                    : `${lead.caseNoPrint} · ${lead.address} — 누르면 내용이 열립니다`
+                    ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 왼쪽 창에 상세가 열립니다`
+                    : `${lead.caseNoPrint} · ${lead.address} — 누르면 왼쪽 창에 상세가 열립니다`
                 }
                 style={{
                   display: "block",
@@ -3104,7 +3067,7 @@ export default function KakaoZoneMap({
                   borderRadius: "5px",
                   padding: "2px 5px",
                   boxShadow: open
-                    ? "0 0 0 2px rgba(180,83,9,.16), 0 8px 18px -8px rgba(120,53,15,.55)"
+                    ? "0 0 0 2px rgba(180,83,9,.22), 0 8px 18px -8px rgba(120,53,15,.55)"
                     : "0 1px 2px rgba(16,24,40,.10), 0 6px 14px -8px rgba(16,24,40,.35)",
                   cursor: "pointer",
                   textAlign: "center",
@@ -3135,24 +3098,6 @@ export default function KakaoZoneMap({
             </div>
           );
         })}
-      </div>
-
-      {/* ── ⚖️ 열어 둔 경매 카드 — 구역 이름표(100)에 가리지 않게 위(z-index 103) ── */}
-      <div ref={auctionCardLayerRef} style={AUCTION_CARD_LAYER_STYLE} data-testid="auction-card-layer">
-        <div
-          ref={auctionCardElRef}
-          style={{ position: "absolute", left: 0, top: 0, width: 0, height: 0, visibility: "hidden" }}
-        >
-          {openAuctionPin && (
-            <div style={{ position: "absolute", left: 0, bottom: "34px", transform: "translateX(-50%)" }}>
-              <AuctionPinCard
-                pin={openAuctionPin}
-                onClose={() => setOpenAuctionId(null)}
-                onOpenZone={onOpenAuctionZone}
-              />
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── 실거래 가격 핀 — `7.8억 / 전용 59㎡` (z-index 95: 폴리곤 위·매물 배지 아래) ── */}

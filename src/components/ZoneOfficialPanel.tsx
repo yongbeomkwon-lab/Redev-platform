@@ -34,6 +34,9 @@ export default function ZoneOfficialPanel({
   auctions = [],
   auctionsMeta = null,
   onLocateAuction,
+  onSelectAuction,
+  auctionHighlightId = null,
+  auctionScrollToken = null,
   onTxPins,
   onOpenBuilding,
 }: {
@@ -47,6 +50,12 @@ export default function ZoneOfficialPanel({
   auctionsMeta?: AuctionsMeta | null;
   /** 경매 물건 위치를 지도에 찍는다 */
   onLocateAuction?: (item: AuctionItem) => void;
+  /** 경매 물건을 왼쪽 창(경매 물건 상세)에서 연다 */
+  onSelectAuction?: (item: AuctionItem) => void;
+  /** 왼쪽 창에서 보고 있는 경매 물건 — 목록에서 강조 */
+  auctionHighlightId?: string | null;
+  /** 값이 바뀔 때마다 그 줄로 스크롤 */
+  auctionScrollToken?: number | null;
   /** 실거래 좌표를 지도 가격 핀으로 넘긴다 */
   onTxPins?: (pins: TxMapPin[]) => void;
   /** 실거래 행을 누를 때 그 단지·건물의 5년 이력을 연다 */
@@ -240,7 +249,14 @@ export default function ZoneOfficialPanel({
       <ZoneListingCards listings={listings} zoneId={zone.id} zoneName={zone.name} />
 
       {/* 구역 내 법원경매 물건 — 매물 카드 아래, 실거래 위 */}
-      <ZoneAuctions items={auctions} meta={auctionsMeta} onLocate={onLocateAuction} />
+      <ZoneAuctions
+        items={auctions}
+        meta={auctionsMeta}
+        onLocate={onLocateAuction}
+        onSelectItem={onSelectAuction}
+        highlightId={auctionHighlightId}
+        scrollToken={auctionScrollToken}
+      />
 
       {/* 국토부 실거래가 — 서울시 고시 데이터 바로 아래에 붙여 경계·면적과 시세를 함께 본다 */}
       <ZoneTransactions

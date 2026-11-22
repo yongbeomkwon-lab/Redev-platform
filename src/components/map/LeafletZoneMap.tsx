@@ -36,7 +36,6 @@ import Icon from "@/components/Icon";
 import SubwayLayer from "./SubwayLayer";
 import { SEOUL_BOUNDS, txPinKey, type AddressPin, type JibunPin, type StationPin, type LeafletZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
-import { formatSaleDate, formatWon } from "@/lib/auctions";
 import JibunPinCard from "./JibunPinCard";
 import { addressPinHtml, stationPinHtml } from "./address-pin";
 
@@ -236,81 +235,44 @@ function TxPricePins({
 /**
  * ⚖️ 경매 물건 핀 — 카카오맵(z-index 96)과 같은 모양(`⚖️ 2.0억 / 11.24 · 유찰 1회`).
  *   · 같은 좌표의 호실은 buildAuctionPins 가 한 핀으로 묶어 넘긴다(쌍문동 507-1 109건 → 1핀).
- *   · 누르면 사건번호·감정가·최저가·유찰·매각기일과 대법원 사건조회 링크가 팝업으로 뜨다.
+ *   · 누르면 지도 말풍선 대신 **왼쪽 대시보드 창**에 그 핀의 물건 상세가 열린다.
  */
 function AuctionPins({
   pins,
-  onOpenZone,
+  onSelectPin,
+  activeId,
 }: {
   pins: AuctionMapPin[];
-  onOpenZone?: (zoneId: string) => void;
+  onSelectPin?: (pin: AuctionMapPin) => void;
+  activeId?: string | null;
 }) {
   if (pins.length === 0) return null;
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return (
     <Pane name="redevAuctionPins" style={{ zIndex: 691 }}>
       {pins.map((p) => {
-        const lead = p.lead;
+        const open = activeId === p.id;
         return (
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
             keyboard={false}
+            eventHandlers={{
+              click: () => onSelectPin?.(p),
+            }}
             icon={L.divIcon({
               className: "redev-auction-pin",
-              html: `<div data-testid="auction-pin" data-auction-id="${esc(p.id)}" style="transform:translate(-50%,-100%);display:block;text-align:center;border:1px solid #f3c98b;border-left:3px solid #b45309;background:#fffbeb;border-radius:5px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:#7c2d12;">⚖️ ${esc(p.priceLabel)}</span><span style="display:block;font-size:9px;font-weight:600;color:#92400e;">${esc(p.subLabel)}</span></div>`,
+              html: `<div data-testid="auction-pin" data-auction-id="${esc(p.id)}" data-active="${open ? "1" : "0"}" style="transform:translate(-50%,-100%);display:block;text-align:center;border:1px solid ${open ? "#b45309" : "#f3c98b"};border-left:3px solid #b45309;background:${open ? "#fff7ed" : "#fffbeb"};border-radius:5px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:#7c2d12;">⚖️ ${esc(p.priceLabel)}</span><span style="display:block;font-size:9px;font-weight:600;color:#92400e;">${esc(p.subLabel)}</span></div>`,
               iconSize: [0, 0],
               iconAnchor: [0, 0],
             })}
-          >
-            <Popup maxWidth={300} autoPan>
-              <div style={{ fontSize: "11px", lineHeight: 1.35 }}>
-                <b style={{ fontSize: "12px" }}>
-                  ⚖️ {p.items.length > 1 ? `물건 ${p.items.length}건` : lead.caseNoPrint}
-                </b>
-                <div style={{ color: "#64748b", fontSize: "10px" }}>
-                  {lead.zoneName} · {lead.jibun}
-                </div>
-                {p.items.slice(0, 2).map((it) => (
-                  <div key={it.id} style={{ marginTop: 4, borderTop: "1px solid #f1f5f9", paddingTop: 3 }}>
-                    <div style={{ fontWeight: 700 }}>
-                      {it.caseNoPrint.replace(it.court, "").trim() || it.caseNo}{" "}
-                      <span style={{ fontWeight: 400, color: "#64748b" }}>{it.usage}</span>
-                    </div>
-                    <div style={{ color: "#475569" }}>
-                      감정 {formatWon(it.appraised)} → 최저{" "}
-                      <b style={{ color: "#b91c1c" }}>{formatWon(it.minimum)}</b>
-                      {it.minimumRate != null ? ` (${it.minimumRate}%)` : ""}
-                    </div>
-                    <div style={{ color: "#475569" }}>
-                      유찰 {it.failCount ?? 0}회 · 매각 {formatSaleDate(it.saleDate)} {it.saleTime}
-                    </div>
-                    {p.items.length > 1 && <div style={{ color: "#64748b", fontSize: "10px" }}>{it.address}</div>}
-                  </div>
-                ))}
-                {p.items.length > 2 && (
-                  <div style={{ color: "#94a3b8", fontSize: "9px" }}>
-                    외 {p.items.length - 2}건 — 구역 상세의 경매 목록에서 전체를 봅니다
-                  </div>
-                )}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
-                  <a href={lead.detailUrl} target="_blank" rel="noreferrer">
-                    대법원에서 사건 조회 ↗
-                  </a>
-                  {onOpenZone && (
-                    <button type="button" onClick={() => onOpenZone(lead.zoneId)}>
-                      구역 상세 열기
-                    </button>
-                  )}
-                </div>
-              </div>
-            </Popup>
-          </Marker>
+          />
         );
       })}
     </Pane>
   );
 }
+
 
 /** 5년 이력 창에서 고른 단지·지번으로 지도를 부드럽게 옮긴다 */
 function PanToActiveTxPin({ pins, activeKey }: { pins: TxMapPin[]; activeKey: string }) {
@@ -674,7 +636,8 @@ export default function LeafletZoneMap({
   auctionPins = [],
   auctionPinsOn = false,
   onToggleAuctionPins,
-  onOpenAuctionZone,
+  onSelectAuctionPin,
+  activeAuctionPinId,
   jibunPickOn = false,
   onToggleJibunPick,
   onPickJibun,
@@ -817,7 +780,11 @@ export default function LeafletZoneMap({
       />
 
       {/* ── ⚖️ 경매 물건 핀 — 구역 안(광역이면 매칭된 전체) 법원경매 물건 ── */}
-      <AuctionPins pins={auctionPinsOn ? auctionPins : []} onOpenZone={onOpenAuctionZone} />
+      <AuctionPins
+        pins={auctionPinsOn ? auctionPins : []}
+        onSelectPin={onSelectAuctionPin}
+        activeId={activeAuctionPinId ?? null}
+      />
 
       {/* ── 지번 찍기 — 클릭/우클릭으로 찍은 자리에 오레오 블루 물결 핀 ── */}
       <JibunPicker on={jibunPickOn} onPick={onPickJibun} />

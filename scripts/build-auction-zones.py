@@ -94,6 +94,13 @@ def main() -> None:
     items = data["items"]
     feats = json.load(open(ZONES, encoding="utf-8"))["features"]
 
+    # 법원별 물건 수 — 화면 캡션·보고에 그대로 쓴다(서부지법이 빠졌는지 바로 보이게)
+    court_counts: dict[str, dict] = {}
+    for it in items:
+        c = it.get("court") or it.get("courtCode") or "?"
+        court_counts.setdefault(c, {"name": c, "count": 0})
+        court_counts[c]["count"] += 1
+
     zones = []
     for f in feats:
         p = f["properties"]
@@ -149,6 +156,10 @@ def main() -> None:
             "failCount": it.get("failCount"),
             "saleDate": it.get("saleDate"),
             "saleTime": it.get("saleTime") or "",
+            "salePlace": it.get("salePlace") or "",
+            "decisionDate": it.get("decisionDate") or "",
+            "courtDept": it.get("courtDept") or "",
+            "courtTel": it.get("courtTel") or "",
             "area": it.get("area") or "",
             "landCategory": it.get("landCategory") or "",
             "note": it.get("note") or "",
@@ -173,11 +184,13 @@ def main() -> None:
         "saleDateFrom": data["meta"].get("saleDateFrom"),
         "saleDateTo": data["meta"].get("saleDateTo"),
         "courts": data["meta"].get("courts"),
+        "courtsItems": court_counts,
         "seoulItems": sum(1 for i in items if i.get("sido") == "서울특별시"),
         "geocoded": sum(1 for i in items if i.get("lat")),
         "matched": matched_items,
         "zonesWithAuctions": len(by_zone),
-        "note": "매각기일이 앞으로 약 2주인 공고중 물건을 대법원 법원경매정보에서 받아 지번 좌표로 구역 경계와 매칭한 결과입니다. "
+        "note": "매각기일이 앞으로 약 2달(2026-11-23 ~ 2027-01-28)인 진행 중 물건을 대법원 법원경매정보에서 받아 "
+                "지번 좌표로 구역 경계와 매칭한 결과입니다. "
                 "지번 좌표는 카카오 주소검색 기준이며, 같은 사건의 다른 물건·지분매각도 각각 한 건으로 셉니다.",
     }
     payload = {"meta": meta, "byZone": by_zone}

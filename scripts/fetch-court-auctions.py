@@ -15,10 +15,18 @@
 
 사용법
   python3 scripts/fetch-court-auctions.py                 # 서울 5개 법원 전체(이어받기)
+  python3 scripts/fetch-court-auctions.py --cond 0004602 --court B000215
+                                                          # 다른 검색조건(기일 6주+ · 서부지법)으로 수집
   python3 scripts/fetch-court-auctions.py --court B000210 # 한 법원만
   python3 scripts/fetch-court-auctions.py --probe 20270113 --court B000210
                                                           # 그 매각기일 조건으로 한 번만 조회(탐침)
   python3 scripts/fetch-court-auctions.py --status        # 지금까지 모은 raw 상태 요약
+
+검색조건(cortAuctnSrchCondCd) — 2026-11-22 실측
+  · 0004601 「부동산 일반」: 매각기일이 앞으로 약 2주인 공고중 물건. 서울서부지법 0건.
+  · 0004602 「부동산 전체」: 기일이 2026-11-23~2027-01-06 로 넓고 **서부지법 321건**이 들어온다.
+    (매각기일 파라미터 dspslDxdyYmd 는 무시된다 — 20261215 를 넣어도 같은 응답이 온다.)
+  그래서 0004601(기존 raw) + 0004602 를 함께 받아 합친다(raw_tag 로 구분, rebuild 가 합친다).
 
 출력
   scripts/data/court-auction/raw/<court>-p<page>-<run>.json   원본 응답
@@ -79,13 +87,14 @@ def open_session() -> None:
     curl([BASE + "/pgj/index.on", "-o", "/dev/null", "-H", "Referer: " + BASE + "/"])
 
 
-def search(court: str, page: int, sale_date: str = "", region_sido: str = "") -> dict:
+def search(court: str, page: int, sale_date: str = "", region_sido: str = "",
+           cond: str = "0004601") -> dict:
     srch = {
         "cortOfcCd": court,
         "mvprpRletDvsCd": "00031R",       # 부동산
         "rdnmSdCd": "", "rdnmSggCd": "", "rdnmNo": "",
         "rdDspslPlcAdongSdCd": "", "rdDspslPlcAdongSggCd": "", "rdDspslPlcAdongEmdCd": "",
-        "cortAuctnSrchCondCd": "0004601",  # 부동산 일반
+        "cortAuctnSrchCondCd": cond,        # 0004601 부동산 일반(기일 2주) · 0004602 부동산 전체(기일 6주+)
         "cortStDvs": "1" if court else ("2" if region_sido else ""),
         "rprsAdongSdCd": region_sido, "rprsAdongSggCd": "", "rprsAdongEmdCd": "",
         "mvprpDspslPlcAdongSdCd": "", "mvprpDspslPlcAdongSggCd": "", "mvprpDspslPlcAdongEmdCd": "",
@@ -140,14 +149,22 @@ def log_block(court: str, page: int, res: dict) -> None:
     json.dump(rows, open(BLOCK_LOG, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
 
-def raw_path(court: str, page: int, sale_date: str = "") -> str:
-    tag = f"{court or 'seoul'}-{sale_date or 'all'}-p{page:02d}"
-    return os.path.join(RAW_DIR, f"{tag}.json")
+def raw_tag(sale_date: str = "", cond: str = "") -> str:
+    """raw 파일 이름의 가운데 토막 — 기본 검색은 `all`, 다른 검색조건은 `c0004602` 처럼 남긴다."""
+    if sale_date:
+        return sale_date
+    if cond and cond != "0004601":
+        return "c" + cond
+    return "all"
 
 
-def save_raw(court: str, page: int, sale_date: str, res: dict) -> None:
+def raw_path(court: str, page: int, tag: str = "all") -> str:
+    return os.path.join(RAW_DIR, f"{court or 'seoul'}-{tag or 'all'}-p{page:02d}.json")
+
+
+def save_raw(court: str, page: int, tag: str, res: dict) -> None:
     os.makedirs(RAW_DIR, exist_ok=True)
-    json.dump(res, open(raw_path(court, page, sale_date), "w", encoding="utf-8"),
+    json.dump(res, open(raw_path(court, page, tag), "w", encoding="utf-8"),
               ensure_ascii=False)
 
 
@@ -161,6 +178,7 @@ def won(v) -> int | None:
 
 
 def normalize(row: dict) -> dict:
+    """검색 결과 한 줄 → 물건 1건."""
     """검색 결과 한 줄 → 물건 1건. (사이트 컬럼 ID는 2000년대 법원 시스템 코드명을 그대로 쓴다)"""
     court = row.get("boCd") or ""
     case_no = row.get("srnSaNo") or ""              # 2023타경104875
@@ -197,6 +215,9 @@ def normalize(row: dict) -> dict:
         "saleTime": (row.get("maeHh1") or "")[:2] + ":" + (row.get("maeHh1") or "")[2:4]
                     if row.get("maeHh1") else "",
         "salePlace": row.get("maePlace") or "",
+        "courtDept": row.get("jpDeptNm") or "",          # 경매계(예: 경매4계)
+        "courtTel": row.get("tel") or "",                # 법원 경매계 전화
+        "decisionDate": row.get("maegyuljGiil") or "",   # 매각결정기일 YYYYMMDD
         "area": row.get("areaList") or "",
         "landCategory": row.get("jimokList") or "",
         "note": row.get("mulBigo") or "",
@@ -207,25 +228,27 @@ def normalize(row: dict) -> dict:
 
 
 def collect(courts: list[str], delay: float, sale_date: str = "",
-            max_pages: int = 40) -> dict:
+            max_pages: int = 40, cond: str = "0004601") -> dict:
     open_session()
     time.sleep(max(2.0, delay / 2))
+    tag = raw_tag(sale_date, cond)
     items: list[dict] = []
     meta = {
         "collectedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "source": "대법원 법원경매정보(courtauction.go.kr) 부동산 물건검색",
+        "cond": cond,
         "courts": {}, "blocked": None, "failures": [],
     }
     for court in courts:
         page = 1
         done_pages = 0
         while page <= max_pages:
-            path = raw_path(court, page, sale_date)
+            path = raw_path(court, page, tag)
             if os.path.exists(path):
                 res = json.load(open(path, encoding="utf-8"))
                 cached = True
             else:
-                res = search(court, page, sale_date)
+                res = search(court, page, sale_date, cond=cond)
                 cached = False
             if looks_blocked(res):
                 log_block(court, page, res)
@@ -238,11 +261,11 @@ def collect(courts: list[str], delay: float, sale_date: str = "",
             rows = data.get("dlt_srchResult") or []
             if not rows:
                 if not cached:
-                    save_raw(court, page, sale_date, res)
+                    save_raw(court, page, tag, res)
                     time.sleep(delay)
                 break
             if not cached:
-                save_raw(court, page, sale_date, res)
+                save_raw(court, page, tag, res)
             pi = data.get("dma_pageInfo") or {}
             total = int(pi.get("totalCnt") or 0)
             items.extend(normalize(r) for r in rows)
@@ -256,7 +279,7 @@ def collect(courts: list[str], delay: float, sale_date: str = "",
         meta["courts"][court] = {"name": SEOUL_COURTS.get(court, court), "pages": done_pages}
         if meta["blocked"]:
             break
-        if not os.path.exists(raw_path(court, max_pages, sale_date)):
+        if not os.path.exists(raw_path(court, max_pages, tag)):
             time.sleep(delay)
     # 중복 제거(법원+사건번호+물건번호)
     uniq: dict[str, dict] = {}
@@ -270,18 +293,27 @@ def collect(courts: list[str], delay: float, sale_date: str = "",
 
 
 def rebuild() -> dict:
-    """raw/*.json 을 모두 정규화해 latest.json 을 다시 만든다(수집을 이어붙일 때)."""
+    """raw/*.json 을 모두 정규화해 latest.json 을 다시 만든다(수집을 이어붙일 때).
+
+    raw 는 여러 검색조건(0004601·0004602)·여러 번의 실행이 섞여 있으므로
+    파일명의 법원코드로 법원을, 가운데 토막(c0004602 등)으로 검색조건을 센다.
+    물건은 id(법원+사건+물건)로 중복을 없앤다.
+    """
     items: dict[str, dict] = {}
     courts: dict[str, int] = {}
+    conds: dict[str, int] = {}
     if not os.path.isdir(RAW_DIR):
         raise SystemExit("raw 가 없습니다")
     for f in sorted(os.listdir(RAW_DIR)):
         if not f.endswith(".json"):
             continue
-        court = f.split("-")[0]
+        parts = f[:-5].split("-")
+        court = parts[0]
+        cond = parts[1] if len(parts) > 1 else "all"
         res = json.load(open(os.path.join(RAW_DIR, f), encoding="utf-8"))
         rows = (res.get("data") or {}).get("dlt_srchResult") or []
         courts[court] = courts.get(court, 0) + 1
+        conds[cond] = conds.get(cond, 0) + 1
         for r in rows:
             it = normalize(r)
             items[it["id"]] = it
@@ -290,6 +322,7 @@ def rebuild() -> dict:
         "collectedAt": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "source": "대법원 법원경매정보(courtauction.go.kr) 부동산 물건검색",
         "courts": {c: {"name": SEOUL_COURTS.get(c, c), "pages": n} for c, n in courts.items()},
+        "rawTags": conds,
         "saleDateFrom": dates[0] if dates else "",
         "saleDateTo": dates[-1] if dates else "",
         "blocked": None,
@@ -332,6 +365,8 @@ def main() -> None:
     ap.add_argument("--court", default="", help="법원 코드(예: B000210). 없으면 서울 5개 법원")
     ap.add_argument("--delay", type=float, default=20.0, help="요청 간 대기(초). 기본 20")
     ap.add_argument("--probe", default="", help="매각기일(YYYYMMDD) 한 날짜만 조회")
+    ap.add_argument("--cond", default="0004601",
+                    help="검색조건 코드 — 0004601 부동산 일반(기일 2주) · 0004602 부동산 전체(기일 6주+, 서부지법 포함)")
     ap.add_argument("--max-pages", type=int, default=40)
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--rebuild", action="store_true", help="raw 전체를 latest.json 으로 다시 합친다")
@@ -346,7 +381,8 @@ def main() -> None:
                          ensure_ascii=False, indent=1))
         return
     courts = [args.court] if args.court else list(SEOUL_COURTS)
-    res = collect(courts, args.delay, sale_date=args.probe, max_pages=args.max_pages)
+    res = collect(courts, args.delay, sale_date=args.probe, max_pages=args.max_pages,
+                  cond=args.cond)
     print(json.dumps({k: res["meta"][k] for k in ("count", "courts", "blocked")},
                      ensure_ascii=False, indent=1))
 

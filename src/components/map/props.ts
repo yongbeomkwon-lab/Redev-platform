@@ -72,12 +72,17 @@ export type ZoneMapProps = {
    *   좌표가 같은 호실은 `buildAuctionPins` 가 핀 하나로 묶어 넘긴다.
    */
   auctionPins?: AuctionMapPin[];
-  /** 경매 핀 표시 ON/OFF — 상태는 ZoneExplorer 가 갖는다(구역 선택 시 기본 ON) */
+  /** 경매 핀 표시 ON/OFF — 상태는 ZoneExplorer 가 갖는다(첫 화면부터 기본 ON) */
   auctionPinsOn?: boolean;
   /** 지도 위 「⚖️ 경매 핀」 토글 */
   onToggleAuctionPins?: () => void;
-  /** 경매 핀 카드의 「구역 상세 열기」 — 그 물건이 속한 구역을 연다 */
-  onOpenAuctionZone?: (zoneId: string) => void;
+  /**
+   * ⚖️ 경매 핀을 눌렀을 때 — 그 핀에 묶인 물건들을 **왼쪽 대시보드 창**에 띄우고
+   * 그 구역을 고른다(예전의 지도 말풍선 카드를 대신한다).
+   */
+  onSelectAuctionPin?: (pin: AuctionMapPin) => void;
+  /** 왼쪽 창에서 보고 있는 핀 — 지도에서 그 핀을 강조(테두리·그림자)한다 */
+  activeAuctionPinId?: string | null;
   /**
    * 「📍 지번 찍기」 모드 — 켜면 지도 클릭이 구역 선택 대신 **그 자리의 지번 핀**을 꽂는다.
    *   · 아이패드(터치)에서는 이 토글이 있어야 구역 안을 찍을 수 있다.

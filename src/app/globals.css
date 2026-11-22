@@ -316,6 +316,23 @@
 .auction-pin-layer[data-compact="1"] .auction-pin-dot {
   display: block;
 }
+/* 같은 자리에 겹쳐 위로 쌓인 핀 — scale() 은 글자를 다시 흐리게 만들므로 쓰지 않고,
+   글자 크기·패딩만 줄여 아래 핀의 라벨을 가리지 않게 한다(정수 픽셀 유지) */
+.auction-pin-layer [data-stacked="1"] .auction-pin-btn {
+  padding: 1px 3px !important;
+}
+.auction-pin-layer [data-stacked="1"] .auction-pin-label span:first-child {
+  font-size: 10px !important;
+  line-height: 12px !important;
+}
+.auction-pin-layer [data-stacked="1"] .auction-pin-label span + span {
+  font-size: 8px !important;
+  line-height: 10px !important;
+}
+/* 왼쪽 창에서 보고 있는 핀 — 테두리·그림자를 한 단계 더 */
+.auction-pin-layer .auction-pin-btn[data-active="1"] {
+  border-color: #b45309 !important;
+}
 
 /* Leaflet 지도가 탭/모달 아래에 깔리지 않도록 z-index 정리 */
 .leaflet-container {
