@@ -109,6 +109,33 @@ export function loadAuctions(): Promise<AuctionsData | null> {
   return cache;
 }
 
+/**
+ * 매각 단위 키 — 법원경매의 실제 매각단위는 **사건 + 물건번호**다.
+ *   · 일괄매각은 한 물건번호 아래 필지·호실이 여러 줄(목적물)로 실린다 → 같은 키로 묶여 1건.
+ *     예: 대선제분일대1구역1지구 24줄(2024타경134077, 물건 1) → 1건
+ *         쌍문동 모아타운 2-4구역 17줄(2025타경10119, 물건 1) → 1건
+ *   · 반대로 호실마다 사건이 따로면 사건 수만큼 센다
+ *     예: 쌍문동 507-1일원 호실 132개(2025타경4725 등 132사건) → 132건
+ *   · 같은 사건이라도 물건번호가 다르면 따로 매각되는 물건이다(소리마을 10개 호실 → 10건).
+ */
+export function auctionSaleKey(it: AuctionItem): string {
+  return `${it.courtCode}|${it.caseNo}|${it.itemNo || it.objectNo || it.id}`;
+}
+
+/** 구역 경매 목록의 실제 매각 건수 — 같은 물건의 목적물 줄(일괄매각 필지·호실)을 1건으로 접는다 */
+export function countAuctionSales(items: AuctionItem[]): number {
+  const keys = new Set<string>();
+  for (const it of items) keys.add(auctionSaleKey(it));
+  return keys.size;
+}
+
+/** 사건 수(법원+사건번호) — 화면에 ‘사건 N개’로 병기한다 */
+export function countAuctionCases(items: AuctionItem[]): number {
+  const keys = new Set<string>();
+  for (const it of items) keys.add(`${it.courtCode}|${it.caseNo}`);
+  return keys.size;
+}
+
 /** YYYYMMDD → 11.24(월) */
 export function formatSaleDate(ymd: string): string {
   if (!ymd || ymd.length !== 8) return ymd || "-";

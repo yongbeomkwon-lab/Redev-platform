@@ -44,6 +44,8 @@ G4_PATH = os.path.join(HERE, "data", "official-gangnam4gu.json")
 REST17_PATH = os.path.join(HERE, "data", "official-rest17gu.json")
 # 「자양동 10번지 일원」 — 대표님이 관리자 그리기 도구로 직접 그린 경계(민간도심복합·성장거점형, 추진준비)
 JAYANG10_PATH = os.path.join(HERE, "data", "official-jayang10.json")
+# 「신길동 113-5 · 90-31 일대」 — 고시 지형도면에서 옮긴 구역계(경계 미고시 → 고시도면) + 고시 메타
+SINGIL_PATH = os.path.join(HERE, "data", "official-singil-1135-9031.json")
 
 
 def load_supplement(path=SUPPLEMENT_PATH):
@@ -115,6 +117,13 @@ def load_g4(path=G4_PATH):
 
 
 def load_jayang10(path=JAYANG10_PATH):
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def load_singil(path=SINGIL_PATH):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fp:
@@ -267,6 +276,9 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
     # ── 12) 나머지 17개 구 추진준비 구역(공고 도면 다각형 + 대표 지점) ──────────
     stats_rest = apply_rest17(fc, seoul_zones)
 
+    # ── 13) 신길동 113-5 · 90-31 일대 — 고시 지형도면 구역계(경계 미고시 → 고시도면) ──
+    stats_singil = apply_singil(fc, seoul_zones)
+
     meta["count"] = len(features)
     # meta 에는 이번 실행에서 바뀐 수가 아니라 **보강 파일이 담고 있는 범위**를 적는다
     # (같은 파일을 다시 돌려도 값이 흔들리지 않게).
@@ -350,6 +362,20 @@ def apply_supplement(fc, seoul_zones, meta=None, supp=None):
         }
         stats["addedRest17"] = stats_rest["_new"]
         stats["aliasedRest17"] = stats_rest["_aliased"]
+
+    if stats_singil:
+        meta["singil1135"] = {
+            "asOf": stats_singil["asOf"],
+            "zones": stats_singil["zones"],
+            "polygons": stats_singil["polygons"],
+            "note": (
+                "신길동 113-5 일대(영등포구 고시 제2026-146호·31,677㎡)와 신길동 90-31 일대"
+                "(서울특별시고시 제2026-420호·58,162㎡) — 경계 미고시(점) 상태에서 고시 지형도면의 "
+                "구역계로 교체하고, 대표 지점이 북쪽으로 빗나가 있던 것을 경계 중심으로 바로잡았다. "
+                "도면을 옮긴 추정선이라 오차 ±30m."
+            ),
+        }
+        stats["appliedSingil"] = stats_singil["applied"]
 
     if stats_upd:
         meta["zoneUpdates"] = {
@@ -742,6 +768,61 @@ def apply_sangdo23(fc, seoul_zones):
     if target_feature is not None:
         target_feature["geometry"] = geometry
     return {"asOf": doc.get("asOf"), "note": doc.get("note")}
+
+
+def apply_singil(fc, seoul_zones):
+    """신길동 113-5 · 90-31 일대 — 고시 지형도면 구역계·메타로 교체(멱등).
+
+    · 두 구역은 신속통합기획 후보지라 법정 벡터 도형이 없다 — 영등포구 고시 제2026-146호(113-5)
+      와 서울특별시고시 제2026-420호(90-31) 지형도면·보도자료 위치도의 구역계를 도로·필지에 맞춰
+      옮긴 다각형을 넣고 geom="고시도면"으로 표시한다(추정선, ±30m).
+    · 기존 대표 지점(center)은 새 경계 중심보다 북쪽으로 빗나가 있었다(113-5 약 110m,
+      90-31 약 155m 북서) — 경계 중심으로 바로잡는다.
+    · 고시 번호·일자·면적·진행단계는 문서(scripts/data/official-singil-1135-9031.json)에 적힌 값.
+    """
+    doc = load_singil()
+    if not doc:
+        return None
+    features = fc.setdefault("features", [])
+    by_feature_id = {f.get("id"): f for f in features}
+    by_id = {z.get("id"): z for z in seoul_zones}
+    applied = polygons = 0
+    for z in doc.get("zones", []):
+        zid = z.get("id")
+        feat = by_feature_id.get(zid)
+        zone = by_id.get(zid)
+        if feat is None and zone is None:
+            continue
+        rings = z.get("polygon")
+        geometry = None
+        if rings:
+            coords = [[lng, lat] for lat, lng in rings]
+            if coords[0] != coords[-1]:
+                coords.append(coords[0])
+            geometry = {"type": "Polygon", "coordinates": [coords]}
+        props = {"geom": z.get("boundary", "고시도면"), "asOf": doc.get("asOf")}
+        for key in ("name", "alias", "type", "kind", "stage", "area", "selectedAt",
+                    "centerLabel", "note", "areaNote", "boundaryNote", "sources"):
+            if z.get(key) is not None:
+                props[key] = z[key]
+        if z.get("sourceId"):
+            props["sourceId"] = z["sourceId"]
+        if z.get("center"):
+            props["center"] = list(z["center"])
+        for target in ((feat.get("properties") if feat is not None else None), zone):
+            if target is None:
+                continue
+            target.update(props)
+            if rings:
+                target["polygon"] = [list(p) for p in rings]
+            if z.get("sourceId"):
+                target["sid"] = z["sourceId"]
+        if feat is not None:
+            feat["geometry"] = geometry
+        applied += 1
+        polygons += 1 if rings else 0
+    return {"asOf": doc.get("asOf"), "zones": len(doc.get("zones", [])),
+            "applied": applied, "polygons": polygons}
 
 
 def apply_sangdo182(fc, seoul_zones):
@@ -1353,6 +1434,8 @@ def main():
           f"(이미 있음 {stats['skipped']}건) · 총 {len(fc['features'])}개 구역")
     if stats.get("updatedExisting"):
         print(f"기존 구역 정정·숨김 {stats['updatedExisting']}건 적용")
+    if stats.get("appliedSingil"):
+        print(f"신길동 113-5·90-31 고시도면 구역계 {stats['appliedSingil']}곳 적용")
     return 0
 
 

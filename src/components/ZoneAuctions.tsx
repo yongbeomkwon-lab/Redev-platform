@@ -14,6 +14,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  countAuctionCases,
+  countAuctionSales,
   daysUntilSale,
   formatSaleDate,
   formatWon,
@@ -99,6 +101,10 @@ export default function ZoneAuctions({
 
   if (items.length === 0) return null;
 
+  // 실제 매각 건수 — 일괄매각 목적물(필지·호실 목록) 여러 줄은 1건으로 센다.
+  //   헤더·상단 배지가 이 값을 쓴다(줄 수 items.length 로 세면 24·17처럼 부풀려 보인다).
+  const salesCount = countAuctionSales(items);
+  const caseCount = countAuctionCases(items);
   const shown = casesOpen ? groups : groups.slice(0, CASES_PREVIEW);
   const asOf = meta?.collectedAt ? meta.collectedAt.slice(0, 10) : null;
   const toggleGroup = (key: string) =>
@@ -112,11 +118,17 @@ export default function ZoneAuctions({
   return (
     <section
       ref={rootRef}
+      id="zone-auctions"
       data-testid="zone-auctions"
-      className="rounded-xl border border-slate-300 bg-white p-3"
+      className="scroll-mt-2 rounded-xl border border-slate-300 bg-white p-3"
     >
       <div className="mb-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
-        <h3 className="text-xs font-bold text-slate-800">⚖️ 구역 내 진행 경매 {items.length}건</h3>
+        <h3 className="text-xs font-bold text-slate-800">⚖️ 구역 내 진행 경매 {salesCount}건</h3>
+        {caseCount < salesCount && (
+          <span className="rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+            사건 {caseCount}개
+          </span>
+        )}
         <span className="text-[10px] text-slate-500">대법원 법원경매정보</span>
         {asOf && <span className="ml-auto text-[10px] text-slate-400">{asOf} 수집</span>}
       </div>
@@ -127,6 +139,9 @@ export default function ZoneAuctions({
           const open = openGroups.has(g.key);
           const visible = open ? g.items : g.items.slice(0, ITEMS_PER_CASE);
           const hidden = g.items.length - visible.length;
+          // 한 사건 안에서 몇 개가 따로 매각되는가 — 일괄매각이면 목적물이 여러 줄이어도 1건이다
+          const groupSales = countAuctionSales(g.items);
+          const isBatch = g.items.length > 1 && groupSales === 1;
           return (
             <li
               key={g.key}
@@ -144,8 +159,15 @@ export default function ZoneAuctions({
                 </b>
                 <span className="text-[10px] text-slate-500">{head.court.replace("지방법원", "")}</span>
                 {g.items.length > 1 && (
-                  <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
-                    물건 {g.items.length}건
+                  <span
+                    className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700"
+                    title={
+                      isBatch
+                        ? `일괄매각 — 필지·호실 ${g.items.length}개를 한꺼번에 매각합니다(경매 1건)`
+                        : `이 사건에서 따로 매각되는 물건 ${groupSales}건(목적물 ${g.items.length}줄)`
+                    }
+                  >
+                    {isBatch ? `일괄매각 · 목적물 ${g.items.length}개` : `물건 ${groupSales}건`}
                   </span>
                 )}
               </div>
@@ -235,7 +257,7 @@ export default function ZoneAuctions({
                   onClick={() => toggleGroup(g.key)}
                   className="mt-1.5 w-full rounded border border-slate-200 py-0.5 text-[10px] font-medium text-slate-500 hover:border-slate-400 hover:text-slate-800"
                 >
-                  이 사건 물건 {g.items.length}건 {open ? "접기" : `모두 보기 (+${hidden})`}
+                  이 사건 {isBatch ? "목적물" : "물건"} {g.items.length}건 {open ? "접기" : `모두 보기 (+${hidden})`}
                 </button>
               )}
             </li>
@@ -258,8 +280,9 @@ export default function ZoneAuctions({
         {meta?.saleDateFrom && meta?.saleDateTo
           ? ` (매각기일 ${formatSaleDate(meta.saleDateFrom)}~${formatSaleDate(meta.saleDateTo)})`
           : ""}
-        , 같은 사건의 다른 호실·지분매각은 각각 한 건으로 셉니다. 입찰 전 권리분석은 매각물건명세서로
-        확인하세요.
+        , 일괄매각으로 한꺼번에 매각되는 필지·호실 목록은 1건으로 셉니다(사건 안에서 펼쳐 볼 수 있습니다).
+        같은 사건이라도 물건번호가 다르면 따로 매각되는 물건이라 각각 셉니다. 입찰 전 권리분석은
+        매각물건명세서로 확인하세요.
       </p>
     </section>
   );

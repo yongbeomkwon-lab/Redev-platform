@@ -56,7 +56,7 @@ import { ZoneListingCards } from "@/components/ZoneListingCards";
 import ZoneAuctions from "@/components/ZoneAuctions";
 import ZoneTalk from "@/components/community/ZoneTalk";
 import AuctionDetailCard from "@/components/AuctionDetailCard";
-import { formatWon, formatSaleDate, loadAuctions, type AuctionItem, type AuctionsData } from "@/lib/auctions";
+import { formatWon, formatSaleDate, loadAuctions, countAuctionSales, type AuctionItem, type AuctionsData } from "@/lib/auctions";
 import { buildAuctionPins, type AuctionMapPin } from "@/lib/auction-pins";
 import {
   LISTINGS_CHANGED_EVENT,
@@ -479,7 +479,7 @@ export default function ZoneExplorer() {
     setAuctionDetail({ pinId: pin.id, zoneId, items: pin.items, activeId: pin.lead.id });
     setAuctionFocus(null);
     setAuctionListFocus(null);
-    if (zoneId && zoneId !== selectedId) pickZone(zoneId);
+    if (zoneId && zoneId !== selectedId) pickZone(zoneId, { auction: true });
     else if (zoneId) setPanelOpen(true);
     // 좁은 화면에서는 왼쪽 카드가 화면을 덮으므로 오른쪽 패널을 접는다
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
@@ -500,13 +500,17 @@ export default function ZoneExplorer() {
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
   // 경매 물건이 있는 구역 상위 목록 — 첫 화면(패널)에서 바로 들어간다
+  //   · count 는 **실제 매각 건수**(일괄매각 목적물 목록은 1건). 쌍문동 507-1일원처럼 호실마다
+  //     사건이 따로면 사건 수만큼(132건) 그대로 센다.
+  //   · units 는 auctions.json 의 줄 수(목적물 수) — 일괄매각이면 count 보다 크다.
   const auctionTop = useMemo(() => {
     if (!auctions) return [];
     return Object.entries(auctions.byZone)
       .map(([id, list]) => ({
         id,
         name: list[0]?.zoneName ?? id,
-        count: list.length,
+        count: countAuctionSales(list),
+        units: list.length,
         nearest: list[0],
       }))
       .sort((a, b) =>
@@ -1090,16 +1094,24 @@ export default function ZoneExplorer() {
     setUnlocked((prev) => new Set(prev).add(id));
   }
 
-  function pickZone(id: string) {
+  /**
+   * 구역 선택. `opts.auction` 은 경매 목록·경매 핀에서 들어온 경우 — 경매 핀이 지도에 보이도록 켠다.
+   */
+  function pickZone(id: string, opts?: { auction?: boolean }) {
     setSelectedId(id);
     setPanelOpen(true);
     setAuctionFocus(null);
+    const z = seoulZones.find((s) => s.id === id);
+    // 준공·입주 완료 구역(예: 쌍문동 507-1일원 — 경매 132건)은 ‘준공 포함’이 꺼져 있으면
+    // 지도 레이어에서 통째로 빠진다. 그 구역을 골랐는데 지도에 아무것도 안 보이면 고장으로 보이므로,
+    // 고른 구역이 완공 구역이면 ‘준공 포함’을 자동으로 켜 경계를 그린다(2026-11-23 제보).
+    if (z && isCompletedZone(z) && !showCompleted) setShowCompleted(true);
     // 유형 필터가 켜져 있어 고른 구역이 지도 레이어에서 빠져 있으면 지도에서 사라진 것처럼 보인다
     // → 필터를 풀어 경계를 다시 그린다(검색·주소 판정은 필터와 무관하게 전체를 본다).
-    if (typeFilter !== "전체") {
-      const z = seoulZones.find((s) => s.id === id);
-      if (z && z.type !== typeFilter) setTypeFilter("전체");
-    }
+    if (z && typeFilter !== "전체" && z.type !== typeFilter) setTypeFilter("전체");
+    // 경매 목록에서 들어온 경우 경매 핀도 켠다 — 구역을 고르면 선택 초기화 효과가 ‘자동(켜짐)’으로
+    // 돌리지만, 같은 구역에서 핀을 꺼 둔 상태로 목록을 누르는 경우까지 확실히 켜기 위해 명시한다.
+    if (opts?.auction) setAuctionPinsChoice(true);
   }
 
   /** 첫 화면 패널의 핫스팟 → 지도를 그 자리로 옮기고 🔥 개발압력 레이어·카드를 연다 */
@@ -2279,6 +2291,22 @@ export default function ZoneExplorer() {
             {!selected && !selectedSeoul && (
               <span className="text-[11px] text-slate-500">개발압력 TOP · 최근 변동</span>
             )}
+            {/* ⚖️ 경매 배지 — 구역 상세의 경매 섹션은 아래쪽이라 놓치기 쉽다.
+                헤더(스크롤과 무관하게 늘 보이는 줄)에서 바로 그 섹션으로 부드럽게 내려간다. */}
+            {selectedAuctions.length > 0 && (
+              <button
+                type="button"
+                data-testid="panel-auction-badge"
+                onClick={() => {
+                  const el = document.getElementById("zone-auctions");
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                title={`이 구역 경매 ${countAuctionSales(selectedAuctions)}건 — 누르면 경매 목록으로 내려갑니다`}
+                className="shrink-0 whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-2 py-[3px] text-[11px] font-bold text-amber-900 hover:border-amber-500 hover:bg-amber-100"
+              >
+                ⚖️ 경매 {countAuctionSales(selectedAuctions)}건
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPanelOpen(false)}
@@ -2640,10 +2668,10 @@ export default function ZoneExplorer() {
                         <button
                           key={z.id}
                           type="button"
-                          onClick={() => pickZone(z.id)}
+                          onClick={() => pickZone(z.id, { auction: true })}
                           data-testid="auction-zone-item"
                           data-zone-id={z.id}
-                          title={`${z.name} · 경매 ${z.count}건 — 누르면 구역 상세가 열립니다`}
+                          title={`${z.name} · 경매 ${z.count}건${z.units > z.count ? `(일괄매각 목적물 ${z.units}개)` : ""} — 누르면 구역 상세가 열립니다`}
                           className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-slate-100"
                         >
                           <span className="min-w-0 flex-1">
