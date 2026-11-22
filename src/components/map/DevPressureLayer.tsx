@@ -5,12 +5,40 @@
 //   · 좌표는 카카오 `map.getProjection().containerPointFromCoords()` 로 매 이동·확대마다 다시 잡는다.
 //     (구역 폴리곤은 캔버스가 직접 그리지만, 점 핀은 DOM 이 눌러야 해서 이 레이어가 맡는다)
 //   · 멀리 보면 점수 높은 곳만 남긴다 — 서울 전체에서 540여 개 핀이 지도를 덮지 않게.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KakaoMap, KakaoSDK } from "./kakao-loader";
-import { DEV_GRADE_COLOR, loadDevPressure, minScoreForLevel, type DevHotspot } from "@/lib/dev-pressure";
+import {
+  DEV_GRADE_COLOR,
+  formatBlockArea,
+  loadDevBlocks,
+  loadDevPressure,
+  minScoreForLevel,
+  type DevBlock,
+  type DevHotspot,
+} from "@/lib/dev-pressure";
 import DevPressureCard from "./DevPressureCard";
 
 type Mark = { spot: DevHotspot; x: number; y: number };
+
+/** 가상 구역경계 — 지도 좌표를 그대로 그리기 위해 「1e-6도」 격자 단위의 Path 문자열로 미리 만든다.
+ *  (매 프레임 꼭짓점 4,000개를 다시 투영하지 않고, SVG 그룹 transform 만 옮긴다) */
+const BLOCK_UNIT = 1e6;
+const BLOCK_REF_LAT = 37.55;
+const BLOCK_REF_LNG = 126.9;
+/** 이 배율보다 멀리 보면 가상 경계는 그리지 않는다 — 서울 전체에서 80개 폴리곤이 지도를 덮지 않게 */
+const BLOCK_MAX_LEVEL = 6;
+
+function blockPathD(block: DevBlock): string {
+  const toX = (lng: number) => ((lng - BLOCK_REF_LNG) * BLOCK_UNIT).toFixed(1);
+  const toY = (lat: number) => (-(lat - BLOCK_REF_LAT) * BLOCK_UNIT).toFixed(1);
+  const ring = (pts: [number, number][]) =>
+    pts.length < 3
+      ? ""
+      : `M${pts.map(([lat, lng]) => `${toX(lng)},${toY(lat)}`).join("L")}Z`;
+  let d = ring(block.polygon);
+  for (const h of block.holes ?? []) d += ring(h); // evenodd 로 구멍이 뚫린다
+  return d;
+}
 
 /** 한 화면에 그릴 핀 상한 — DOM 수를 묶어 이동할 때 끊기지 않게 */
 const MAX_MARKS = 64;
@@ -42,13 +70,28 @@ export default function DevPressureLayer({
   focus?: { id: string; lat: number; lng: number; token: number } | null;
 }) {
   const [spots, setSpots] = useState<DevHotspot[] | null>(null);
+  const [blocks, setBlocks] = useState<DevBlock[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [marks, setMarks] = useState<Mark[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
   const [level, setLevel] = useState<number>(map.getLevel());
+  /** SVG 그룹 변환 — { x, y, kx, ky } 를 ref 로 두고 DOM 에 직접 적용한다(매 프레임 리렌더 방지) */
+  const blockGRef = useRef<SVGGElement | null>(null);
+  /** 가상 경계 중심의 화면 좌표 — 폴리곤을 눌렀을 때 카드를 띄울 자리(핀이 없어도 된다) */
+  const blockCentersRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const [blockLayerShown, setBlockLayerShown] = useState(true);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const selRef = useRef<string | null>(null);
   selRef.current = selId;
+  /** place() 가 최신 블록 목록을 클로저 없이 읽기 위한 ref */
+  const blocksRef = useRef<DevBlock[] | null>(null);
+
+  blocksRef.current = blocks;
+  /** 블록 경로 문자열 — 데이터가 한 번만 바뀌므로 한 번만 만든다 */
+  const blockPaths = useMemo(
+    () => (blocks ?? []).map((b) => ({ block: b, d: blockPathD(b) })),
+    [blocks]
+  );
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +101,14 @@ export default function DevPressureLayer({
       })
       .catch(() => {
         if (alive) setFailed(true);
+      });
+    // 가상 구역경계는 핀과 별개 파일 — 없거나 실패해도 핀은 그대로 보여 준다
+    loadDevBlocks()
+      .then((d) => {
+        if (alive) setBlocks(d.blocks);
+      })
+      .catch(() => {
+        /* 가상 경계만 없는 상태로 둔다 */
       });
     return () => {
       alive = false;
@@ -96,7 +147,48 @@ export default function DevPressureLayer({
       kept.push(m);
     }
     setMarks(kept);
+
+    // ── 가상 구역경계(SVG) 위치 맞추기 ────────────────────────────────────
+    //   꼭짓점은 「1e-6도」 단위로 미리 그려 두고, 여기서는 지도 중심의 축척만 재서
+    //   그룹 transform 하나를 옮긴다(폴리곤 80개 · 꼭짓점 4천여 개를 매 프레임 투영하지 않는다).
+    // 폴리곤 중심의 화면 좌표 — 카드 앵커(폴리곤 클릭 시)로 쓴다
+    if (blocksRef.current) {
+      const m2 = new Map<string, { x: number; y: number }>();
+      for (const b of blocksRef.current) {
+        const p = proj.containerPointFromCoords(new sdk.maps.LatLng(b.center[0], b.center[1]));
+        m2.set(b.id, { x: Math.round(p.x), y: Math.round(p.y) });
+      }
+      blockCentersRef.current = m2;
+    }
+
+    const scene = blockGRef.current;
+    if (scene) {
+      const showBlocks = lv <= BLOCK_MAX_LEVEL;
+      setBlockLayerShown(showBlocks);
+      if (showBlocks) {
+        const c = map.getCenter();
+        const cLat = c.getLat();
+        const cLng = c.getLng();
+        const p0 = proj.containerPointFromCoords(new sdk.maps.LatLng(cLat, cLng));
+        const p1 = proj.containerPointFromCoords(new sdk.maps.LatLng(cLat, cLng + 0.01));
+        const p2 = proj.containerPointFromCoords(new sdk.maps.LatLng(cLat + 0.01, cLng));
+        const kxDeg = (p1.x - p0.x) / 0.01; // px per degree(lng)
+        const kyDeg = (p2.y - p0.y) / 0.01; // px per degree(lat) — 화면 y 는 남쪽(+)
+        if (Math.abs(kxDeg) > 1e-6 && Math.abs(kyDeg) > 1e-6) {
+          const tx = Math.round((p0.x + (BLOCK_REF_LNG - cLng) * kxDeg) * 100) / 100;
+          const ty = Math.round((p0.y + (BLOCK_REF_LAT - cLat) * kyDeg) * 100) / 100;
+          const sx = kxDeg / BLOCK_UNIT;
+          const sy = -kyDeg / BLOCK_UNIT;
+          scene.setAttribute("transform", `translate(${tx} ${ty}) scale(${sx} ${sy})`);
+        }
+      }
+    }
   }, [map, sdk, spots]);
+
+  useEffect(() => {
+    if (!blocks) return;
+    place();
+  }, [blocks, place]);
 
   // 첫 화면 패널 → 핫스팟 카드: 지도를 그 자리로 옮기고 카드를 연다(token 이 바뀔 때만)
   useEffect(() => {
@@ -129,11 +221,63 @@ export default function DevPressureLayer({
     };
   }, [map, place, sdk, spots]);
 
-  const selected = marks.find((m) => m.spot.id === selId) ?? null;
+  // 카드는 핀을 눌렀든 가상 경계(폴리곤)를 눌렀든 같은 스팟으로 연다.
+  //   · 핀이 이 화면에 없을 수 있으므로(확대 배율에 따라 핀을 솎아 낸다) 스팟은 전체 목록에서 찾는다.
+  const selectedMark = marks.find((m) => m.spot.id === selId) ?? null;
+  const selectedSpot = selectedMark?.spot ?? (selId ? (spots?.find((s) => s.id === selId) ?? null) : null);
+  const selectedBlock = selectedSpot ? (blocks?.find((b) => b.id === selectedSpot.id) ?? null) : null;
+  const anchor = selectedMark ?? (selectedBlock ? blockCentersRef.current.get(selectedBlock.id) ?? null : null);
+  const selected = selectedSpot && anchor ? { spot: selectedSpot, x: anchor.x, y: anchor.y } : null;
   const total = spots?.length ?? 0;
+  const blockCount = blocks?.length ?? 0;
 
   return (
     <div ref={wrapRef} className="pointer-events-none absolute inset-0 z-[98]" data-testid="dev-pressure-layer">
+      {/* ── 가상 구역경계 (추정) — 🔥 개발압력이 켜졌을 때만 여기 마운트된다 ─────────
+          · 주황 점선 테두리 + 반투명 산호색 채움. 실제 추진 구역과 헷갈리지 않게 «점선»으로만.
+          · 꼭짓점은 1e-6도 단위 Path 로 미리 그렸고, 이동·확대 때 그룹 transform 만 바뀐다. */}
+      {blockPaths.length > 0 && (
+        <svg
+          className="absolute inset-0 h-full w-full"
+          style={{ zIndex: 0, display: blockLayerShown ? "block" : "none", overflow: "visible" }}
+          aria-hidden={false}
+          data-testid="dev-block-layer"
+        >
+          <g ref={blockGRef}>
+            {blockPaths.map(({ block, d }) => {
+              const active = block.id === selId;
+              return (
+                <path
+                  key={block.id}
+                  d={d}
+                  fillRule="evenodd"
+                  data-testid="dev-block-polygon"
+                  data-block-id={block.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelId(block.id);
+                  }}
+                  style={{
+                    fill: active ? "rgba(249,115,22,0.26)" : "rgba(249,115,22,0.13)",
+                    stroke: active ? "#ea580c" : "#f97316",
+                    strokeWidth: active ? 2.4 : 1.8,
+                    strokeDasharray: "7 5",
+                    strokeLinejoin: "round",
+                    vectorEffect: "non-scaling-stroke",
+                    cursor: "pointer",
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <title>
+                    {`${block.gu} ${block.dong} 가상 구역경계 (추정) · ${formatBlockArea(block.areaM2)}`}
+                  </title>
+                </path>
+              );
+            })}
+          </g>
+        </svg>
+      )}
+
       {/* 핀 — 「84점」 알약. 숫자만으로는 무엇인지 알 수 없어 단위(점)를 붙였다 */}
       {marks.map((m) => {
         const s = m.spot;
@@ -202,6 +346,7 @@ export default function DevPressureLayer({
         >
           <DevPressureCard
             spot={selected.spot}
+            block={selectedBlock}
             onClose={() => setSelId(null)}
             onOpenZone={onOpenZone}
             onPickJibun={onPickJibun}
@@ -237,6 +382,18 @@ export default function DevPressureLayer({
         <div className="mt-0.5 text-[9.5px] leading-tight text-slate-500">
           정비구역·아파트에 둘러싸인 노후 저층지 — 아파트 동·단지를 뺀 저층 건물 기준
           {level >= 8 ? " · 확대하면 더 많이 보입니다" : ""}
+          {blockCount > 0 && (
+            <>
+              <br />
+              <span className="inline-flex items-center gap-1">
+                <svg width="18" height="8" aria-hidden>
+                  <line x1="0" y1="4" x2="18" y2="4" stroke="#f97316" strokeWidth="2" strokeDasharray="5 3" />
+                </svg>
+                <b className="font-bold text-orange-600">점선 구역경계</b> = 가상 구역경계(추정) {blockCount}곳
+                {level > BLOCK_MAX_LEVEL ? " · 확대하면 보입니다" : ""}
+              </span>
+            </>
+          )}
           <br />
           아파트 동: © OpenStreetMap contributors (ODbL) · 구역: 서울시 고시
         </div>

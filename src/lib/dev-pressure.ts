@@ -61,6 +61,75 @@ export type DevPressureData = {
   hotspots: DevHotspot[];
 };
 
+/**
+ * 🔥 개발압력 **가상 구역경계** — `public/data/dev-pressure-blocks.json`
+ *   (scripts/build-dev-pressure-blocks.py 산출)
+ *
+ *   · 핫스팟 둘레 30년↑ 저층 건물이 골목으로 이어진 덩어리의 외곽을 딴 **추정** 경계다.
+ *     고시된 구역계가 아니므로 지도에서는 주황 점선 + 반투명 채움으로만 그린다.
+ *   · 기존 정비구역·아파트 단지 안은 빼고 그렸다(실제 추진 구역과 겹치지 않게).
+ *   · `polygon` 은 앱의 구역(SeoulZone.polygon)과 같은 `[위도, 경도]` 순서다.
+ */
+export type DevBlock = {
+  /** 핫스팟 id (DevHotspot.id) — 카드·핀이 이 키로 블록을 찾는다 */
+  id: string;
+  score: number;
+  grade: DevHotspot["grade"];
+  gu: string;
+  dong: string;
+  hjd?: string | null;
+  areaM2: number;
+  pyeong: number;
+  /** 30년 이상 비율(%) — 이 블록 안 저층 건물 중 연도를 아는 것 기준 */
+  oldPct: number;
+  /** 블록 안 저층 건물 동수 */
+  bldCount: number;
+  /** 반경 500m 아파트 동수(개발압력 산출값) */
+  aptCount: number;
+  apts: string[];
+  zones: DevPressureZone[];
+  station?: DevPressureStation | null;
+  /** [위도, 경도] */
+  center: [number, number];
+  /** 외곽 링 — [위도, 경도] */
+  polygon: [number, number][];
+  /** 큰 내부 구멍(학교·단지) — [위도, 경도] */
+  holes?: [number, number][][];
+};
+
+export type DevBlockData = {
+  generatedAt: string;
+  method: Record<string, unknown>;
+  blocks: DevBlock[];
+};
+
+const BLOCK_VERSION = process.env.NEXT_PUBLIC_BUILD_ID || "dev";
+export const DEV_BLOCKS_URL = `/data/dev-pressure-blocks.json?v=${encodeURIComponent(BLOCK_VERSION)}`;
+
+let blockCache: Promise<DevBlockData> | null = null;
+
+/** 가상 구역경계 데이터 — 개발압력 핀과 같은 시점에 한 번만 받는다 */
+export function loadDevBlocks(): Promise<DevBlockData> {
+  if (!blockCache) {
+    blockCache = fetch(DEV_BLOCKS_URL, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`dev-pressure-blocks ${r.status}`);
+        return r.json() as Promise<DevBlockData>;
+      })
+      .catch((e) => {
+        blockCache = null;
+        throw e;
+      });
+  }
+  return blockCache;
+}
+
+/** 면적 표기 — 1만㎡ 이상은 「2.4만㎡」, 그 아래는 「8,200㎡」 */
+export function formatBlockArea(m2: number): string {
+  if (m2 >= 10000) return `${(m2 / 10000).toFixed(1)}만㎡`;
+  return `${Math.round(m2).toLocaleString()}㎡`;
+}
+
 const DATA_VERSION = process.env.NEXT_PUBLIC_BUILD_ID || "dev";
 export const DEV_PRESSURE_URL = `/data/dev-pressure.json?v=${encodeURIComponent(DATA_VERSION)}`;
 
