@@ -100,11 +100,11 @@ export default function DevPressureCard({
               </div>
             </div>
             <div>
-              <div className="text-[8.5px] text-slate-400">노후 30년↑</div>
+              <div className="text-[8.5px] text-slate-400">경계 안 노후</div>
               <div className="text-[10.5px] font-bold leading-tight text-ink">{block.oldPct}%</div>
             </div>
             <div>
-              <div className="text-[8.5px] text-slate-400">저층 건물</div>
+              <div className="text-[8.5px] text-slate-400">경계 안 동수</div>
               <div className="text-[10.5px] font-bold leading-tight text-ink">{block.bldCount}동</div>
             </div>
           </div>
