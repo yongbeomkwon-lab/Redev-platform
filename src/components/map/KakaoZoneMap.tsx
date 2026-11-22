@@ -38,7 +38,6 @@ import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
-import AuctionPinCard from "./AuctionPinCard";
 import JibunPinCard from "./JibunPinCard";
 import DevPressureLayer from "./DevPressureLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
@@ -456,7 +455,8 @@ export default function KakaoZoneMap({
   auctionPins = [],
   auctionPinsOn = false,
   onToggleAuctionPins,
-  onOpenAuctionZone,
+  onSelectAuctionPin,
+  activeAuctionPinId,
   jibunPickOn = false,
   onToggleJibunPick,
   onPickJibun,
@@ -534,12 +534,8 @@ export default function KakaoZoneMap({
   const auctionAtRef = useRef<AuctionMapPin[]>([]);
   /** draw 가 이번 프레임에 놓은 경매 핀 자리 — 실거래 핀이 그 위에 겹치지 않게 비킨다 */
   const auctionPlacedRef = useRef<{ x: number; y: number }[]>([]);
-  /** 지금 펼쳐 둔 경매 핀 카드 레이어·요소 — draw 가 카드를 핀 자리로 옮긴다 */
-  const auctionCardLayerRef = useRef<HTMLDivElement | null>(null);
-  const auctionCardElRef = useRef<HTMLDivElement | null>(null);
-  /** 지금 펼쳐 둔 경매 핀 카드(좌표 키) — 하나만 열린다 */
-  const [openAuctionId, setOpenAuctionId] = useState<string | null>(null);
-  const openAuctionRef = useRef<string | null>(null);
+  /** 왼쪽 창에서 보고 있는 핀 — draw 가 이 핀을 맨 앞·강조로 놓는다 */
+  const activeAuctionPinRef = useRef<string | null>(null);
   /** 「지번 찍기」로 꽂은 핀 레이어·요소 — draw 가 매 프레임 좌표를 맞춘다 */
   const jibunLayerRef = useRef<HTMLDivElement | null>(null);
   const jibunElRef = useRef<HTMLDivElement | null>(null);
@@ -2574,6 +2570,9 @@ export default function KakaoZoneMap({
     void document.fonts?.ready.then(() => {
       if (!alive) return;
       labelSizeRef.current.dirty = true;
+      // 글자 폭 측정치도 대체 폰트로 잰 값이므로 버린다 — 지마켓 산스는 자폭이 넓어
+      // 늦게 실린 폰트로 잰 폭을 그대로 쓰면 카드 오른쪽 글자가 테두리에 붙는다
+      tagWRef.current.clear();
       tagSizeRef.current.clear();
       draw();
     });
