@@ -34,7 +34,47 @@ export type PreparedZone = {
   completed: boolean;
   /** 위치 참고용 근사원(실제 구역계 아님) — 점선으로 옅게 그린다 */
   approx: boolean;
+  /** 정점이 **원형**인 근사원(geom="근사원") — 광역 화면에서는 큰 점선 원 대신 작은 위치 점 */
+  approxCircle: boolean;
 };
+
+/**
+ * 위치 참고용 '근사원'인가 — 실제 구역계 다각형과 반드시 구분한다.
+ *   · geom === "근사원": 대표 지번 중심에 면적을 원으로 환산한 97정점 원
+ *   · geom 표기가 없어도 boundaryApprox 이고 정점이 원형(중심에서의 반지름 편차 8% 이내)이면 근사원으로 본다
+ *   ⚠️ 신수13구역·성내동 431·방배 467-19 처럼 boundaryApprox: true 여도 공고·고시 도면에서 딴
+ *      실제 다각형(반지름 편차 49~164%)은 근사원으로 보지 않는다 — 지도에 그대로 경계로 그린다.
+ */
+export function isApproxCircleZone(z: {
+  geom?: string;
+  boundaryApprox?: boolean;
+  polygon?: [number, number][];
+}): boolean {
+  if (z.geom === "근사원") return true;
+  const ring = z.polygon;
+  if (!z.boundaryApprox || !ring || ring.length < 20) return false;
+  let latSum = 0;
+  let lngSum = 0;
+  for (const [lat, lng] of ring) {
+    latSum += lat;
+    lngSum += lng;
+  }
+  const cLat = latSum / ring.length;
+  const cLng = lngSum / ring.length;
+  const kx = 111_320 * Math.cos((cLat * Math.PI) / 180);
+  let sum = 0;
+  const radii: number[] = [];
+  for (const [lat, lng] of ring) {
+    const r = Math.hypot((lng - cLng) * kx, (lat - cLat) * 110_540);
+    radii.push(r);
+    sum += r;
+  }
+  const mean = sum / radii.length;
+  if (!(mean > 0)) return false;
+  let maxDev = 0;
+  for (const r of radii) maxDev = Math.max(maxDev, Math.abs(r - mean));
+  return maxDev / mean <= 0.08;
+}
 
 export type PreparedZones = {
   zones: PreparedZone[];
@@ -115,6 +155,7 @@ export function prepareZones(list: SeoulZone[]): PreparedZones {
       maxLng,
       completed: isCompletedZone(z),
       approx: !!z.boundaryApprox,
+      approxCircle: isApproxCircleZone(z),
     });
   }
 

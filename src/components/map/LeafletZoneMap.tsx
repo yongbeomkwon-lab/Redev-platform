@@ -30,6 +30,7 @@ import L from "leaflet";
 import { CircleMarker, MapContainer, Marker, Pane, Polygon, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { isCompletedZone, type SeoulZone } from "@/lib/seoul-zones";
+import { isApproxCircleZone } from "./prepare-zones";
 import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
@@ -483,6 +484,14 @@ function FocusMyPin({ pins, focusId }: { pins: MyListingPin[]; focusId?: string 
   return null;
 }
 
+/**
+ * 위치 참고용 근사원을 지도에서 감춘다 — 광역 화면에서는 점도 찍지 않고 완전히 숨긴다.
+ *   레이어는 남겨 두어야 줌을 되돌렸을 때 setStyle 로 다시 그릴 수 있다(투명 스타일은 클릭 판정에만 남는다).
+ */
+function hiddenApproxCircleStyle(): L.PathOptions {
+  return { color: "#ffffff", fillColor: "#ffffff", weight: 0, opacity: 0, fillOpacity: 0, dashArray: "" };
+}
+
 /** 전수 레이어 — L.geoJSON 한 겹을 Canvas로 그린다(수천 개 폴리곤도 부드럽게). */
 function SeoulZoneLayer({
   zones,
@@ -512,7 +521,7 @@ function SeoulZoneLayer({
         .map((z) => ({
           type: "Feature" as const,
           id: z.id,
-          properties: { id: z.id, name: z.name, alias: z.alias, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area, boundaryApprox: z.boundaryApprox },
+          properties: { id: z.id, name: z.name, alias: z.alias, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area, boundaryApprox: z.boundaryApprox, approxCircle: isApproxCircleZone(z) },
           geometry: {
             type: "Polygon" as const,
             coordinates: [[...z.polygon, z.polygon[0]].map(([lat, lng]) => [lng, lat])],
@@ -524,15 +533,21 @@ function SeoulZoneLayer({
   useEffect(() => {
     const layer = L.geoJSON(collection, {
       interactive: true,
-      style: (f) =>
-        zoneStyle(
-          (f?.properties?.type ?? "일반재개발") as SeoulZone["type"],
-          f?.properties?.id === selectedRef.current,
+      style: (f) => {
+        const p = f?.properties as { id?: string; type?: string; stage?: string; boundaryApprox?: boolean; approxCircle?: boolean } | undefined;
+        const active = p?.id === selectedRef.current;
+        // 위치 참고용 근사원(DDP 1·2·3구역 등) — 광역(줌 13 이하 = 카카오 레벨 7 이상)에서는
+        //   큰 점선 원을 아예 그리지 않는다(작은 점도 없음 — 카카오맵과 같은 규칙). 실제 구역계 다각형은 그대로.
+        if (p?.approxCircle && !active && zoomRef.current <= 13) return hiddenApproxCircleStyle();
+        return zoneStyle(
+          (p?.type ?? "일반재개발") as SeoulZone["type"],
+          active,
           false,
           zoomRef.current,
-          isCompletedZone({ stage: (f?.properties?.stage as string) ?? "" }),
-          !!f?.properties?.boundaryApprox
-        ),
+          isCompletedZone({ stage: (p?.stage as string) ?? "" }),
+          !!p?.boundaryApprox
+        );
+      },
       onEachFeature: (feature, lyr) => {
         const p = feature.properties as { id: string; name: string; type: string; kind: string; stage: string; gu: string; area: number };
         lyr.on("click", (e) => {
@@ -557,10 +572,15 @@ function SeoulZoneLayer({
     layer.eachLayer((l) => {
       const p = (l as L.Path & { feature?: GeoJSON.Feature }).feature?.properties;
       if (!p) return;
+      const selected = p.id === selectedId;
+      if (p.approxCircle && !selected && zoom <= 13) {
+        (l as L.Path).setStyle(hiddenApproxCircleStyle());
+        return;
+      }
       (l as L.Path).setStyle(
         zoneStyle(
           p.type as SeoulZone["type"],
-          p.id === selectedId,
+          selected,
           false,
           zoom,
           isCompletedZone({ stage: p.stage ?? "" }),
@@ -713,35 +733,14 @@ export default function LeafletZoneMap({
       })}
 
       {/* ── 경계 미고시 후보지 (점) ──
-           · 광역 줌아웃(줌 13 이하 = 카카오 레벨 7 이상): 작은 위치 점(반지름 4px, 흰 테두리)만 —
-             정상 폴리곤 구역을 큰 점선 원으로 덮지 않게
+           · 광역 줌아웃(줌 13 이하 = 카카오 레벨 7 이상): 선택된 구역만 그리고, 나머지는 아예 그리지 않는다
+             (작은 점조차 찍지 않아 실제 구역계 다각형만 남는다 — 2026-11-22 사용자 지시)
            · 동네 확대(줌 14 이상): 기존처럼 점선 원(반지름 9px) */}
       {pointZones.map((z) => {
         const sel = z.id === selectedZoneId;
         const farOut = zoom <= 13;
+        if (farOut && !sel) return null;
         const color = TYPE_COLORS[z.type] ?? "#7c3aed";
-        if (farOut && !sel) {
-          return (
-            <CircleMarker
-              key={`pt-${z.id}`}
-              center={z.center}
-              radius={4}
-              pathOptions={{
-                color: "#ffffff",
-                weight: 1.1,
-                opacity: 0.9,
-                fillColor: color,
-                fillOpacity: 0.92,
-              }}
-              eventHandlers={{ click: () => onSelectZone(z.id) }}
-            >
-              <Tooltip direction="top" permanent opacity={1} className="zone-name-label">
-                <b>{z.name}</b>
-                <span className="zone-name-sub"> · {z.stage} · 경계 미고시</span>
-              </Tooltip>
-            </CircleMarker>
-          );
-        }
         return (
           <CircleMarker
             key={`pt-${z.id}`}
@@ -764,6 +763,11 @@ export default function LeafletZoneMap({
           </CircleMarker>
         );
       })}
+
+      {/* ── 위치 참고용 근사원 (DDP 1·2·3구역 등) ──
+           · 실제 구역계가 아니라 대표 지번에 면적을 원으로 환산한 점선 원이다(카카오맵과 같은 규칙)
+           · 줌 13 이하: 아예 그리지 않는다 — 위 전수 레이어가 투명 스타일로 감춘다(점도 안 찍음)
+           · 줌 14 이상·선택: 전수 레이어의 점선 원 그대로 — 여기서 따로 그릴 것이 없다 */}
 
       {/* ── 매물 배지 — 카카오맵과 같은 `🏠 매물 N` ── */}
       <ListingBadges zones={seoulZones} counts={listingCounts} onSelect={onSelectZone} />

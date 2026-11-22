@@ -1410,6 +1410,7 @@ export default function KakaoZoneMap({
       fillOpacity: number;
       dash: number[] | null;
     }[] = [];
+    const wideOut = map.getLevel() >= 7;
 
     let buf = bufRef.current;
 
@@ -1419,6 +1420,15 @@ export default function KakaoZoneMap({
       const z = pz.zone;
       const isSel = z.id === selId;
       const isHover = !isSel && z.id === hoverId;
+
+      // 위치 참고용 근사원(DDP 1·2·3구역 등) — 정점이 원형인 점선 원이다.
+      //   · 광역 줌아웃(레벨 7 이상): 실제 구역계가 아니므로 **아예 그리지 않는다**(점도 안 찍음).
+      //     초기 화면에는 실제 구역계 다각형만 남아 지도가 깔끔해진다(2026-11-22 사용자 지시).
+      //   · 동네 확대(레벨 6 이하)·선택·호버: 기존처럼 점선 원으로 — 근사 경계임을 드러낸다.
+      //   ⚠️ 신수13구역·성내동 431·방배 467-19 처럼 공고·고시 도면에서 딴 실제 다각형은
+      //      boundaryApprox 여도 여기서 걸러지지 않는다(isApproxCircleZone 이 정점 형태로 판정).
+      if (pz.approxCircle && wideOut && !isSel && !isHover) continue;
+
       const st = zoneStyle(z.type, isSel || isHover, z.featured, zoomProxy, pz.completed, pz.approx);
       // 스카이뷰에서는 항공사진이 보이도록 채움을 옅게 (테두리는 그대로)
       if (skyviewRef.current) st.fillOpacity = Math.min(st.fillOpacity, isSel || isHover ? 0.3 : 0.16);
@@ -1516,11 +1526,11 @@ export default function KakaoZoneMap({
     ctx.setLineDash([]);
 
     // 3) 구역계 미고시 후보지(예: 사당21구역) — 줌 레벨에 따라 표현을 바꾼다
-    //    · 광역 줌아웃(레벨 7 이상): 선택·호버만 강조하고, 나머지는 작은 **위치 점**(반지름 3.5px,
-    //      얇은 흰 테두리 + 유형 색)만 찍는다. 예전에는 이 레벨에서도 반지름 9px 점선 원이 그려져
-    //      실제 경계가 있는 정상 폴리곤 구역들까지 동그라미에 덮인 것처럼 보였다(2026-11-22 지적).
+    //    · 광역 줌아웃(레벨 7 이상): 선택·호버만 강조하고, 나머지는 **아예 그리지 않는다**.
+    //      초기 광역 화면에는 실제 구역계 다각형만 남긴다(작은 위치 점조차 안 찍어 지도를 가리지 않게 —
+    //      2026-11-22 사용자 지시).
     //    · 동네 확대(레벨 6 이하): 기존처럼 점선 원(반지름 8~9px) + 흰 점 — 경계 미고시임을 한눈에.
-    const pointsFarOut = map.getLevel() >= 7;
+    const pointsFarOut = wideOut;
     for (const z of data.points) {
       const x = p0x + (z.center[1] - lng0) * pxPerLng;
       const y = p0y + (mercator(z.center[0]) - m0) * pxPerMerc;
@@ -1528,17 +1538,7 @@ export default function KakaoZoneMap({
       const isSel = z.id === selId;
       const isHover = !isSel && z.id === hoverId;
       const color = TYPE_COLORS[z.type] ?? "#7c3aed";
-      if (pointsFarOut && !isSel && !isHover) {
-        // 위치 점 — 240곳이 모여도 지도·정상 구역 폴리곤을 가리지 않게
-        ctx.beginPath();
-        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = rgba(color, 0.92);
-        ctx.fill();
-        ctx.lineWidth = 1.1;
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.stroke();
-        continue;
-      }
+      if (pointsFarOut && !isSel && !isHover) continue;
       ctx.beginPath();
       ctx.arc(x, y, isSel ? 13 : isHover ? 11 : 9, 0, Math.PI * 2);
       ctx.setLineDash([4, 3]);
