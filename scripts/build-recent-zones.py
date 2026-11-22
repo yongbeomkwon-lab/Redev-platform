@@ -57,6 +57,13 @@ CURATED = [
         "label": "구역계 도면 반영(2024-06-21 공고)",
         "note": "사당동 300번지 일대 — 동작구 구역 공개 도면의 구역계를 다각형으로 반영(계측 39,541㎡·대상지 선정 2024-11-15)",
     },
+    # 2026-11-22 도선동 332 일대 — 공개 구역계가 없는 추진준비 구역이라 연속지적도 지번선으로 경계를 만듦
+    {
+        "name": "(가)도선동 332 민간도심복합",
+        "asOf": "2026-11-22",
+        "label": "신규 등록(가상경계)",
+        "note": "도선동 332·314·333-1·홍익동 346 일대 — 민간도심복합(주거중심형) 추진준비, 무학로·마장로·왕십리로26길·무학로2길 필지선 경계(계측 57,726㎡·공고 58,713.7㎡)",
+    },
     # 2026-11-22 사당동 77-24 일대(사당19구역) — 구역계 도면 반영
     {
         "name": "사당동 77-24 일대",
@@ -193,7 +200,7 @@ def main():
         ),
         reverse=True,
     )
-    rows = [r for r in rows if r["center"]][:14]
+    rows = [r for r in rows if r["center"]][:20]
     payload = {"generatedAt": date.today().isoformat(), "zones": rows}
     txt = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     open(OUT, "w", encoding="utf-8").write(txt)
