@@ -657,9 +657,18 @@ export default function ZoneExplorer() {
             rows: json.transactions ?? [],
             // 국토부 호출 한도(429)·오류로 받지 못한 달 — '거래 없음'으로 단정하지 않는다
             failedMonths: json.failedMonths ?? [],
+            // 서울 밖 지점(구 이름이 없음)·키 미설정은 따로 안내한다
+            reason: json.reason,
+            message: json.message,
           };
         } catch {
-          return { ok: false, rows: [] as MolitTransaction[], failedMonths: [] as string[] };
+          return {
+            ok: false,
+            rows: [] as MolitTransaction[],
+            failedMonths: [] as string[],
+            reason: undefined,
+            message: undefined,
+          };
         }
       };
       /** 가장 최근 계약일 — 유형을 고를 때 거래 건수가 같으면 최신 쪽을 고른다 */
@@ -669,6 +678,8 @@ export default function ZoneExplorer() {
       let anyAnswered = false;
       /** 통째로 응답을 못 받은 호출 수 — 이게 있으면 '거래 없음'이라고 단정하지 않는다 */
       let failedCalls = 0;
+      /** 거절 이유(서울 밖 주소 등) — 그대로 안내한다 */
+      let rejected: string | null = null;
       /** 429 등으로 비어 버린 달(YYYYMM) — 마지막에 한 달씩 다시 물어본다 */
       const missing = new Set<string>();
       let found: { kind: BuildingTradeKind; rows: MolitTransaction[] } | null = null;
@@ -682,7 +693,11 @@ export default function ZoneExplorer() {
         );
         if (results.some((r) => r.ok)) anyAnswered = true;
         for (const r of results) {
-          if (!r.ok) failedCalls += 1;
+          if (!r.ok) {
+            failedCalls += 1;
+            if (r.reason === "gu_not_found") rejected = "서울 자치구 주소만 실거래를 조회할 수 있습니다.";
+            else if (r.reason === "key_missing" && r.message) rejected = r.message;
+          }
           for (const ym of r.failedMonths) missing.add(ym);
         }
         // 거래가 많은 유형을 고르고, 같으면 최근 거래가 있는 유형을 고른다
@@ -723,11 +738,13 @@ export default function ZoneExplorer() {
 
       if (!found) {
         say(
-          failedCalls > 0 || missing.size > 0
-            ? "실거래를 일부만 불러왔습니다(국토부 호출 한도). 잠시 뒤 다시 시도해 주세요."
-            : anyAnswered
-              ? "이 지번에는 최근 5년 공동주택(아파트·연립다세대) 신고 거래가 없습니다."
-              : "실거래를 조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."
+          rejected
+            ? rejected
+            : failedCalls > 0 || missing.size > 0
+              ? "실거래를 일부만 불러왔습니다(국토부 호출 한도). 잠시 뒤 다시 시도해 주세요."
+              : anyAnswered
+                ? "이 지번에는 최근 5년 공동주택(아파트·연립다세대) 신고 거래가 없습니다."
+                : "실거래를 조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."
         );
         return;
       }
