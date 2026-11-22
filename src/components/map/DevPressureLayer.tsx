@@ -258,10 +258,10 @@ export default function DevPressureLayer({
                     setSelId(block.id);
                   }}
                   style={{
-                    fill: active ? "rgba(249,115,22,0.26)" : "rgba(249,115,22,0.13)",
+                    fill: active ? "rgba(249,115,22,0.30)" : "rgba(249,115,22,0.17)",
                     stroke: active ? "#ea580c" : "#f97316",
-                    strokeWidth: active ? 2.4 : 1.8,
-                    strokeDasharray: "7 5",
+                    strokeWidth: active ? 2.8 : 2.2,
+                    strokeDasharray: "6 4",
                     strokeLinejoin: "round",
                     vectorEffect: "non-scaling-stroke",
                     cursor: "pointer",
