@@ -16,8 +16,9 @@ import urllib.request
 BASE = os.environ.get("BASE", "http://localhost:3100")
 SUPA = os.environ["NEXT_PUBLIC_SUPABASE_URL"].rstrip("/")
 ANON = os.environ["NEXT_PUBLIC_SUPABASE_ANON_KEY"]
+# 검증용 계정은 환경변수로만 받는다 — 저장소에 비밀번호를 적어 두지 않는다(공개 저장소).
 EMAIL = os.environ.get("QA_EMAIL", "qa.redev@redev-platform.test")
-PASSWORD = os.environ.get("QA_PASSWORD", "RedevQa2026!")
+PASSWORD = os.environ.get("QA_PASSWORD", "")
 
 passed, failed = 0, 0
 
@@ -65,6 +66,10 @@ def login():
         sys.exit(1)
     return body["access_token"]
 
+
+if not PASSWORD:
+    print("QA_PASSWORD 환경변수에 검증 계정 비밀번호를 넣어 주세요.")
+    sys.exit(2)
 
 print("커뮤니티 API 점검 —", BASE)
 token = login()
