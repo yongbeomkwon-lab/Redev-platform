@@ -50,13 +50,15 @@ UA = (
 REFERER = BASE + "/pgj/index.on?w2xPath=/pgj/ui/pgj100/PGJ151M01.xml&pgjId=151M01"
 PAGE_SIZE = 50  # 사이트 기본 페이지 크기 상한
 
-# 서울 5개 지방법원 — 부동산(법원) 코드. 응답의 boCd 로 다시 확인한다.
+# 서울 5개 지방법원 — 부동산(법원) 코드.
+#   2026-11-22 확인: 코드 순서가 화면의 법원 목록 순서와 다르다(남부=212, 북부=213, 서부=215, 의정부=214).
+#   실제 이름은 응답의 `printCsNo`(“서울북부지방법원<br/>2025타경10119”)로 다시 확인해 덮어쓴다.
 SEOUL_COURTS = {
     "B000210": "서울중앙지방법원",
     "B000211": "서울동부지방법원",
-    "B000212": "서울서부지방법원",
-    "B000213": "서울남부지방법원",
-    "B000214": "서울북부지방법원",
+    "B000212": "서울남부지방법원",
+    "B000213": "서울북부지방법원",
+    "B000215": "서울서부지방법원",
 }
 
 
@@ -162,6 +164,8 @@ def normalize(row: dict) -> dict:
     """검색 결과 한 줄 → 물건 1건. (사이트 컬럼 ID는 2000년대 법원 시스템 코드명을 그대로 쓴다)"""
     court = row.get("boCd") or ""
     case_no = row.get("srnSaNo") or ""              # 2023타경104875
+    # 법원 이름은 원문 표기(printCsNo 앞부분)를 우선한다 — 코드표보다 이 값이 권위 있다
+    court_nm = (row.get("printCsNo") or "").split("<br/>")[0] or SEOUL_COURTS.get(court, court)
     item_no = row.get("maemulSer") or ""             # 물건번호(매각물건일련)
     obj_no = row.get("mokmulSer") or ""              # 목적물번호
     appraised = won(row.get("gamevalAmt"))           # 감정평가액
@@ -173,7 +177,7 @@ def normalize(row: dict) -> dict:
     return {
         "id": row.get("docid") or f"{court}-{case_no}-{item_no}",
         "courtCode": court,
-        "court": SEOUL_COURTS.get(court, row.get("jiwonNm") or court),
+        "court": court_nm,
         "caseNo": case_no,
         "caseNoPrint": (row.get("printCsNo") or "").replace("<br/>", " ").strip(),
         "itemNo": item_no,

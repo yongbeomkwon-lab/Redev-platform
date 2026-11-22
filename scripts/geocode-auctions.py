@@ -59,33 +59,38 @@ def query_of(item: dict) -> str:
 
 
 def lookup(key: str, query: str) -> tuple[float, float] | None:
-    url = ENDPOINT + "?" + urllib.parse.urlencode({"query": query, "size": "1"})
-    p = subprocess.run([
-        "curl", "-sS", "--max-time", "20", url,
-        "-H", f"Authorization: KakaoAK {key}",
-        "-H", f"KA: os/web; origin/{ORIGIN}",
-        "-H", f"Origin: {ORIGIN}",
-        "-H", f"Referer: {ORIGIN}/",
-        "-A", "Mozilla/5.0",
-    ], capture_output=True)
-    try:
-        data = json.loads(p.stdout.decode("utf-8", errors="replace"))
-    except json.JSONDecodeError:
-        return None
-    docs = data.get("documents") or []
-    if not docs:
-        return None
-    d = docs[0]
-    try:
-        return float(d["y"]), float(d["x"])
-    except (KeyError, TypeError, ValueError):
-        return None
+    """주소검색 → (없으면) 키워드검색. 카카오 주소검색이 모르는 지번도 키워드로는 잡히는 경우가 있다."""
+    for path, param in (("/v2/local/search/address.json", "query"),
+                        ("/v2/local/search/keyword.json", "query")):
+        url = "https://dapi.kakao.com" + path + "?" + urllib.parse.urlencode({param: query, "size": "1"})
+        p = subprocess.run([
+            "curl", "-sS", "--max-time", "20", url,
+            "-H", f"Authorization: KakaoAK {key}",
+            "-H", f"KA: os/web; origin/{ORIGIN}",
+            "-H", f"Origin: {ORIGIN}",
+            "-H", f"Referer: {ORIGIN}/",
+            "-A", "Mozilla/5.0",
+        ], capture_output=True)
+        try:
+            data = json.loads(p.stdout.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            continue
+        docs = data.get("documents") or []
+        if not docs:
+            continue
+        d = docs[0]
+        try:
+            return float(d["y"]), float(d["x"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--sleep", type=float, default=0.22, help="요청 간 대기(초)")
+    ap.add_argument("--retry-failed", action="store_true", help="지난번 실패(None)한 주소만 다시 시도")
     args = ap.parse_args()
 
     data = json.load(open(LATEST, encoding="utf-8"))
@@ -99,7 +104,7 @@ def main() -> None:
         if it.get("sido") != "서울특별시":
             continue
         q = query_of(it)
-        if q in cache:
+        if q in cache and not (args.retry_failed and cache[q] is None):
             continue
         if q not in todo:
             todo.append(q)
