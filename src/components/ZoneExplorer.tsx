@@ -47,6 +47,7 @@ import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
 import ZoneAuctions from "@/components/ZoneAuctions";
 import { formatWon, formatSaleDate, loadAuctions, type AuctionItem, type AuctionsData } from "@/lib/auctions";
+import { buildAuctionPins } from "@/lib/auction-pins";
 import {
   LISTINGS_CHANGED_EVENT,
   listingCountsByZoneId,
@@ -198,6 +199,11 @@ export default function ZoneExplorer() {
   const [auctions, setAuctions] = useState<AuctionsData | null>(null);
   /** 지도에 위치를 보여 줄 경매 물건(「📍 지도 위치」를 누른 것) */
   const [auctionFocus, setAuctionFocus] = useState<AuctionItem | null>(null);
+  /**
+   * ⚖️ 지도 경매 핀 표시 — `null` 이면 ‘자동’(구역을 골랐을 때만 ON, 광역에서는 OFF).
+   *   사용자가 지도 위 토글을 누르면 true/false 로 굳히고, 구역을 바꾸면 다시 자동으로 돌린다.
+   */
+  const [auctionPinsChoice, setAuctionPinsChoice] = useState<boolean | null>(null);
   const [jibunPickOn, setJibunPickOn] = useState(false);
   const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
   const [jibunProbing, setJibunProbing] = useState(false);
@@ -411,6 +417,8 @@ export default function ZoneExplorer() {
   useEffect(() => {
     setTxPins([]);
     setAuctionFocus(null);
+    // 경매 핀 토글도 ‘자동’(구역 선택 시 ON)으로 돌린다
+    setAuctionPinsChoice(null);
   }, [selectedId]);
   // 선택 구역의 매물 — zoneId 로 먼저, 안 되면 구역명으로 맞춘다(옛 저장분·개편 전 id)
   const selectedListings = listings.filter((l) =>
@@ -419,6 +427,17 @@ export default function ZoneExplorer() {
   // 선택 구역에 매칭된 경매 물건 — 없으면 빈 배열(섹션을 그리지 않는다)
   const selectedAuctions: AuctionItem[] =
     selectedId && auctions ? auctions.byZone[selectedId] ?? [] : [];
+  // ── ⚖️ 지도 경매 핀 ──────────────────────────────────────────────────────
+  //   · 구역을 골랐으면 그 구역 안 물건만, 광역이면 매칭된 전체 물건을 좌표로 묶어 지도에 넘긴다.
+  //   · 같은 좌표의 호실은 `buildAuctionPins` 가 핀 하나로 묶는다(쌍문동 507-1 109건 → 1핀).
+  //   · 표시는 구역 선택 시 기본 ON — 광역에서 보려면 지도 위 「⚖️ 경매 핀」 토글을 켜야 한다.
+  const zoneAuctionPins = useMemo(() => buildAuctionPins(selectedAuctions), [selectedAuctions]);
+  const allAuctionPins = useMemo(
+    () => (auctions ? buildAuctionPins(Object.values(auctions.byZone).flat()) : []),
+    [auctions]
+  );
+  const mapAuctionPins = selectedId ? zoneAuctionPins : allAuctionPins;
+  const auctionPinsOn = auctionPinsChoice ?? !!selectedId;
   // 경매 물건이 있는 구역 상위 목록 — 첫 화면(패널)에서 바로 들어간다
   const auctionTop = useMemo(() => {
     if (!auctions) return [];
@@ -1384,6 +1403,10 @@ export default function ZoneExplorer() {
           txPins={txPins}
           txPinsOn={txPinsOn}
           onToggleTxPins={() => setTxPinsOn((v) => !v)}
+          auctionPins={mapAuctionPins}
+          auctionPinsOn={auctionPinsOn}
+          onToggleAuctionPins={() => setAuctionPinsChoice(!auctionPinsOn)}
+          onOpenAuctionZone={(id) => pickZone(id)}
           onSelectTxPin={(pin) =>
             setBuildingTarget({
               gu: selected?.district ?? selectedSeoul?.gu ?? "",

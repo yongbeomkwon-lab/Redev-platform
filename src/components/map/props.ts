@@ -2,6 +2,7 @@
 // (leaflet/kakao 를 임포트하지 않는 순수 모듈이라 어디서든 안전하다)
 import type { Zone } from "@/lib/types";
 import type { SeoulZone } from "@/lib/seoul-zones";
+import type { AuctionMapPin } from "@/lib/auction-pins";
 
 /** 서울시 경계 (지도 초기 화면) — [[남서 위도, 경도], [북동 위도, 경도]] */
 export const SEOUL_BOUNDS: [[number, number], [number, number]] = [
@@ -66,6 +67,17 @@ export type ZoneMapProps = {
    * 화면을 그 핀으로 부드럽게 옮긴다. 창을 닫으면 null 로 돌아온다.
    */
   activeTxPin?: { umdNm: string; jibun: string } | null;
+  /**
+   * ⚖️ 경매 물건 핀 — 구역을 골랐으면 그 구역 안 물건, 광역이면 매칭된 전체 물건.
+   *   좌표가 같은 호실은 `buildAuctionPins` 가 핀 하나로 묶어 넘긴다.
+   */
+  auctionPins?: AuctionMapPin[];
+  /** 경매 핀 표시 ON/OFF — 상태는 ZoneExplorer 가 갖는다(구역 선택 시 기본 ON) */
+  auctionPinsOn?: boolean;
+  /** 지도 위 「⚖️ 경매 핀」 토글 */
+  onToggleAuctionPins?: () => void;
+  /** 경매 핀 카드의 「구역 상세 열기」 — 그 물건이 속한 구역을 연다 */
+  onOpenAuctionZone?: (zoneId: string) => void;
   /**
    * 「📍 지번 찍기」 모드 — 켜면 지도 클릭이 구역 선택 대신 **그 자리의 지번 핀**을 꽂는다.
    *   · 아이패드(터치)에서는 이 토글이 있어야 구역 안을 찍을 수 있다.

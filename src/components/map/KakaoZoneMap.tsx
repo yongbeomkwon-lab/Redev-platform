@@ -37,6 +37,8 @@ import { TYPE_COLORS, badgeColor, shortStage, shortZoneType, zoneStyle } from ".
 import Icon from "@/components/Icon";
 import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import type { AuctionMapPin } from "@/lib/auction-pins";
+import AuctionPinCard from "./AuctionPinCard";
 import JibunPinCard from "./JibunPinCard";
 import DevPressureLayer from "./DevPressureLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
@@ -92,6 +94,37 @@ const MY_PIN_LAYER_STYLE = {
   zIndex: 102,
   pointerEvents: "none" as const,
 };
+
+/**
+ * ⚖️ 경매 물건 핀 레이어 — 실거래 핀(95) 위, 지번 핀(97)·매물 배지·이름표(100) 아래(z-index 96).
+ *   · 실거래 핀과 같은 자리 규칙을 쓰지만 색을 앰버로 달리해 한눈에 구분된다.
+ */
+const AUCTION_PIN_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 96,
+  pointerEvents: "none" as const,
+};
+
+/**
+ * ⚖️ 열어 둔 경매 카드 레이어 — 구역 이름표·매물 배지(100)와 내 매물 핀(102) 위(z-index 103).
+ *   · 카드가 구역 이름표에 가리지 않게 별도 레이어에 둔다.
+ */
+const AUCTION_CARD_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 103,
+  pointerEvents: "none" as const,
+};
+
+/** 경매 핀 색 — 경매(⚖️)를 뜻하는 앰버 계열. 실거래 핀의 블루·보라와 갈린다 */
+const AUCTION_PIN_ACCENT = "#b45309";
 
 /** 실거래 핀 색 — 유형 구분(아파트=브랜드 블루, 연립·다세대=보라) */
 const TX_PIN_COLORS: Record<string, string> = {
@@ -416,6 +449,10 @@ export default function KakaoZoneMap({
   onToggleTxPins,
   onSelectTxPin,
   activeTxPin,
+  auctionPins = [],
+  auctionPinsOn = false,
+  onToggleAuctionPins,
+  onOpenAuctionZone,
   jibunPickOn = false,
   onToggleJibunPick,
   onPickJibun,
@@ -480,6 +517,18 @@ export default function KakaoZoneMap({
   const activeTxKeyRef = useRef<string>("");
   const activeTxKey = activeTxPin ? txPinKey(activeTxPin.umdNm, activeTxPin.jibun) : "";
   activeTxKeyRef.current = activeTxKey;
+  /** ⚖️ 경매 물건 핀 레이어 + 핀 요소(좌표 키 → 래퍼) — draw 가 매 프레임 좌표를 맞춘다 */
+  const auctionLayerRef = useRef<HTMLDivElement | null>(null);
+  const auctionElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const auctionAtRef = useRef<AuctionMapPin[]>([]);
+  /** draw 가 이번 프레임에 놓은 경매 핀 자리 — 실거래 핀이 그 위에 겹치지 않게 비킨다 */
+  const auctionPlacedRef = useRef<{ x: number; y: number }[]>([]);
+  /** 지금 펼쳐 둔 경매 핀 카드 레이어·요소 — draw 가 카드를 핀 자리로 옮긴다 */
+  const auctionCardLayerRef = useRef<HTMLDivElement | null>(null);
+  const auctionCardElRef = useRef<HTMLDivElement | null>(null);
+  /** 지금 펼쳐 둔 경매 핀 카드(좌표 키) — 하나만 열린다 */
+  const [openAuctionId, setOpenAuctionId] = useState<string | null>(null);
+  const openAuctionRef = useRef<string | null>(null);
   /** 「지번 찍기」로 꽂은 핀 레이어·요소 — draw 가 매 프레임 좌표를 맞춘다 */
   const jibunLayerRef = useRef<HTMLDivElement | null>(null);
   const jibunElRef = useRef<HTMLDivElement | null>(null);
@@ -1079,11 +1128,66 @@ export default function KakaoZoneMap({
       }
     }
 
+    // ⚖️ 경매 물건 핀 — 실거래 핀보다 **먼저** 자리를 잡는다.
+    //   · 그러면 아래 실거래 핀 고리가 이 경매 핀과 겹치면 비켜서고, 경매 핀이 실거래 핀에 가려지지 않는다.
+    //   · 아래쪽 끝이 물건 지점에 닿게 translate(-50%,-100%). 겹치면 뒤에 오는 핀을 숨긴다(펼친 카드는 항상 우선).
+    if (auctionLayerRef.current) {
+      const placed: { x: number; y: number }[] = [];
+      const openId = openAuctionRef.current;
+      // 서울 전체(레벨 8 이상)처럼 멀리서 볼 때는 가격표 대신 작은 앰버 점으로 찍는다
+      const compact = map.getLevel() >= 8;
+      auctionLayerRef.current.dataset.compact = compact ? "1" : "0";
+      let openPos: { x: number; y: number; visible: boolean } | null = null;
+      const ordered = [...auctionAtRef.current].sort(
+        (a, b) => (a.id === openId ? 0 : 1) - (b.id === openId ? 0 : 1)
+      );
+      for (const p of ordered) {
+        const node = auctionElsRef.current.get(p.id);
+        if (!node) continue;
+        const x = p0x + (p.lng - lng0) * pxPerLng;
+        const y = p0y + (mercator(p.lat) - m0) * pxPerMerc;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -100 || x > cw + 100 || y < -80 || y > ch + 80) {
+          node.style.visibility = "hidden";
+          if (p.id === openId) openPos = { x, y, visible: false };
+          continue;
+        }
+        let clash = false;
+        for (const q of placed) {
+          const limW = compact ? 18 : 52;
+          const limH = compact ? 16 : 26;
+          if (Math.abs(q.x - x) < limW && Math.abs(q.y - y) < limH) {
+            clash = true;
+            break;
+          }
+        }
+        if (clash && p.id !== openId) {
+          node.style.visibility = "hidden";
+          continue;
+        }
+        placed.push({ x, y });
+        node.style.transform = `translate3d(${Math.round(x * 10) / 10}px,${Math.round(y * 10) / 10}px,0) translate(-50%,-100%)`;
+        node.style.visibility = "visible";
+        if (p.id === openId) openPos = { x, y, visible: true };
+      }
+      auctionPlacedRef.current = placed;
+      // 열어 둔 카드도 같은 자리로 — 핀이 화면 밖이면 카드도 감춘다
+      const cardEl = auctionCardElRef.current;
+      if (cardEl) {
+        if (openPos && openPos.visible) {
+          cardEl.style.transform = `translate3d(${Math.round(openPos.x * 10) / 10}px,${Math.round(openPos.y * 10) / 10}px,0)`;
+          cardEl.style.visibility = "visible";
+        } else {
+          cardEl.style.visibility = "hidden";
+        }
+      }
+    }
+
     // 실거래 가격 핀 — 같은 변환으로 좌표를 맞춘다.
     //   · 핀은 아래쪽 끝이 거래 지점에 닿게 translate(-50%,-100%).
     //   · 겹치면 뒤에 오는 핀을 숨긴다(펼쳐 둔 핀 상세는 항상 우선).
     if (txLayerRef.current) {
-      const placedPins: { x: number; y: number }[] = [];
+      // 경매 핀이 이미 잡은 자리는 피해 놓는다(두 레이어가 서로 덮지 않게)
+      const placedPins: { x: number; y: number }[] = [...auctionPlacedRef.current];
       const openId = openPinRef.current;
       const activeKey = activeTxKeyRef.current;
       const isActivePin = (p: TxMapPin) => !!activeKey && txPinKey(p.umdNm, p.jibun) === activeKey;
@@ -2252,6 +2356,29 @@ export default function KakaoZoneMap({
   txAtRef.current = visibleTxPins;
   openPinRef.current = openPinId;
 
+  // ── ⚖️ 경매 물건 핀 ──────────────────────────────────────────────────
+  //   · ZoneExplorer 가 고른 구역의 물건(광역이면 매칭된 전체)을 좌표로 묶어 넘긴다.
+  //   · 토글이 OFF 면 목록을 비워 핀·카드를 함께 감추고, 토글 자체는 남긴다.
+  const visibleAuctionPins = useMemo(
+    () => (auctionPinsOn ? auctionPins : []),
+    [auctionPins, auctionPinsOn]
+  );
+  auctionAtRef.current = visibleAuctionPins;
+  openAuctionRef.current = openAuctionId;
+  /** 열어 둔 카드의 핀 — 카드 레이어가 이것을 그린다 */
+  const openAuctionPin = openAuctionId
+    ? visibleAuctionPins.find((p) => p.id === openAuctionId) ?? null
+    : null;
+
+  // 핀 목록이 바뀌면(구역 이동·토글) 펼친 경매 카드를 닫는다
+  useEffect(() => {
+    setOpenAuctionId(null);
+  }, [visibleAuctionPins]);
+  useEffect(() => {
+    if (!auctionLayerRef.current) return;
+    draw();
+  }, [visibleAuctionPins, openAuctionId, draw]);
+
   // 핀 목록이 바뀌면(구역 이동·토글) 자리를 다시 그린다 — 펼친 카드는 닫는다
   useEffect(() => {
     setOpenPinId(null);
@@ -2826,6 +2953,100 @@ export default function KakaoZoneMap({
         ))}
       </div>
 
+      {/* ── ⚖️ 경매 물건 핀 — `⚖️ 2.0억 / 11.24 · 유찰 1회` (z-index 96: 실거래 핀 위·배지 아래) ── */}
+      <div
+        ref={auctionLayerRef}
+        className="auction-pin-layer"
+        style={AUCTION_PIN_LAYER_STYLE}
+        data-testid="auction-pin-layer"
+      >
+        {visibleAuctionPins.map((p) => {
+          const open = openAuctionId === p.id;
+          const lead = p.lead;
+          const many = p.items.length > 1;
+          return (
+            <div
+              key={p.id}
+              ref={(el) => {
+                if (el) auctionElsRef.current.set(p.id, el);
+                else auctionElsRef.current.delete(p.id);
+              }}
+              style={{ position: "absolute", left: 0, top: 0, width: "max-content", visibility: "hidden" }}
+            >
+              <button
+                type="button"
+                className="auction-pin-btn"
+                data-testid="auction-pin"
+                data-auction-id={p.id}
+                data-auction-zone={lead.zoneId}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenAuctionId((v) => (v === p.id ? null : p.id));
+                }}
+                title={
+                  many
+                    ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 내용이 열립니다`
+                    : `${lead.caseNoPrint} · ${lead.address} — 누르면 내용이 열립니다`
+                }
+                style={{
+                  display: "block",
+                  pointerEvents: "auto",
+                  border: `1px solid ${open ? AUCTION_PIN_ACCENT : "#f3c98b"}`,
+                  borderLeft: `3px solid ${AUCTION_PIN_ACCENT}`,
+                  background: open ? "#fff7ed" : "#fffbeb",
+                  borderRadius: "5px",
+                  padding: "2px 5px",
+                  boxShadow: open
+                    ? "0 0 0 2px rgba(180,83,9,.16), 0 8px 18px -8px rgba(120,53,15,.55)"
+                    : "0 1px 2px rgba(16,24,40,.10), 0 6px 14px -8px rgba(16,24,40,.35)",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                  lineHeight: 1.15,
+                }}
+              >
+                <span className="auction-pin-label">
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      color: "#7c2d12",
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
+                    ⚖️ {p.priceLabel}
+                  </span>
+                  <span style={{ display: "block", fontSize: "9px", fontWeight: 600, color: "#92400e" }}>
+                    {p.subLabel}
+                  </span>
+                </span>
+                {/* 서울 전체(레벨 8 이상)처럼 멀리서 볼 때는 작은 점으로만 찍는다 — 레이어 CSS 가 바꾼다 */}
+                <span className="auction-pin-dot" aria-hidden />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── ⚖️ 열어 둔 경매 카드 — 구역 이름표(100)에 가리지 않게 위(z-index 103) ── */}
+      <div ref={auctionCardLayerRef} style={AUCTION_CARD_LAYER_STYLE} data-testid="auction-card-layer">
+        <div
+          ref={auctionCardElRef}
+          style={{ position: "absolute", left: 0, top: 0, width: 0, height: 0, visibility: "hidden" }}
+        >
+          {openAuctionPin && (
+            <div style={{ position: "absolute", left: 0, bottom: "34px", transform: "translateX(-50%)" }}>
+              <AuctionPinCard
+                pin={openAuctionPin}
+                onClose={() => setOpenAuctionId(null)}
+                onOpenZone={onOpenAuctionZone}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── 실거래 가격 핀 — `7.8억 / 전용 59㎡` (z-index 95: 폴리곤 위·매물 배지 아래) ── */}
       <div ref={txLayerRef} style={TX_PIN_LAYER_STYLE} data-testid="tx-pin-layer">
         {visibleTxPins.map((p) => {
@@ -3368,6 +3589,24 @@ export default function KakaoZoneMap({
             <Icon name="tag" size={13} />
             <span className="hidden md:inline">실거래 핀</span>
             <span className="font-normal text-slate-400">{txPins.length}</span>
+          </button>
+        )}
+        {onToggleAuctionPins && auctionPins.length > 0 && (
+          <button
+            type="button"
+            onClick={onToggleAuctionPins}
+            aria-pressed={auctionPinsOn}
+            data-testid="auction-pins-toggle"
+            title="구역 안 법원경매 물건을 ⚖️ 핀으로 표시 — 끄면 감춥니다"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+              auctionPinsOn
+                ? "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+            }`}
+          >
+            <span aria-hidden className="text-[12px] leading-none">⚖️</span>
+            <span className="hidden md:inline">경매 핀</span>
+            <span className="font-normal text-amber-700/70">{auctionPins.length}</span>
           </button>
         )}
         {onToggleCompleted && (

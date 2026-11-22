@@ -256,6 +256,33 @@
   display: block;
 }
 
+/* ── ⚖️ 지도 경매 핀 — 구역 안 법원경매 물건
+   · 기본은 가격표(`⚖️ 2.0억` / `11.24 · 유찰 1회`).
+   · 서울 전체(카카오 레벨 8 이상)처럼 멀리서 볼 때는 작은 앰버 점으로만 찍어 지도를 덮지 않는다
+     (draw 가 레이어 dataset.compact 를 바꾸고 아래 CSS 가 그린다). */
+.auction-pin-dot {
+  display: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #b45309;
+  box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(15, 23, 42, 0.45);
+}
+.auction-pin-layer[data-compact="1"] .auction-pin-btn {
+  padding: 0 !important;
+  border: 0 !important;
+  border-left-width: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.auction-pin-layer[data-compact="1"] .auction-pin-label {
+  display: none;
+}
+.auction-pin-layer[data-compact="1"] .auction-pin-dot {
+  display: block;
+}
+
 /* Leaflet 지도가 탭/모달 아래에 깔리지 않도록 z-index 정리 */
 .leaflet-container {
   z-index: 0;
