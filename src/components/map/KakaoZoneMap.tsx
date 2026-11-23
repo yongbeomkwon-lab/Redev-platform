@@ -3875,7 +3875,7 @@ export default function KakaoZoneMap({
           <div
             data-testid="parcel-viewing"
             style={{ position: "absolute", left: 0, top: 0, width: "max-content" }}
-            dangerouslySetInnerHTML={{ __html: parcelBubbleHtml(parcel.label) }}
+            dangerouslySetInnerHTML={{ __html: parcelBubbleHtml() }}
           />
         )}
       </div>

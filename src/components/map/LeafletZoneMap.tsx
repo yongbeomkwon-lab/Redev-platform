@@ -105,7 +105,7 @@ function ParcelLayer({ parcel }: { parcel?: Parcel | null }) {
     () =>
       L.divIcon({
         className: "redev-parcel-viewing",
-        html: parcel ? parcelBubbleHtml(parcel.label) : "",
+        html: parcel ? parcelBubbleHtml() : "",
         iconSize: [0, 0],
         iconAnchor: [0, 0],
       }),
