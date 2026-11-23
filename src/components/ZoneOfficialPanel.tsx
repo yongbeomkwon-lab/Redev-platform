@@ -199,6 +199,13 @@ export default function ZoneOfficialPanel({
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
                 </span>
               </>
+            ) : zone.geom === "필지정합" ? (
+              <>
+                연속지적도 필지선에 맞춰 다시 조립한 경계
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
+                </span>
+              </>
             ) : zone.geom === "근사원" ? (
               <>
                 근사 경계 — 실제 구역계 아님(경계 미고시)
