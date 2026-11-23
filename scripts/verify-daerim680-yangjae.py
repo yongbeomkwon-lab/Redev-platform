@@ -19,6 +19,7 @@ from playwright.sync_api import sync_playwright
 BASE = os.environ.get("TARGET_URL", "https://redev-platform-iota.vercel.app").rstrip("/")
 OUT_DAERIM = "/workspace/downloads/redev_daerim680.png"
 OUT_YANGJAE = "/workspace/downloads/redev_yangjae_fixed.png"
+OUT_YANGJAE2 = "/workspace/downloads/redev_yangjae2_2_fixed.png"
 failures: list[str] = []
 
 
@@ -36,20 +37,27 @@ def search(page, q):
     time.sleep(1.2)
 
 
-def focus_map(page, lat, lng, level):
-    page.evaluate(
-        """([lat, lng, level]) => {
-             const d = window.__redevDiag, k = window.kakao;
-             const m = d && d.map && d.map();
-             if (!m) return;
-             m.setCenter(new k.maps.LatLng(lat, lng));
-             m.setLevel(level);
-           }""",
-        [lat, lng, level],
-    )
-    time.sleep(2.0)
-    page.evaluate("() => window.__redevDiag && window.__redevDiag.draw && window.__redevDiag.draw()")
-    time.sleep(1.5)
+def enable_cadastral(page):
+    """지적편집도(필지 경계·지번) 오버레이를 켠다 — 필지정합 경계를 눈으로 대조하기 위해."""
+    try:
+        btn = page.locator("button:has-text('지적편집도')").first
+        if btn.get_attribute("aria-pressed") != "true":
+            btn.click(timeout=5000)
+            time.sleep(2.5)
+            print("지적편집도 on")
+    except Exception as exc:  # noqa: BLE001 — 없으면 지도만으로 검수
+        print("지적편집도 토글 실패:", str(exc)[:80])
+
+
+def zoom_steps(page, n: int):
+    """앱의 확대(+)·축소(−) 버튼을 누른다 — 지도 인스턴스를 직접 만지지 않고 화면 배율을 바꾼다."""
+    key = "확대" if n > 0 else "축소"
+    btn = page.locator(f"button[aria-label='{key}']").first
+    for _ in range(abs(n)):
+        btn.click(timeout=5000)
+        time.sleep(2.2)
+    print(f"지도 {key} {abs(n)}단계")
+
 
 
 def panel_text(page):
@@ -152,7 +160,8 @@ def run():
         check("상세 패널 — 구역면적 76,753㎡", "76,753㎡" in txt)
         check("상세 패널 — '구역계 미고시' 배지 아님", "구역계 미고시" not in txt)
         check("상세 패널 — 토지거래허가구역 문구(2026-11-24~2028-01-28)", "2026-11-24~2028-01-28" in txt)
-        focus_map(page, 37.500537, 126.900161, 5)
+        enable_cadastral(page)  # 지적편집도를 먼저 켜고, 배율은 그 뒤에 앱 버튼으로
+        zoom_steps(page, +2)
         scroll_panel_to(page, "경계 도형")
         page.screenshot(path=OUT_DAERIM)
 
@@ -180,13 +189,23 @@ def run():
         check("검색 '양재2동 2구역' 결과 노출", "양재2동 2구역" in body)
         page.keyboard.press("Escape")
 
-        # 두 구역을 한 화면에 — 397-1(동쪽) 과 2구역(서쪽) 사이 중앙
+        # 양재동 397-1(모아통합기획) — 필지정합 경계가 필지선을 따라가는지 확대해서 본다
+        page.goto(f"{BASE}/?diag=1&zone=yangjae-397-1", wait_until="domcontentloaded")
+        page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
+        time.sleep(4)
+        enable_cadastral(page)
+        zoom_steps(page, +2)
+        scroll_panel_to(page, "경계 도형")
+        page.screenshot(path=OUT_YANGJAE)
+
+        # 양재2동 2구역도 같은 조건으로 한 장 더 (두 구역을 한 화면에 담으면 경계가 작아져 따로 남긴다)
         page.goto(f"{BASE}/?diag=1&zone=yangjae2-2", wait_until="domcontentloaded")
         page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
         time.sleep(4)
-        focus_map(page, 37.47050, 127.04480, 4)
+        enable_cadastral(page)
+        zoom_steps(page, +2)
         scroll_panel_to(page, "경계 도형")
-        page.screenshot(path=OUT_YANGJAE)
+        page.screenshot(path=OUT_YANGJAE2)
 
         # 지도에 실제로 그려졌는지 — 캔버스 드로우 횟수
         draws = page.evaluate("() => (window.__redevDiag && window.__redevDiag.draws ? window.__redevDiag.draws() : -1)")
@@ -194,7 +213,7 @@ def run():
 
         real = [e for e in errs if "favicon" not in e and "ResizeObserver" not in e]
         check("콘솔 오류 0", len(real) == 0, str(real[:3]))
-        print("saved", OUT_DAERIM, OUT_YANGJAE)
+        print("saved", OUT_DAERIM, OUT_YANGJAE, OUT_YANGJAE2)
         ctx.close()
         b.close()
     return 0 if not failures else 1
