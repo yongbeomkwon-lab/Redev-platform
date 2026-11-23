@@ -88,7 +88,8 @@ export type ZoneMapProps = {
   activeTxPin?: { umdNm: string; jibun: string } | null;
   /**
    * ⚖️ 경매 물건 핀 — 구역을 골랐으면 그 구역 안 물건, 광역이면 매칭된 전체 물건.
-   *   좌표가 같은 호실은 `buildAuctionPins` 가 핀 하나로 묶어 넘긴다.
+   *   `buildAuctionPins` 가 **매각단위**(사건+물건번호)로 묶어 넘긴다 — 일괄매각 목적물 24필지는 1핀,
+   *   좌표가 같은 호실(쌍문동 507-1 132건)도 1핀.
    */
   auctionPins?: AuctionMapPin[];
   /** 경매 핀 표시 ON/OFF — 상태는 ZoneExplorer 가 갖는다(첫 화면부터 기본 ON) */

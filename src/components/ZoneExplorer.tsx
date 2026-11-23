@@ -468,8 +468,9 @@ export default function ZoneExplorer() {
   const selectedAuctions: AuctionItem[] =
     selectedId && auctions ? auctions.byZone[selectedId] ?? [] : [];
   // ── ⚖️ 지도 경매 핀 ──────────────────────────────────────────────────────
-  //   · 구역을 골랐으면 그 구역 안 물건만, 광역이면 매칭된 전체 물건을 좌표로 묶어 지도에 넘긴다.
-  //   · 같은 좌표의 호실은 `buildAuctionPins` 가 핀 하나로 묶는다(쌍문동 507-1 109건 → 1핀).
+  //   · 구역을 골랐으면 그 구역 안 물건만, 광역이면 매칭된 전체 물건을 **매각단위**로 묶어 지도에 넘긴다.
+  //   · 일괄매각은 목적물이 여러 필지·호실이어도 핀 하나(중심점)다 — 대선제분 24필지 → `406.3억 · 일괄` 1핀.
+  //   · 좌표가 같은 호실(쌍문동 507-1 132건)도 `buildAuctionPins` 가 핀 하나로 묶는다.
   //   · 표시는 구역 선택 시 기본 ON — 광역에서 보려면 지도 위 「⚖️ 경매 핀」 토글을 켜야 한다.
   const zoneAuctionPins = useMemo(() => buildAuctionPins(selectedAuctions), [selectedAuctions]);
   const allAuctionPins = useMemo(
@@ -496,16 +497,17 @@ export default function ZoneExplorer() {
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
 
-  /** 경매 목록·카드에서 「상세」 — 그 물건을 왼쪽 창에 연다(같은 좌표의 형제 물건도 함께) */
+  /** 경매 목록·카드에서 「상세」 — 그 물건이 속한 **지도 핀**을 찾아 왼쪽 창에 연다
+   *   · 일괄매각은 목적물이 여러 필지에 흩어져 있어도 지도 핀이 1개다 — 목록에서 한 필지를 눌러도
+   *     그 사건의 목적물 전체를 카드에 띄우고(눌러서 전환) 지도 핀도 함께 강조한다. */
   function openAuctionItem(item: AuctionItem) {
-    const siblings = item.lat && item.lng
-      ? selectedAuctions.filter((x) => Math.abs(x.lat - item.lat) < 1e-5 && Math.abs(x.lng - item.lng) < 1e-5)
-      : [item];
-    const pinId = `${item.lat.toFixed(5)},${item.lng.toFixed(5)}`;
+    const pin = mapAuctionPins.find((p) => p.items.some((x) => x.id === item.id));
+    const items = pin ? pin.items : [item];
+    const pinId = pin ? pin.id : `${item.lat.toFixed(5)},${item.lng.toFixed(5)}`;
     setAuctionDetail({
       pinId,
       zoneId: selectedId ?? item.zoneId,
-      items: siblings.length ? siblings : [item],
+      items,
       activeId: item.id,
     });
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);

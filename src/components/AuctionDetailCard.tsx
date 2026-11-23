@@ -9,12 +9,21 @@
 //   · 같은 좌표에 여러 물건(호실·지분)이 묶인 핀이면 카드 안에서 전환하며 모두 볼 수 있다.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useMemo } from "react";
-import { daysUntilSale, formatSaleDate, formatWon, type AuctionItem } from "@/lib/auctions";
+import {
+  auctionSaleKey,
+  daysUntilSale,
+  formatSaleDate,
+  formatWon,
+  type AuctionItem,
+} from "@/lib/auctions";
 
 /** 경매 핀·카드의 앰버 색 — 지도 핀과 같은 값 */
 export const AUCTION_ACCENT = "#b45309";
 
 const COURT_SHORT = (court: string) => court.replace("지방법원", "").replace("지원", "");
+
+/** `영등포구 문래동3가 16-17` → `문래동3가 16-17` — 카드 안 좁은 알약에 들어가게 */
+const SHORT_JIBUN = (jibun: string) => (jibun || "").replace(/^\S+?(구|군)\s+/, "");
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -56,6 +65,9 @@ export default function AuctionDetailCard({
   if (!active) return null;
 
   const many = items.length > 1;
+  /** 한 매각단위(사건+물건번호)의 목적물이 여럿 — 법원이 **일괄매각**으로 한꺼번에 넘기는 필지·호실
+   *   (훅을 쓰지 않는다 — 위 조기 반환 뒤라 훅 순서가 흔들린다) */
+  const bulk = items.length > 1 && new Set(items.map((it) => auctionSaleKey(it))).size === 1;
   const d = daysUntilSale(active.saleDate);
   const caseNo =
     active.caseYear && active.casePart && active.caseSerial
@@ -106,7 +118,9 @@ export default function AuctionDetailCard({
         {many && (
           <div>
             <div className="mb-1 flex items-baseline gap-1.5">
-              <span className="text-[10px] font-semibold text-slate-500">같은 자리 물건 {items.length}건</span>
+              <span className="text-[10px] font-semibold text-slate-500">
+                {bulk ? `일괄매각 목적물 ${items.length}개` : `같은 자리 물건 ${items.length}건`}
+              </span>
               <span className="text-[9.5px] text-slate-400">눌러서 전환</span>
             </div>
             <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
@@ -127,7 +141,10 @@ export default function AuctionDetailCard({
                         : "border-slate-300 bg-white text-slate-600 hover:border-amber-500 hover:text-amber-800")
                     }
                   >
-                    {i + 1}. {it.usage || "물건"} {formatWon(it.minimum)}
+                    {/* 일괄매각은 목적물마다 금액이 같다 — 저마다 다른 지번으로 구분한다 */}
+                    {bulk
+                      ? `${i + 1}. ${SHORT_JIBUN(it.jibun) || it.objectNo || "목적물"}`
+                      : `${i + 1}. ${it.usage || "물건"} ${formatWon(it.minimum)}`}
                   </button>
                 );
               })}
@@ -152,7 +169,7 @@ export default function AuctionDetailCard({
             <span className="text-[10px] text-slate-500">
               감정 <b className="text-[11.5px] font-semibold text-slate-700">{formatWon(active.appraised)}</b>
             </span>
-            <span className="text-[10px] text-slate-500">최저매각가격</span>
+            <span className="text-[10px] text-slate-500">최저매각가격{bulk ? "(일괄 전체)" : ""}</span>
           </div>
           <div className="flex items-baseline gap-1">
             <b className="text-[17px] font-extrabold leading-tight text-rose-700">{formatWon(active.minimum)}</b>
@@ -167,6 +184,11 @@ export default function AuctionDetailCard({
                 style={{ width: `${Math.max(2, Math.min(100, rate))}%`, background: AUCTION_ACCENT }}
               />
             </div>
+          )}
+          {bulk && (
+            <p className="mt-1 text-[9.5px] leading-snug text-slate-500">
+              목적물 {items.length}개를 한꺼번에 매각합니다 — 금액은 법원이 고시한 일괄 전체 기준입니다.
+            </p>
           )}
         </div>
 

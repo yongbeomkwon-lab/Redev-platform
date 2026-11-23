@@ -3342,9 +3342,11 @@ export default function KakaoZoneMap({
                   onSelectAuctionPin?.(p);
                 }}
                 title={
-                  many
-                    ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 왼쪽 창에 상세가 열립니다`
-                    : `${lead.caseNoPrint} · ${lead.address} — 누르면 왼쪽 창에 상세가 열립니다`
+                  p.bulk
+                    ? `${lead.zoneName} · ${lead.caseNoPrint} — 일괄매각 목적물 ${p.parcels}개를 한꺼번에 매각. 누르면 왼쪽 창에 상세가 열립니다`
+                    : many
+                      ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 왼쪽 창에 상세가 열립니다`
+                      : `${lead.caseNoPrint} · ${lead.address} — 누르면 왼쪽 창에 상세가 열립니다`
                 }
                 style={{
                   display: "block",
