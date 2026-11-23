@@ -192,6 +192,13 @@ export default function ZoneOfficialPanel({
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 사업지 선정 전이라 실제 경계와 다를 수 있음
                 </span>
               </>
+            ) : zone.geom === "참고도" ? (
+              <>
+                검토용 참고도에서 옮긴 경계 — 공식 구역계 아님(공개 전)
+                <span className="text-emerald-700/70">
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
+                </span>
+              </>
             ) : zone.geom === "근사원" ? (
               <>
                 근사 경계 — 실제 구역계 아님(경계 미고시)
