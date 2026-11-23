@@ -29,6 +29,7 @@ import ZoneTransactions from "@/components/ZoneTransactions";
 import LandPermitNotice from "@/components/LandPermitNotice";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { looksLikeAddress, searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
+import { fetchParcel, type Parcel } from "@/lib/parcel";
 import { loadSubwayStations, lineNames, SUBWAY_LINES, searchStations, type SubwayStation } from "@/lib/subway-stations";
 import { distanceM } from "@/components/map/prepare-zones";
 import {
@@ -222,6 +223,13 @@ export default function ZoneExplorer() {
   const [addrBusy, setAddrBusy] = useState(false);
   const [addrNote, setAddrNote] = useState<string | null>(null);
   const [addrVerdict, setAddrVerdict] = useState<AddressVerdict | null>(null);
+  // ── 필지(지적) 경계 — 주소로 고른 지점의 필지를 지도에 파랗게 칠한다(2026-11-23 요청) ──
+  //   · 주소 후보를 고르거나 지도에서 지번을 찍으면 /api/parcel 로 그 지점의 필지를 받아 온다.
+  //   · 실패해도 주소 핀은 그대로다 — 카드에 한 줄로만 알린다.
+  const [parcel, setParcel] = useState<Parcel | null>(null);
+  const [parcelNote, setParcelNote] = useState<string | null>(null);
+  /** 마지막 필지 요청 번호 — 주소를 빠르게 연달아 고를 때 늦게 온 응답을 버린다 */
+  const parcelSeqRef = useRef(0);
   // ── 지하철역 검색 ─────────────────────────────────────────────────────
   //   역 이름(‘사당역’·‘건대입구’)으로 574개 역을 찾아 지도를 그 역으로 확대하고,
   //   역 주변 정비구역을 목록으로 보여준다(구역 선택으로 바로 이어진다).
@@ -800,6 +808,8 @@ export default function ZoneExplorer() {
   async function pickJibun(lat: number, lng: number) {
     const seq = ++jibunSeqRef.current;
     setJibunNote(null);
+    // 클릭한 자리의 필지도 함께 강조한다 — 지번 핀 카드·주소 카드와 같은 필지를 본다
+    void showParcel(lat, lng);
     setJibunPin({ lat, lng, gu: "", dong: "", jibun: "", jibunAddress: "", zones: [], state: "loading" });
     const rev = await reverseGeocode(lat, lng);
     if (jibunSeqRef.current !== seq) return;
@@ -1027,13 +1037,37 @@ export default function ZoneExplorer() {
     };
   }, [query]);
 
-  /** 주소 핀·판정 카드 초기화 — 구역 선택은 그대로 둔다 */
+  /**
+   * 필지(지적) 경계 조회 — 좌표가 속한 필지를 서버 라우트로 받아 지도에 칠한다.
+   *   · 응답이 늦게 와도 **마지막으로 고른 주소**의 필지만 남긴다(seq).
+   *   · 실패·필지 없음은 카드 한 줄로만 알리고 주소 핀은 건드리지 않는다.
+   */
+  async function showParcel(lat: number, lng: number) {
+    const seq = ++parcelSeqRef.current;
+    setParcelNote(null);
+    const r = await fetchParcel(lat, lng);
+    if (parcelSeqRef.current !== seq) return;
+    if (r.ok) {
+      setParcel(r.parcel ?? null);
+      setParcelNote(
+        r.parcel ? null : "이 지점의 지적 필지를 찾지 못했습니다(지적도에 없는 자리일 수 있습니다)."
+      );
+    } else {
+      setParcel(null);
+      setParcelNote("필지 경계를 불러오지 못했습니다 — 주소 핀은 그대로입니다.");
+    }
+  }
+
+  /** 주소 핀·판정 카드·필지 강조 초기화 — 구역 선택은 그대로 둔다 */
   function clearAddress() {
     setAddrVerdict(null);
     setAddrCandidates([]);
     setAddrNote(null);
     setAddrJibun(null);
     setJibunNote(null);
+    parcelSeqRef.current += 1;
+    setParcel(null);
+    setParcelNote(null);
   }
 
   /** 주소 후보 확정 — 판정 → 핀 → (속한 구역이 있으면) 그 구역 선택 */
@@ -1049,6 +1083,8 @@ export default function ZoneExplorer() {
     setAddrJibun(
       c.jibun && c.dong && c.gu ? { gu: c.gu, dong: c.dong, jibun: c.jibun } : null
     );
+    // 필지(지적) 경계 — 주소 핀과 함께 그 필지를 파랗게 칠한다(실패해도 핀은 그대로)
+    void showParcel(c.lat, c.lng);
     if (v.status === "inside") {
       pickZone(v.inside[0].zone.id);
     } else if (v.status === "completed") {
@@ -1610,6 +1646,7 @@ export default function ZoneExplorer() {
           onToggleCompleted={toggleCompleted}
           completedCount={completedZones.length}
           addressPin={addressPin}
+          parcel={parcel}
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
           listingCounts={SHOW_MAP_LISTING_BADGES ? listingCounts : undefined}
@@ -1648,7 +1685,12 @@ export default function ZoneExplorer() {
             void pickJibun(lat, lng);
           }}
           jibunPin={jibunPin}
-          onCloseJibunPin={() => setJibunPin(null)}
+          onCloseJibunPin={() => {
+            setJibunPin(null);
+            parcelSeqRef.current += 1;
+            setParcel(null);
+            setParcelNote(null);
+          }}
           onOpenJibunHistory={(pin) => {
             void openJibunHistory({ gu: pin.gu, dong: pin.dong, jibun: pin.jibun });
           }}
@@ -2020,6 +2062,21 @@ export default function ZoneExplorer() {
                 </p>
                 {addrVerdict.address.detail && (
                   <p className="truncate text-[10px] text-slate-500">{addrVerdict.address.detail}</p>
+                )}
+                {parcel && (
+                  <p
+                    data-testid="address-parcel"
+                    className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-blue-700"
+                    title={`${parcel.label} — 지적(연속지적도) 경계`}
+                  >
+                    <i aria-hidden className="h-[6px] w-[6px] shrink-0 rounded-[1px] border border-blue-700 bg-blue-300" />
+                    <span className="truncate">
+                      지적 필지 {parcel.jibun ? `${parcel.jibun} ` : ""}경계 표시 중
+                    </span>
+                  </p>
+                )}
+                {parcelNote && (
+                  <p className="mt-1 text-[10px] leading-snug text-amber-700">{parcelNote}</p>
                 )}
               </div>
               <button

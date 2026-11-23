@@ -47,8 +47,9 @@ import {
   type TxMapPin,
 } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
+import type { Parcel } from "@/lib/parcel";
 import JibunPinCard from "./JibunPinCard";
-import { addressPinHtml, stationPinHtml } from "./address-pin";
+import { addressPinHtml, parcelBubbleHtml, stationPinHtml } from "./address-pin";
 
 export { TYPE_COLORS };
 
@@ -91,6 +92,43 @@ function FitSelected({
     if (point) map.flyTo(point, 16, { duration: 0.7 });
   }, [ring, point, map, fitRequest, skip]);
   return null;
+}
+
+/**
+ * 필지(지적) 강조 — 주소로 고른 지점의 필지 경계를 **파란 반투명 + 진한 파란 선**으로 칠하고,
+ * 가운데에 `보는중` 말풍선을 얹는다(카카오맵 구현과 같은 모양·같은 규칙).
+ *   · 폴리곤은 지도 pane 450(구역 폴리곤 400 위, 핀 900 아래) — 구역 경계에 묻히지 않게.
+ *   · 말풍선은 divIcon(크기 0) + HTML 이 스스로 translate(-50%,0) 로 가운데를 잡는다.
+ */
+function ParcelLayer({ parcel }: { parcel?: Parcel | null }) {
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: "redev-parcel-viewing",
+        html: parcel ? parcelBubbleHtml(parcel.label) : "",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+    [parcel?.label]
+  );
+  if (!parcel || !parcel.rings.length) return null;
+  return (
+    <>
+      <Pane name="redevParcel" style={{ zIndex: 450 }}>
+        {parcel.rings.map((ring, i) => (
+          <Polygon
+            key={i}
+            positions={ring}
+            interactive={false}
+            pathOptions={{ color: "#1d4ed8", weight: 2.6, opacity: 1, fillColor: "#3b82f6", fillOpacity: 0.3 }}
+          />
+        ))}
+      </Pane>
+      <Pane name="redevParcelLabel" style={{ zIndex: 905 }}>
+        <Marker position={parcel.center} icon={icon} interactive={false} keyboard={false} />
+      </Pane>
+    </>
+  );
 }
 
 /**
@@ -713,6 +751,7 @@ export default function LeafletZoneMap({
   onToggleCompleted,
   completedCount = 0,
   addressPin,
+  parcel,
   stationPin,
   zoneFitRequest,
   listingCounts = {},
@@ -896,6 +935,8 @@ export default function LeafletZoneMap({
         fitRequest={zoneFitRequest}
         skip={!!addressPin && !!selectedZoneId && addressPin.zoneId === selectedZoneId}
       />
+      {/* ── 필지(지적) 강조 — 주소로 고른 지번의 경계 + '보는중' 말풍선 ── */}
+      <ParcelLayer parcel={parcel} />
       {/* ── 주소 검색 핀 — 맨 위 pane(불투명 카드 + 드롭핀) ── */}
       <AddressPinMarker pin={addressPin} />
       {/* ── 지하철역 핀 — 역 검색으로 고른 역 ── */}

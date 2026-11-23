@@ -3,6 +3,7 @@
 import type { Zone } from "@/lib/types";
 import type { SeoulZone } from "@/lib/seoul-zones";
 import type { AuctionMapPin } from "@/lib/auction-pins";
+import type { Parcel } from "@/lib/parcel";
 
 /** 서울시 경계 (지도 초기 화면) — [[남서 위도, 경도], [북동 위도, 경도]] */
 export const SEOUL_BOUNDS: [[number, number], [number, number]] = [
@@ -55,6 +56,11 @@ export type ZoneMapProps = {
   completedCount?: number;
   /** 주소 검색으로 찾은 위치 핀 — null 이면 지운다 */
   addressPin?: AddressPin | null;
+  /**
+   * 주소로 고른 지점의 **필지(지적) 경계** — 파란 반투명 + 진한 파란 선으로 칠하고
+   * 가운데에 `보는중` 말풍선을 띄운다. null 이면 지운다(핀 지우기와 함께 사라진다).
+   */
+  parcel?: Parcel | null;
   /** 지하철역 검색으로 고른 역 — null 이면 지운다(지도를 그 역으로 확대한다) */
   stationPin?: StationPin | null;
   /**

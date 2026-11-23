@@ -35,7 +35,7 @@ import {
 } from "@/lib/building-age";
 import { TYPE_COLORS, badgeColor, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
-import { addressPinHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { clipZoneToBox, hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
+import { addressPinHtml, parcelBubbleHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { clipZoneToBox, hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
@@ -472,6 +472,7 @@ export default function KakaoZoneMap({
   onToggleCompleted,
   completedCount = 0,
   addressPin,
+  parcel,
   stationPin,
   zoneFitRequest,
   listingCounts,
@@ -520,6 +521,15 @@ export default function KakaoZoneMap({
   const pinLayerRef = useRef<HTMLDivElement | null>(null);
   /** 지하철역 핀 레이어 — 주소 핀과 동시에 떠 있을 수 있어 따로 둔다 */
   const stationLayerRef = useRef<HTMLDivElement | null>(null);
+  /** 필지 '보는중' 말풍선 레이어 — 필지가 바뀔 때만 다시 그린다 */
+  const parcelLabelRef = useRef<HTMLDivElement | null>(null);
+  /** 이번 프레임에 말풍선을 앉힐 자리(필지 경계 상자 가운데) — ref 라 draw 가 다시 그려지지 않는다 */
+  const parcelAtRef = useRef<{ lat: number; lng: number } | null>(null);
+  /** 화면에서 필지가 차지하는 크기(px) — 아주 작으면 말풍선이 필지를 덮으므로 숨긴다 */
+  const parcelPxRef = useRef<{ w: number; h: number } | null>(null);
+  /** draw 가 읽는 필지 도형 — props 를 매 프레임 의존성으로 끌고 다니지 않는다 */
+  const parcelRef = useRef<typeof parcel>(null);
+  parcelRef.current = parcel ?? null;
   const labelLayerRef = useRef<HTMLDivElement | null>(null);
   /**
    * 선택 구역 이름표의 실제 크기(px) — 퍼센트(-50%) 가운데 정렬이 소수점 픽셀에 걸리지 않도록
@@ -900,6 +910,16 @@ export default function KakaoZoneMap({
     placeLabel();
     placeOnMap(pinLayerRef.current, pinAtRef.current.lat, pinAtRef.current.lng);
     placeOnMap(stationLayerRef.current, stationAtRef.current.lat, stationAtRef.current.lng);
+
+    // 필지 '보는중' 말풍선 — 필지 가운데에 앉히되, 화면에서 필지가 손톱만 하면 숨긴다
+    const parcelLayer = parcelLabelRef.current;
+    if (parcelLayer) {
+      const at = parcelAtRef.current;
+      const px = parcelPxRef.current;
+      const tooSmall = !px || Math.max(px.w, px.h) < 46;
+      if (!at || tooSmall) parcelLayer.style.visibility = "hidden";
+      else placeOnMap(parcelLayer, at.lat, at.lng);
+    }
 
     // ── 기본 구역 이름표 — `구역명 + 사업유형` 을 **처음 화면부터** 띄운다 ──────────
     //   · 예전에는 마우스를 올려야(툴팁) 구역명이 보였다(사용자 요청으로 기본 표시).
@@ -1686,6 +1706,57 @@ export default function KakaoZoneMap({
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = Math.max(1, a.weight - 2);
       ctx.stroke(a.path);
+    }
+    ctx.setLineDash([]);
+
+    // 2-2) 주소로 고른 **필지** — 지적 경계를 파란 반투명 + 진한 파란 선으로 칠한다(2026-11-23 요청)
+    //   · 구역 폴리곤 위에 얹어야 "이 필지를 보고 있다"가 읽힌다(구역 채움 20%에 묻히지 않게).
+    //   · 이름표는 캔버스가 아니라 DOM(아래 '보는중' 말풍선)이 그린다 — 글자가 선명해야 한다.
+    const parcelShape = parcelRef.current;
+    if (parcelShape && parcelShape.rings.length) {
+      const toXY = (lat: number, lng: number): [number, number] => [
+        p0x + (lng - lng0) * pxPerLng,
+        p0y + (mercator(lat) - m0) * pxPerMerc,
+      ];
+      let visible = false;
+      for (const ring of parcelShape.rings) {
+        if (!ring || ring.length < 3) continue;
+        let rMinX = Infinity;
+        let rMaxX = -Infinity;
+        let rMinY = Infinity;
+        let rMaxY = -Infinity;
+        ctx.beginPath();
+        for (let i = 0; i < ring.length; i++) {
+          const [x, y] = toXY(ring[i][0], ring[i][1]);
+          if (x < rMinX) rMinX = x;
+          if (x > rMaxX) rMaxX = x;
+          if (y < rMinY) rMinY = y;
+          if (y > rMaxY) rMaxY = y;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        if (rMaxX < -40 || rMinX > cw + 40 || rMaxY < -40 || rMinY > ch + 40) continue;
+        visible = true;
+        ctx.fillStyle = "rgba(59,130,246,0.30)";
+        ctx.fill();
+        // 흰 헤일로 한 겹 → 파란 외곽선: 건물·지번 글자가 많은 기본지도에서도 경계가 또렷하다
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.stroke();
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = "#1d4ed8";
+        ctx.stroke();
+      }
+      // 말풍선 자리 — 필지 상자 가운데(작게 보일 때는 말풍선을 숨긴다: 캔버스 안 루프에서 판단)
+      const b = parcelShape.bounds;
+      const [bx0, by0] = toXY(b.minLat, b.minLng);
+      const [bx1, by1] = toXY(b.maxLat, b.maxLng);
+      parcelAtRef.current = visible ? { lat: (b.minLat + b.maxLat) / 2, lng: (b.minLng + b.maxLng) / 2 } : null;
+      parcelPxRef.current = visible ? { w: Math.abs(bx1 - bx0), h: Math.abs(by1 - by0) } : null;
+    } else {
+      parcelAtRef.current = null;
+      parcelPxRef.current = null;
     }
     ctx.setLineDash([]);
 
@@ -2894,6 +2965,31 @@ export default function KakaoZoneMap({
     settleView();
   }, [addressPin, draw, settleView]);
 
+  // ── 필지(지적) 경계 — 파란 강조가 너무 작게 보이면 필지가 화면에 차도록 한 번만 확대 ────
+  //   · 주소 핀이 먼저 level 3~4 로 착지한 뒤 필지 도형이 300ms쯤 늦게 온다(서버 조회).
+  //   · 이미 화면에서 충분히 크면(작은 변의 26% 이상) 손대지 않는다 — 사용자가 맞춰 둔 화면을 흔들지 않는다.
+  //   · 확대만 한다(축소는 하지 않는다). 최대 level 2(건물 하나가 화면에 크게 보이는 배율)까지.
+  useEffect(() => {
+    const k = sdkRef.current;
+    const map = mapRef.current;
+    const el = mapElRef.current;
+    if (!k || !map || !el || !parcel) return;
+    const b = parcel.bounds;
+    const proj = map.getProjection();
+    const a = proj.containerPointFromCoords(new k.maps.LatLng(b.minLat, b.minLng));
+    const c = proj.containerPointFromCoords(new k.maps.LatLng(b.maxLat, b.maxLng));
+    const px = Math.max(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
+    const target = Math.min(el.clientWidth, el.clientHeight) * 0.26;
+    if (!Number.isFinite(px) || px <= 0 || px >= target) return;
+    const steps = Math.round(Math.log2(target / px));
+    if (steps <= 0) return;
+    const level = Math.max(2, map.getLevel() - Math.min(steps, 4));
+    map.jump(new k.maps.LatLng(parcel.center[0], parcel.center[1]), level, {
+      animate: { duration: 320 },
+    });
+    settleView();
+  }, [parcel, settleView]);
+
   // ── 지하철역 핀 — 역 중심으로 확대(level 3~4) ───────────────────────────────
   //   역은 '구역 판정'이 아니라 기준점이다. 주변 정비구역을 한눈에 보도록 level 4(약 1km 폭)로
   //   맞추고, 역 자체는 핀으로 찍는다. 같은 역을 다시 골라도 화면이 흐트러지지 않게
@@ -3762,6 +3858,17 @@ export default function KakaoZoneMap({
             data-testid="address-pin"
             style={{ position: "absolute", left: 0, top: 0, width: "max-content" }}
             dangerouslySetInnerHTML={{ __html: addressPinHtml(addressPin) }}
+          />
+        )}
+      </div>
+
+      {/* ── 필지 '보는중' 말풍선 — 주소로 고른 지번의 지적 경계 위(핀 카드보다 한 층 아래) ── */}
+      <div ref={parcelLabelRef} style={{ ...PIN_LAYER_STYLE, zIndex: 99 }} data-testid="parcel-viewing-layer">
+        {parcel && (
+          <div
+            data-testid="parcel-viewing"
+            style={{ position: "absolute", left: 0, top: 0, width: "max-content" }}
+            dangerouslySetInnerHTML={{ __html: parcelBubbleHtml(parcel.label) }}
           />
         )}
       </div>
