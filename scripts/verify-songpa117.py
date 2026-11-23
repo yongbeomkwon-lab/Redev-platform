@@ -182,21 +182,21 @@ def annotate(raw_path, out_path, screens, title, pad=90):
     for n in "12345":
         pts = [tuple(p) for p in screens[f"zone{n}"]]
         d.line(pts + [pts[0]], fill=ZCOL[n] + (255,), width=4)
-        cx2 = sum(p[0] for p in pts) / len(pts)
-        cy2 = sum(p[1] for p in pts) / len(pts)
-        d.ellipse([cx2 - 19, cy2 - 19, cx2 + 19, cy2 + 19], fill=(255, 255, 255, 235), outline=ZCOL[n] + (255,), width=3)
-        d.text((cx2 - 7, cy2 - 15), n, fill=ZCOL[n] + (255,), font=small)
 
-    lines = [
-        "굵은 남색 = 송파한양1차 필지(겹침 0㎡)",
-        "굵은 초록 = 서울송파초등학교 · 주황 = 송파근린공원 (겹침 0㎡)",
-        "색선 1~5 = 모아타운 구역계(연속지적도 블록 기준·참고도 ±5m)",
-    ]
-    bw = max(d.textlength(t, font=small) for t in lines) + 26
-    d.rectangle([24, 24, 24 + bw, 24 + 30 * len(lines) + 46], fill=(255, 255, 255, 235))
+    # 범례 — 구역은 번호표 대신 색선으로 을라 준다(배지 글자를 가리지 않게)
+    rows = [
+        ((110, 60, 180), "송파한양1차 필지(겹침 0㎡) — 굵은 남색"),
+        ((0, 160, 0), "서울송파초등학교(114학) — 굵은 초록"),
+        ((235, 110, 0), "송파근린공원(113공) — 주황"),
+    ] + [(ZCOL[n], f"송파117 {n}구역 — 색선") for n in "12345"]
+    tw = max(d.textlength(t, font=small) for _, t in rows) + 26
+    bw = tw + 46
+    d.rectangle([24, 24, 24 + bw, 24 + 30 * len(rows) + 46], fill=(255, 255, 255, 235))
     d.text((36, 32), title, fill=(20, 20, 20, 255), font=font)
-    for i, t in enumerate(lines):
-        d.text((36, 74 + 30 * i), t, fill=(40, 40, 40, 255), font=small)
+    for i, (col, t) in enumerate(rows):
+        y = 74 + 30 * i
+        d.line([40, y + 10, 68, y + 10], fill=col + (255,), width=5)
+        d.text((80, y), t, fill=(40, 40, 40, 255), font=small)
     Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB").save(out_path)
     print("saved", out_path, im.size)
 
@@ -262,24 +262,51 @@ def run():
         body = page.locator("body").inner_text()
         check("부모 구역 패널 — 참고도·83,193㎡", "참고도" in body and "83,193" in body, "")
         check("부모 구역 패널 — 블록 기준·송파한양1차 설명", "필지" in body and "송파한양1차" in body, "")
-        zoom_in(page, 1)
+
+        # 구역 상세 패널 — 짧은 이름·새 면적
+        page.goto(f"{BASE}/?zone=songpa117-moa-3&diag=1", wait_until="domcontentloaded")
+        page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
+        time.sleep(7)
+        body3 = page.locator("body").inner_text()
+        check("3구역 패널 — 짧은 이름·참고도·17,786㎡", "송파117 3구역" in body3 and "참고도" in body3 and "17,786" in body3, "")
+        check("3구역 패널 — 옛 이름도 함께 보임", "(가칭)송파1동 하단" in body3, "")
+
+        # 지도 화면 — 모아타운만 켜고(다른 구역 이름표가 자리를 비켜 주게) 레벨 3으로 맞춘다
+        page.goto(f"{BASE}/?diag=1", wait_until="domcontentloaded")
+        page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
+        time.sleep(7)
+        page.evaluate(
+            "()=>{const m=window.__redevDiag.map(); m.setLevel(3); m.panTo(new window.kakao.maps.LatLng(37.5065,127.1120));}"
+        )
+        time.sleep(3)
+        try:
+            page.locator("button:has-text('필터')").first.click(timeout=6000)
+            time.sleep(1.2)
+            page.get_by_role("button", name="모아타운", exact=True).first.click(timeout=6000)
+            time.sleep(2.5)
+            page.get_by_role("button", name="접기").first.click(timeout=5000)
+            time.sleep(1.2)
+            print("구역 유형 필터 — 모아타운만")
+        except Exception as exc:  # noqa: BLE001
+            print("필터 적용 실패:", str(exc)[:120])
         cadastral_on(page)
         time.sleep(1.5)
 
         st = map_state(page)
-        check("지도 중심이 구역 안(37.5063±0.003)", abs((st or {}).get("lat", 0) - 37.5063) < 0.003, str(st))
+        check("지도 중심이 구역 안(37.5065±0.003)", abs((st or {}).get("lat", 0) - 37.5065) < 0.003, str(st))
 
         # 지도 배지 — DOM .zone-tag 글자 그대로(잘리면 이름 뒤에 … 가 붙는다)
         tags = page.eval_on_selector_all("[data-testid='zone-tag'] b", "els => els.map(e => e.textContent.trim())")
         mine = [t for t in tags if "송파117" in t]
-        check("지도 배지 5개가 모두 뜸", len(set(mine)) >= 5, f"배지 {sorted(set(mine))}")
-        check("배지 이름이 잘리지 않음(… 없음)", all("…" not in t for t in mine) and set(NAMES.values()) <= set(mine),
-              f"{sorted(set(mine))}")
+        check("지도 배지 5개가 모두 뜸", set(NAMES.values()) <= set(mine), f"배지 {sorted(set(mine))}")
+        check("배지 이름이 잘리지 않음(… 없음)", all("…" not in t for t in mine), f"{sorted(set(mine))}")
         for n in "12345":
             el = page.locator("[data-testid='zone-tag']", has_text=NAMES[n]).first
             if el.count():
                 clip = el.evaluate("e => {const b=e.querySelector('b'); return {sw:b.scrollWidth, cw:b.clientWidth, text:b.textContent};}")
                 check(f"배지 '{NAMES[n]}' 넘침 없음", clip["sw"] <= clip["cw"] + 1, str(clip))
+            else:
+                check(f"배지 '{NAMES[n]}' 넘침 없음", False, "이름표 없음")
 
         raw_full = f"{D}/redev_songpa117_v3_raw.png"
         page.screenshot(path=raw_full)
@@ -288,6 +315,19 @@ def run():
             rings[f"zone{n}"] = ring
         annotate(raw_full, f"{D}/redev_songpa117_v3.png", project(page, rings),
                  "송파117 모아타운 1~5구역 — 블록 기준 재작성(2026-11-23 3차)")
+
+        # 검색 — 옛 이름·줄인 이름 둘 다으로 찾히는지(별칭 유지 확인)
+        page.goto(f"{BASE}/", wait_until="domcontentloaded")
+        page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
+        time.sleep(2)
+        for term, want in (("송파동 117 일대 모아타운 3구역", "송파117 3구역"), ("송파1동 하단 3구역", "송파117 3구역"), ("송파117", "송파117")):
+            box = page.locator("input[placeholder*='검색']").first
+            box.click()
+            box.fill(term)
+            time.sleep(1.5)
+            rows = page.locator("[data-testid='zone-result']").all_inner_texts()
+            first = rows[0].split("\n")[0] if rows else ""
+            check(f"검색 '{term}' → {want}", any(want in r for r in rows[:5]), f"결과 {len(rows)}개 · 첫줄 '{first}'")
 
         real = [e for e in errs if "favicon" not in e and "ResizeObserver" not in e]
         check("콘솔 오류 0", len(real) == 0, str(real[:3]))
