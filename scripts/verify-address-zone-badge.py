@@ -46,11 +46,22 @@ def rows(page):
 
 
 def search(page, q: str) -> None:
+    """주소를 치고 **그 주소의 후보**가 뜰 때까지 기다린다.
+
+    이전 검색의 후보가 DOM 에 남아 있어 `wait_for_selector` 만으로는 새 결과를 기다리지 못한다
+    (2026-11-23: 양재동을 쳤는데 신림동 줄을 읽어 실패) — 번지(마지막 토큰)가 보이는지로 확인한다.
+    """
     inp = page.get_by_test_id("zone-search-input")
     inp.click()
     inp.fill(q)
-    page.wait_for_selector("[data-testid=address-candidate]", timeout=20000)
-    time.sleep(1.2)
+    token = q.split()[-1]
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        rows = page.get_by_test_id("address-candidate")
+        if rows.count() and token in rows.first.inner_text():
+            break
+        page.wait_for_timeout(250)
+    time.sleep(1.0)
 
 
 def badge_of(page, index: int = 0):
