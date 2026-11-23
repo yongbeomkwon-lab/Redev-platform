@@ -916,7 +916,7 @@ export default function KakaoZoneMap({
     if (parcelLayer) {
       const at = parcelAtRef.current;
       const px = parcelPxRef.current;
-      const tooSmall = !px || Math.max(px.w, px.h) < 46;
+      const tooSmall = !px || Math.max(px.w, px.h) < 30;
       if (!at || tooSmall) parcelLayer.style.visibility = "hidden";
       else placeOnMap(parcelLayer, at.lat, at.lng);
     }
@@ -2967,27 +2967,34 @@ export default function KakaoZoneMap({
 
   // ── 필지(지적) 경계 — 파란 강조가 너무 작게 보이면 필지가 화면에 차도록 한 번만 확대 ────
   //   · 주소 핀이 먼저 level 3~4 로 착지한 뒤 필지 도형이 300ms쯤 늦게 온다(서버 조회).
-  //   · 이미 화면에서 충분히 크면(작은 변의 26% 이상) 손대지 않는다 — 사용자가 맞춰 둔 화면을 흔들지 않는다.
-  //   · 확대만 한다(축소는 하지 않는다). 최대 level 2(건물 하나가 화면에 크게 보이는 배율)까지.
+  //     그래서 **핀 이동 애니메이션이 끝난 뒤**(0.7s)에 재고 움직인다 — 먼저 재면 이동 중인
+  //     배율을 읽어 엉뚱한 level 로 튄다(2026-11-23 실측: 필지가 30px 인데 level 3 에 머묾).
+  //   · 이미 충분히 크면(작은 변의 26% 이상) 손대지 않는다 — 사용자가 맞춰 둔 화면을 흔들지 않는다.
+  //   · 확대만 한다(축소는 하지 않는다). 필지가 아주 작으면 level 1(건물 하나가 화면에 크게)까지 간다.
   useEffect(() => {
-    const k = sdkRef.current;
-    const map = mapRef.current;
-    const el = mapElRef.current;
-    if (!k || !map || !el || !parcel) return;
-    const b = parcel.bounds;
-    const proj = map.getProjection();
-    const a = proj.containerPointFromCoords(new k.maps.LatLng(b.minLat, b.minLng));
-    const c = proj.containerPointFromCoords(new k.maps.LatLng(b.maxLat, b.maxLng));
-    const px = Math.max(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
-    const target = Math.min(el.clientWidth, el.clientHeight) * 0.26;
-    if (!Number.isFinite(px) || px <= 0 || px >= target) return;
-    const steps = Math.round(Math.log2(target / px));
-    if (steps <= 0) return;
-    const level = Math.max(2, map.getLevel() - Math.min(steps, 4));
-    map.jump(new k.maps.LatLng(parcel.center[0], parcel.center[1]), level, {
-      animate: { duration: 320 },
-    });
-    settleView();
+    if (!parcel) return;
+    const timer = window.setTimeout(() => {
+      const k = sdkRef.current;
+      const map = mapRef.current;
+      const el = mapElRef.current;
+      if (!k || !map || !el) return;
+      const b = parcel.bounds;
+      const proj = map.getProjection();
+      const a = proj.containerPointFromCoords(new k.maps.LatLng(b.minLat, b.minLng));
+      const c = proj.containerPointFromCoords(new k.maps.LatLng(b.maxLat, b.maxLng));
+      const px = Math.max(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
+      const target = Math.min(el.clientWidth, el.clientHeight) * 0.26;
+      if (!Number.isFinite(px) || px <= 0 || px >= target) return;
+      const steps = Math.round(Math.log2(target / px));
+      if (steps <= 0) return;
+      const level = Math.max(1, map.getLevel() - Math.min(steps, 6));
+      if (level >= map.getLevel()) return;
+      map.jump(new k.maps.LatLng(parcel.center[0], parcel.center[1]), level, {
+        animate: { duration: 320 },
+      });
+      settleView();
+    }, 700);
+    return () => window.clearTimeout(timer);
   }, [parcel, settleView]);
 
   // ── 지하철역 핀 — 역 중심으로 확대(level 3~4) ───────────────────────────────
