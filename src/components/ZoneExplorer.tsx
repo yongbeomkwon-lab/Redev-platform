@@ -805,6 +805,19 @@ export default function ZoneExplorer() {
   // ── 지도에서 찍은 지번 ────────────────────────────────────────────────
   //   · 즉시 핀을 꽂고(로딩 상태) 역지오코딩으로 법정동·지번을 채운다.
   //   · 그 지점이 속한 정비구역은 경계 판정(judgeAddress)으로 찾는다 — 카드에 바로가기로 붙는다.
+  /**
+   * 찍어 둔 지번 핀·필지 강조를 걷는다.
+   *   · 구역 경계를 그리거나 고치기 시작할 때 지도 위에 떠 있던 지번 핀/팝업이 초안 클릭을 가리거나
+   *     엉뚱한 점을 찍은 것처럼 보이지 않게 함께 치운다(사용자 제보 2026-11-24).
+   *   · 지번 찍기 토글 상태(jibunPickOn)는 건드리지 않는다 — 그리기·수정을 마치면 그대로 돌아온다.
+   */
+  function clearJibunPick() {
+    setJibunPin(null);
+    parcelSeqRef.current += 1;
+    setParcel(null);
+    setParcelNote(null);
+  }
+
   async function pickJibun(lat: number, lng: number) {
     const seq = ++jibunSeqRef.current;
     setJibunNote(null);
@@ -1289,6 +1302,8 @@ export default function ZoneExplorer() {
   const canEditSelectedRing = !!selectedRing && selectedRing.length >= 3;
 
   function startNewDraw() {
+    // 경계를 그리기 시작하면 지도에 떠 있던 지번 핀·필지 강조를 치운다(초안 클릭을 가리지 않게)
+    clearJibunPick();
     setSelectedCustomId(undefined);
     setAdminMeta(null);
     setDraft({ points: [] });
@@ -1328,6 +1343,8 @@ export default function ZoneExplorer() {
    *   경계를 안 고쳐도 사업유형·추진단계를 바로 고쳐 저장할 수 있도록 정보 입력 폼도 함께 연다.
    */
   function startEditSelected() {
+    // 경계·정보를 고치기 시작하면 지번 핀을 치운다(그리기·수정 중에는 지번 찍기가 잠시 꺼진다)
+    clearJibunPick();
     setPanelOpen(true);
     if (selectedCustom) {
       const next = {
@@ -1486,6 +1503,8 @@ export default function ZoneExplorer() {
   function editCustomGeometry(id: string) {
     const z = customZones.find((v) => v.id === id);
     if (!z) return;
+    // 경계 수정에 들어가면 지번 핀을 치운다(그리기·수정 중에는 지번 찍기가 잠시 꺼진다)
+    clearJibunPick();
     setSelectedCustomId(id);
     setPanelOpen(true);
     const next = {
@@ -1685,12 +1704,7 @@ export default function ZoneExplorer() {
             void pickJibun(lat, lng);
           }}
           jibunPin={jibunPin}
-          onCloseJibunPin={() => {
-            setJibunPin(null);
-            parcelSeqRef.current += 1;
-            setParcel(null);
-            setParcelNote(null);
-          }}
+          onCloseJibunPin={clearJibunPick}
           onOpenJibunHistory={(pin) => {
             void openJibunHistory({ gu: pin.gu, dong: pin.dong, jibun: pin.jibun });
           }}

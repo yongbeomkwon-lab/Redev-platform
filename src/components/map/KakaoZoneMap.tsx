@@ -596,12 +596,22 @@ export default function KakaoZoneMap({
   const jibunElRef = useRef<HTMLDivElement | null>(null);
   const jibunPinRef = useRef<JibunPin | null>(null);
   jibunPinRef.current = jibunPin ?? null;
+  /**
+   * 구역 경계를 그리고 있는/고치는 중인가 — 초안(draft)이 하나라도 있으면 참.
+   *   · 사용자 제보(2026-11-24): “지도를 수정 혹은 그릴 때 자꾸만 찍은 지번이 떠서 짜증”
+   *     — 점을 찍거나 꼭짓점을 옮기는 클릭이 지번 찍기로 새어 핀·팝업이 튀어나왔다.
+   *   · 그래서 초안이 있는 동안은 지번 찍기를 **잠시 꺼진 것으로** 본다(토글 상태 자체는 건드리지
+   *     않아 완료·취소하면 원래대로 돌아온다).
+   */
+  const boundaryBusy = !!admin?.draft;
+  /** 지금 실제로 지번 찍기가 도는가 — 그리기·수정 중에는 꺼진 것으로 본다 */
+  const jibunPickActive = jibunPickOn && !boundaryBusy;
   /** 지도 클릭·우클릭이 읽는 지번 찍기 상태 — draw 클로저보다 최신 값이 필요하다 */
   const pickRef = useRef<{ on: boolean; pick: ((lat: number, lng: number) => void) | null }>({
     on: false,
     pick: null,
   });
-  pickRef.current = { on: jibunPickOn, pick: onPickJibun ?? null };
+  pickRef.current = { on: jibunPickActive, pick: onPickJibun ?? null };
   /** 지금 펼쳐 둔 핀 상세 카드(거래 id) — 하나만 열린다 */
   const [openPinId, setOpenPinId] = useState<string | null>(null);
   /** draw() 가 읽는 ‘펼쳐 둔 핀’ — 클로저 대신 ref 로 넘긴다 */
@@ -2305,6 +2315,13 @@ export default function KakaoZoneMap({
         adm.onAddPoint(lat, lng);
         return;
       }
+      // ── 관리자 모드: 경계를 고치는 중(정보 입력 폼 포함) ─────────────────────
+      //   · 초안이 떠 있는 동안 지도 클릭은 초안 손질에만 쓴다 — 지번 찍기 핀·다른 구역 선택이
+      //     튀어나오면 점을 옮기다 판이 엉킨다(사용자 제보 2026-11-24).
+      if (adm?.draft) {
+        clearHoverCursor();
+        return;
+      }
       // ── 관리자 모드: 저장된 관리자 구역을 누르면 선택(수정할 구역 고르기) ──────
       if (adm) {
         let hitCustom: string | undefined;
@@ -2406,6 +2423,8 @@ export default function KakaoZoneMap({
         finishInPlaceSoon();
         return;
       }
+      // 경계를 고치는 중(아직 점을 안 찍은 새 그리기 포함)에는 우클릭으로도 지번을 찍지 않는다
+      if (adminRef.current?.draft) return;
       // 그리는 중이 아니면 우클릭 = 지번 찍기(브라우저 기본 메뉴는 막는다)
       const pick = pickRef.current;
       if (!pick.pick) return;
@@ -3302,11 +3321,13 @@ export default function KakaoZoneMap({
     [settleView]
   );
 
+  // 지번 찍기 중이거나 경계를 그리는/고치는 중이면 구역 이름표가 클릭을 가로채지 않게 한다
+  //   (그리는 중에 이름표를 누르면 점이 찍히는 대신 구역이 열린다)
   return (
     <div
       ref={wrapRef}
       className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl"
-      data-jibun-pick={jibunPickOn ? "1" : undefined}
+      data-jibun-pick={jibunPickOn || boundaryBusy ? "1" : undefined}
     >
       <div ref={mapElRef} className="h-full w-full" />
 
@@ -4028,18 +4049,33 @@ export default function KakaoZoneMap({
         {onToggleJibunPick && (
           <button
             type="button"
-            onClick={onToggleJibunPick}
+            onClick={() => {
+              // 경계를 그리거나 고치는 중에는 눌러도 아무 일도 하지 않는다(초안 클릭과 섞이지 않게)
+              if (boundaryBusy) return;
+              onToggleJibunPick();
+            }}
             aria-pressed={jibunPickOn}
+            aria-disabled={boundaryBusy || undefined}
             data-testid="jibun-pick-toggle"
-            title="지번 찍기 — 지도를 누르면 그 자리의 지번·구역·실거래를 보여 줍니다 (아이패드·터치용)"
+            data-paused={boundaryBusy ? "1" : undefined}
+            title={
+              boundaryBusy
+                ? "구역 경계를 그리거나 고치는 중에는 지번 찍기가 잠시 꺼집니다 — 완료·취소하면 원래대로 돌아옵니다"
+                : "지번 찍기 — 지도를 누르면 그 자리의 지번·구역·실거래를 보여 줍니다 (아이패드·터치용)"
+            }
             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
-              jibunPickOn
-                ? "border-brand bg-brand text-white"
-                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+              boundaryBusy
+                ? "cursor-not-allowed border-line bg-white/70 text-slate-400"
+                : jibunPickOn
+                  ? "border-brand bg-brand text-white"
+                  : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden className="text-[12px] leading-none">◉</span>
+            <span aria-hidden className="text-[12px] leading-none">{boundaryBusy ? "⏸" : "◉"}</span>
             <span className="hidden md:inline">지번 찍기</span>
+            {boundaryBusy && (
+              <span className="hidden text-[10px] font-normal opacity-80 md:inline">일시 중지</span>
+            )}
           </button>
         )}
         {onToggleTxPins && txPins.length > 0 && (

@@ -797,6 +797,12 @@ export default function LeafletZoneMap({
    *   · 카카오맵과 같은 규칙: 구역 경계·개별 뱃지·경매 핀을 걷고 구 카드만 깐다.
    */
   const districtMode = zoom <= 13 && !myPinsOn && !admin;
+  /**
+   * 구역 경계를 그리거나 고치는 중인가 — 초안(draft)이 있으면 지번 찍기를 잠시 꺼 둔다.
+   *   · 사용자 제보(2026-11-24): 경계를 고치는 클릭이 지번 찍기로 새어 핀·팝업이 튀어나왔다.
+   *   · 토글 상태는 그대로 두어 완료·취소하면 원래대로 돌아온다.
+   */
+  const boundaryBusy = !!admin?.draft;
   // 지하철 노선·역명 레이어 — 재개발 상담에서 “역세권인지”가 첫 질문이라 기본 ON
   const [showSubway, setShowSubway] = useState(true);
 
@@ -920,8 +926,9 @@ export default function LeafletZoneMap({
         activeId={activeAuctionPinId ?? null}
       />
 
-      {/* ── 지번 찍기 — 클릭/우클릭으로 찍은 자리에 오레오 블루 물결 핀 ── */}
-      <JibunPicker on={jibunPickOn} onPick={onPickJibun} />
+      {/* ── 지번 찍기 — 클릭/우클릭으로 찍은 자리에 오레오 블루 물결 핀
+           · 경계를 그리거나 고치는 중에는 on·onPick 을 모두 끊어 클릭이 지번으로 새지 않게 한다 ── */}
+      <JibunPicker on={jibunPickOn && !boundaryBusy} onPick={boundaryBusy ? undefined : onPickJibun} />
       <JibunPinLayer
         pin={jibunPin ?? null}
         onClose={onCloseJibunPin}
@@ -1010,17 +1017,29 @@ export default function LeafletZoneMap({
         {onToggleJibunPick && (
           <button
             type="button"
-            onClick={onToggleJibunPick}
+            onClick={() => {
+              // 경계를 그리거나 고치는 중에는 눌러도 아무 일도 하지 않는다(초안 클릭과 섞이지 않게)
+              if (boundaryBusy) return;
+              onToggleJibunPick();
+            }}
             aria-pressed={jibunPickOn}
+            aria-disabled={boundaryBusy || undefined}
             data-testid="jibun-pick-toggle"
-            title="지번 찍기 — 지도를 누르면 그 자리의 지번·구역·실거래를 보여 줍니다"
+            data-paused={boundaryBusy ? "1" : undefined}
+            title={
+              boundaryBusy
+                ? "구역 경계를 그리거나 고치는 중에는 지번 찍기가 잠시 꺼집니다 — 완료·취소하면 원래대로 돌아옵니다"
+                : "지번 찍기 — 지도를 누르면 그 자리의 지번·구역·실거래를 보여 줍니다"
+            }
             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
-              jibunPickOn
-                ? "border-brand bg-brand text-white"
-                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+              boundaryBusy
+                ? "cursor-not-allowed border-line bg-white/70 text-slate-400"
+                : jibunPickOn
+                  ? "border-brand bg-brand text-white"
+                  : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
             }`}
           >
-            <span aria-hidden className="text-[12px] leading-none">◉</span>
+            <span aria-hidden className="text-[12px] leading-none">{boundaryBusy ? "⏸" : "◉"}</span>
             지번 찍기
           </button>
         )}
