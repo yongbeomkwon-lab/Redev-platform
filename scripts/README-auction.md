@@ -8,6 +8,7 @@
 python3 scripts/fetch-court-auctions.py      # ① 대법원 수집(이어받기·차단 감지)
 python3 scripts/geocode-auctions.py          # ② 지번 → 좌표(카카오, 캐시 사용)
 python3 scripts/build-auction-zones.py       # ③ 구역 경계 매칭 → public/data/auctions.json
+python3 scripts/verify-auction-zones.py --fix # ④ 구역 경계를 고친 뒤 매핑 재검사(필수)
 ```
 
 ## ① 대법원 수집 — 지켜야 하는 것
@@ -46,6 +47,23 @@ JSON XHR로 목록을 그린다. 스크립트는 **화면이 실제로 쓰는 �
 bbox 선별 → 광선교차(Point-in-Polygon). 한 물건이 여러 구역에 걸치면 **면적이 가장 작은 구역**을
 대표(`zoneId`)로 두고 `zoneIds` 에 전부 남긴다. 매칭 0건인 구역은 `byZone` 에 키를 만들지 않는다
 (패널이 섹션을 그리지 않는다).
+
+## ④ 매핑 재검사 — 왜 따로 돌려야 하나
+
+`auctions.json` 의 `zoneId` 는 **③을 돌린 그 시점의 폴리곤**으로 계산한 스냅샷이다. 그 뒤에 구역
+경계를 다시 그리거나(`scripts/apply-*.py`) 구역을 새로 넣으면, 물건 좌표는 그대로인데 배지만
+엉뚱한 구역에 남는다.
+
+* 2026-11-23 실제 사례: `양재2동 2구역` 경계를 근사원→필지 가까운 가상경계로 바꾼 뒤 양재동 324-1
+  물건 2줄이 구역 밖(41m)인데도 그 구역 경매로 남아 있었다.
+* 같은 날 `zones.geojson` 을 `seoul-zones.json` 만 보고 다시 내보내 **구역 15곳이 지도에서 사라져**
+  `DDP 1·2·3구역`(경매 9줄)·`쌍문동 710`(1줄)의 `zoneId` 가 주인을 잃기도 했다. 이제 내보내기는
+  사라지는 구역·필드가 있으면 멈추고(`scripts/export-geojson.py`, 같은 규칙의 `.mjs`), 데이터는
+  `scripts/apply-zones-restore-20261123.py` 로 되살렸다.
+
+검사 규칙: 폴리곤 안이면 통과, 밖인데 다른 구역 안이면 면적이 가장 작은 구역으로 재매핑, 어느
+구역에도 없으면 경계에서 10m 이내(`--tol`)면 지번 좌표 오차로 보고 유지, 그보다 멀면 매핑 해제.
+해제·재매핑한 줄은 `meta.audit` 에 남는다(화면은 `byZone` 만 읽으므로 동작에 영향 없음).
 
 ## 원문 링크에 대해
 

@@ -14,13 +14,18 @@
      실리므로, 화면의 건수는 **사건+물건번호**(lib/auctions.ts `countAuctionSales`)로 묶어 센다
      (대선제분 24줄·모아타운 17줄 → 각 1건, 호실마다 사건이 다른 쌍문동 507-1은 132건 그대로).
   4) 매칭 0건인 구역은 키를 만들지 않는다(패널이 섹션을 그리지 않는다).
+  5) 쓴 뒤 scripts/verify-auction-zones.py 의 검사를 그대로 한 번 더 돌려, 결과가 zoneId 폴리곤
+     밖이거나 주인 잃은 구역에 붙은 줄이 있으면 그 자리에서 고친다(--no-verify 로 끈다).
+     경계를 다시 그리거나 구역을 넣은 뒤에는 반드시 `python3 scripts/verify-auction-zones.py --fix`
+     를 따로 돌린다 — auctions.json 은 만들 때의 폴리곤 스냅샷이라, 그 뒤 경계가 바뀌면
+     좌표는 그대로인데 배지만 엉뚱한 구역에 붙는다(2026-11-23).
 
 출력
   · public/data/auctions.json
   · 콘솔 요약(구역 수·물건 수·상위 구역)
 
 사용법
-  python3 scripts/build-auction-zones.py
+  python3 scripts/build-auction-zones.py [--no-verify]
 """
 from __future__ import annotations
 
@@ -91,6 +96,7 @@ def money(v: int | None) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-rate", type=float, default=0, help="최저가율 하한(%) 필터 — 기본 없음")
+    ap.add_argument("--no-verify", action="store_true", help="쓴 뒤 구역 매핑 재검사(verify-auction-zones)를 건너뛴다")
     args = ap.parse_args()
 
     data = json.load(open(LATEST, encoding="utf-8"))
@@ -203,6 +209,34 @@ def main() -> None:
     print("상위 구역:")
     for zid, lst in sorted(by_zone.items(), key=lambda kv: -len(kv[1]))[:10]:
         print(f"  {lst[0]['zoneName']} ({zid}) — {len(lst)}건")
+
+    if not args.no_verify:
+        _verify_after_build()
+
+
+def _verify_after_build() -> None:
+    """방금 쓴 auctions.json 을 zones.geojson 과 다시 대조한다(같은 검사 로직 재사용)."""
+    import importlib.util
+
+    path = os.path.join(HERE, "verify-auction-zones.py")
+    spec = importlib.util.spec_from_file_location("verify_auction_zones", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    data = json.load(open(OUT, encoding="utf-8"))
+    zones = mod.load_zones()
+    r = mod.audit(data, zones, 10.0)
+    if r["remapped"] or r["dropped"] or r["duplicates"]:
+        print("[검사] 매핑이 어긋난 줄을 고칩니다 — 재매핑 "
+              f"{len(r['remapped'])} · 해제 {len(r['dropped'])} · 중복 {len(r['duplicates'])}")
+        for d in r["dropped"]:
+            print(f"    · {d['zoneName']} — {d['caseNo']} {d['address']} ({d['reason']})")
+        data["meta"]["matched"] = r["kept"]
+        data["meta"]["zonesWithAuctions"] = len(r["byZone"])
+        data["byZone"] = r["byZone"]
+        json.dump(data, open(OUT, "w", encoding="utf-8"), ensure_ascii=False)
+    if r["orphans"]:
+        print(f"[검사] ⚠️ zones.geojson 에 없는 구역에 붙은 줄 {len(r['orphans'])}개 — 구역 데이터를 확인하세요")
+    print(f"[검사] 구역 폴리곤 대조 OK — 줄 {r['kept']:,}, 구역 {len(r['byZone'])}곳")
 
 
 if __name__ == "__main__":
