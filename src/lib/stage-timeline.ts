@@ -422,6 +422,7 @@ export const EXACT_STAGE: Record<string, StageEvent[]> = {
   "동의서 번호부여(2026-09-04)": [E("prep", "2026-09-04")],
   "동의서 번호부여(2차 추가)": [E("prep", undefined, false, "2차 추가")],
   "동의서 번호부여 요청 구역 공개(동작구)": [E("prep", undefined, true, "요청 구역 공개")],
+  "동의서 번호부여 요청 구역 공개(서초구)": [E("prep", undefined, true, "요청 구역 공개")],
   "동의서 번호부여 + 신통기획 후보지 상정(2026-10-22)": [
     E("prep"),
     E("candidate", "2026-10-22", true, "후보지 상정"),
