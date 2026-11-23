@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """송파동 117번지 일원(송파1동 하단) 모아타운 — 검토용 참고도 5개 구역계 (2026-11-23)
 
+## 3차 수정 (2026-11-23 밤) — 사용자 지적 두 가지 반영
+  사용자가 배포본을 보고 지적했다.
+    ① "배지도 길어서 몇 구역인지 잘려 나오고" — 지도 이름표는 12~14자에서 잘린다(tagName/cardName).
+       `송파동 117 일대 모아타운 3구역`(19자)은 `송파동 117 일대 모…`로 나와 구역 번호가 사라졌다.
+       → 지도에 뜨는 `name` 을 **`송파117 1구역`~`송파117 5구역`**(9자)**로 줄이고**, 기존 긴 이름은
+       전부 `alias` 에 남겨 검색·패널에서는 그대로 찾을 수 있게 했다.
+    ② "3구역 위치랑 5구역 한양1차 겹침이 생겼네" — 2차본은 사진 색 마스크를 직선화한 도형이라
+       3구역이 북서로 밀려 학교 담장에 붙고, 5구역 동쪽이 송파한양1차 필지(필지 119)를 덮었다.
+       → 브이월드 연속지적도 필지(458필지)에 참고도 색 구역을 배정해 **블록 단위로 다시 조립**했다.
+         구역별 격자 방향(1·2구역 57°, 3구역 51°, 4구역 48°, 5구역 46°)으로 변을 직선화하고,
+         필지를 지나지 않는 도로선에 스냅해 5구역 포함 어느 구역도 송파한양1차와 겹치지 않는다
+         (교집합 0㎡). 3구역 동쪽은 송파한양1차 서쪽 담장·도로에 맞닿아 있다(이격 5.4m).
+       · 서울송파초등학교(114학)·송파근린공원(113공)은 그대로 구역 밖(교집합 0㎡).
+       · 면적 합계 83,193㎡ (1구역 15,196 · 2구역 17,426 · 3구역 17,786 · 4구역 12,862 · 5구역 19,923).
+
 ## 2차 수정 (2026-11-23 저녁) — 사용자 지적 반영
   사용자가 배포본을 보고 두 가지를 지적했다.
     ① "송파초등학교 절반 정도가 재개발구역 내로 들어갔어 옆의 공원도 바로 수정해"
@@ -33,6 +48,7 @@
   1구역 15,611㎡ · 2구역 16,385㎡ · 3구역 16,043㎡ · 4구역 13,142㎡ · 5구역 19,514㎡
   합계 80,695㎡ — 모아통합기획 후보지 요건(전체 1만~10만㎡)에 들어간다.
   전체(부모) 구역은 지도에서 기본으로 숨기고(hiddenByDefault) 검색했을 때만 그린다.
+  → 3차 수정 후 면적은 위 83,193㎡ (참고도 도형 계측값, 공식 고시 면적이 나오면 그 값으로 바꿔야 한다).
 
 실행: python3 scripts/apply-songpa117-moa-20261123.py [--check]   (멱등)
 """
@@ -89,28 +105,28 @@ SOURCES_PARENT = SOURCES + [
 ]
 
 AREA_NOTE = (
-    "참고도에서 옮긴 다각형의 계측 면적입니다. 2026-11-23 2차 수정에서 경계를 직선화하면서 "
-    "둥글게 남아 있던 모서리·잔꼭짓점을 덜어 내 다시 잰 값이라, 1차 때 값(합계 81,951㎡)과 "
-    "구역별로 1~10% 차이가 납니다. 참고도가 검토용이라 공식 고시 면적이 나오면 그 값으로 "
-    "바꿔야 합니다."
+    "참고도에서 옮긴 다각형의 계측 면적입니다. 2026-11-23 3차 수정에서 경계를 연속지적도 "
+    "필지 블록 단위로 다시 조립해 잰 값이라, 2차 때 값(합계 80,695㎡)과 구역별로 5~11% 차이가 "
+    "납니다(1구역 -2.7%, 2구역 +6.4%, 3구역 +10.9%, 4구역 -2.1%, 5구역 +2.1%). "
+    "참고도가 검토용이라 공식 고시 면적이 나오면 그 값으로 바꿔야 합니다."
 )
 
 BOUNDARY_NOTE = (
-    "사진 속 두 역(송파나루역·석촌역)으로 초기 유사변환을 잡고, 브이월드 연속지적도"
-    "(LP_PA_CBND_BUBUN) 필지선 10만여 표본점과 사진 인쇄선 사이 거리의 중앙값을 최소화하도록 "
-    "회전·축척·평행이동을 다시 맞췄습니다(정합 오차 중앙값 2.6m, 축척 1.388px/m, 회전 1.29°). "
-    "그 위에서 구역별 색 마스크의 윤곽을 둘레 2% 허용으로 직선화하고 6m 미만 변·거의 일직선인 "
-    "꼭짓점을 지워 4~6꼭짓점의 각진 도형으로 다시 그렸습니다 — 모든 변이 블록·도로 경계선을 "
-    "따라가고 모서리는 직각(또는 도로가 꺾이는 각)만 남습니다. 서울송파초등학교 필지"
-    "(송파동 114학)와 송파근린공원(송파동 113공)은 구역 밖으로 완전히 빠졌습니다(교집합 0㎡, "
-    "최소 이격 11.7m·16.8m). 참고도 자체가 검토용이라 위치 정확도는 ±3m 수준이며, 공식 구역계가 "
-    "공개되면 그 도면으로 다시 맞춰야 합니다."
+    "브이월드 연속지적도(LP_PA_CBND_BUBUN) 필지 458개에 참고도 색 구역을 배정한 뒤, 구역별 "
+    "격자 방향(1·2구역 57°, 3구역 51°, 4구역 48°, 5구역 46°)으로 변을 직선화하고 필지를 "
+    "지나지 않는 도로선에 스냅해 블록 단위로 다시 조립했습니다. 그래서 모든 변이 필지선·도로 "
+    "경계를 따라가고 모서리는 직각(또는 도로가 꺾이는 각)만 남습니다. 129공(송파공원, 1,645㎡)은 "
+    "참고도와 같이 2구역 안에 포함되어 있고, 송파한양1차아파트 필지(119)는 어느 구역과도 "
+    "겹치지 않습니다(교집합 0㎡ — 3구역 동쪽은 담장·도로에 맞닿아 이격 5.4m). "
+    "서울송파초등학교 필지(송파동 114학)와 송파근린공원(송파동 113공)도 구역 밖으로 완전히 "
+    "빠졌습니다(교집합 0㎡, 최소 이격 6.2m·16.4m). 참고도 자체가 검토용이라 위치 정확도는 "
+    "±5m 수준이며, 공식 구역계가 공개되면 그 도면으로 다시 맞춰야 합니다."
 )
 
 PARENT_NOTE = (
     "(가칭)송파1동 하단 모아통합기획구역입니다. 송파동 117번지 일원(송파나루역 남쪽, 송파초등학교·"
     "송파근린공원 동쪽, 송파한양1차아파트 서쪽 블록)을 1~5구역으로 나눈 모아타운 구역계 참고도이며, "
-    "합계 면적은 약 8.1만㎡입니다. 모아통합기획은 서울시와 자치구가 관리계획을 함께 세우면서 "
+    "합계 면적은 약 8.3만㎡입니다. 모아통합기획은 서울시와 자치구가 관리계획을 함께 세우면서 "
     "모아주택 조합설립을 동시에 추진하는 방식으로, 후보지 요건은 전체 면적 1만~10만㎡·노후도 50% "
     "이상(사업예정지별 50% 이상)·사업예정구역별 토지등소유자 60% 및 토지면적 1/2 이상 동의입니다"
     "(서울특별시 공고 제2026-3045호로 면적 하한이 2만㎡에서 1만㎡로 바뀜). 자치구가 동의서 번호를 "
@@ -121,32 +137,38 @@ PARENT_NOTE = (
     "따로 추진되는 단지라 이 구역계에 들어가지 않습니다."
 )
 
-# 계측 면적(㎡) — 2026-11-23 2차 수정본
-AREAS = {'1': 15611, '2': 16385, '3': 16043, '4': 13142, '5': 19514}
+# 계측 면적(㎡) — 2026-11-23 3차(블록 기준) 수정본, 합계 83,193㎡
+AREAS = {'1': 15196, '2': 17426, '3': 17786, '4': 12862, '5': 19923}
 
-# 구역계 — [위도, 경도], 폐합점 없음. 참고도 사진 픽셀에서 옮긴 뒤 직선화·정리한 꼭짓점.
+# 구역계 — [위도, 경도], 폐합점 없음.
+#   2026-11-23 3차: /workspace/tmp/songpa117_clean_rings.json 의 ring_lnglat([경도,위도])을 그대로 옮겼다.
+#   브이월드 필지 배정 → 격자 방향 직선화 → 도로선 스냅을 마친 블록 단위 도형(참고도 ±5m 근사).
 ZONES = {
-    "1": [
-        [37.508741, 127.111598], [37.507685, 127.111226],
-        [37.507034, 127.112227], [37.508006, 127.112973],
-    ],
-    "2": [
-        [37.507973, 127.112972], [37.507021, 127.112243],
-        [37.506297, 127.113349], [37.507221, 127.114192],
-    ],
-    "3": [
-        [37.507179, 127.111823], [37.506486, 127.111159], [37.505706, 127.112125],
-        [37.505567, 127.112594], [37.505952, 127.112980], [37.506402, 127.112977],
-    ],
-    "4": [
-        [37.506455, 127.111109], [37.505585, 127.110178],
-        [37.504882, 127.110844], [37.505834, 127.111924],
-    ],
-    "5": [
-        [37.505800, 127.111972], [37.504887, 127.110902], [37.503926, 127.111780],
-        [37.504486, 127.112523], [37.505210, 127.112878],
-    ],
+    "1": [[37.507694, 127.111081], [37.507088, 127.112247], [37.508002, 127.112995], [37.508653, 127.111862]],  # 15,196㎡
+    "2": [[37.508002, 127.112995], [37.507278, 127.114308], [37.506379, 127.113586],
+          [37.506325, 127.113528], [37.507088, 127.112247]],  # 17,426㎡
+    "3": [[37.507178, 127.111794], [37.506590, 127.111104], [37.505650, 127.112179],
+          [37.505541, 127.112587], [37.506220, 127.113346]],  # 17,786㎡
+    "4": [[37.506446, 127.111092], [37.505586, 127.110175], [37.504881, 127.110843], [37.505822, 127.111896]],  # 12,862㎡
+    "5": [[37.504365, 127.112429], [37.503931, 127.111760], [37.504881, 127.110843],
+          [37.505822, 127.111896], [37.505209, 127.112878], [37.504870, 127.112509],
+          [37.504732, 127.112626]],  # 19,923㎡
 }
+
+# 기존(1·2차) 긴 이름 — 지도 배지에서는 짧은 name을 쓰고, 이 이름들은 alias로 검색을 받는다.
+OLD_NAMES = {
+    str(n): [
+        f"(가칭)송파1동 하단 모아타운 {n}구역",
+        f"송파동 117 일대 모아타운 {n}구역",
+        f"송파동 117 {n}구역",
+        f"송파1동 하단 {n}구역",
+        f"송파1동 하단 모아타운 {n}구역",
+        f"송파동 모아타운 {n}구역",
+        f"송파117 {n}",
+    ]
+    for n in ("1", "2", "3", "4", "5")
+}
+SHORT_NAMES = {n: f"송파117 {n}구역" for n in ("1", "2", "3", "4", "5")}
 
 # 참고: 학교·공원 필지(브이월드 연속지적도 그대로) — 구역과 겹침 0㎡ 인지 검사에 쓴다
 SCHOOL_RING = [
@@ -165,14 +187,18 @@ PARK_RING = [
 PARENT_RING = ZONES["1"]
 PARENT_PARTS = [ZONES[k] for k in ("2", "3", "4", "5")]
 
+# 송파한양1차아파트(필지 119) — 동쪽 경계 대조용. 3구역은 여기 맞닿고, 5구역은 겹치면 안 된다.
+HANYANG_ID = "11000UQ120PS202502050014"
+
 META_ENTRY = {
     "asOf": "2026-11-23",
     "zones": [f"songpa117-moa-{n}" for n in ("1", "2", "3", "4", "5")] + ["songpa117-moa"],
     "note": (
-        "송파동 117 일대(송파1동 하단) 모아타운 참고도 1~5구역계를 2026-11-23 2차 수정 — 사진 정합을 "
-        "연속지적도 필지선에 다시 맞추고(중앙값 2.6m) 윤곽을 4~6꼭짓점 직선 도형으로 다시 그려, "
-        "서울송파초등학교(송파동 114학)·송파근린공원(송파동 113공)이 구역 안에 들어가던 문제와 둥글게 "
-        "남던 경계를 함께 바로잡았다(교집합 0㎡, 합계 80,695㎡)."
+        "송파동 117 일대(송파1동 하단) 모아타운 참고도 1~5구역계를 2026-11-23 3차 수정 — 연속지적도 "
+        "필지에 참고도 색 구역을 배정해 블록 단위로 다시 조립하고, 배지에 구역 번호가 잘리지 않도록 "
+        "이름을 `송파117 1구역`~`송파117 5구역`으로 줄였다(긴 이름은 alias로 검색 유지). 3구역은 "
+        "송파한양1차 서쪽 담장·도로에 맞닿고(이격 5.4m), 5구역을 포함해 어느 구역도 송파한양1차와 "
+        "겹치지 않으며, 송파초등학교·송파근린공원도 구역 밖이다(교집합 0㎡, 합계 83,193㎡)."
     ),
 }
 
@@ -186,14 +212,9 @@ def zone_props(n: str) -> dict:
     idx = int(n)
     c = _centroid(ZONES[n])
     return {
-        "name": f"송파동 117 일대 모아타운 {idx}구역",
-        "alias": [
-            f"송파동 117 일대 모아타운 {idx}구역",
-            f"송파동 117 {idx}구역",
-            f"송파1동 하단 {idx}구역",
-            f"송파1동 하단 모아타운 {idx}구역",
-            f"송파동 모아타운 {idx}구역",
-        ],
+        # 지도 배지가 잘리지 않도록 짧은 이름을 쓴다(2026-11-23 3차). 긴 이름은 alias 에 전부 남긴다.
+        "name": SHORT_NAMES[n],
+        "alias": OLD_NAMES[n],
         "type": "모아타운",
         "kind": "모아타운(모아통합기획)",
         "stage": "추진준비·구역계 검토(공식 공고 전)",
@@ -207,7 +228,7 @@ def zone_props(n: str) -> dict:
         "center": [c[0], c[1]],
         "centerLabel": "참고도 구역계 중심",
         "note": (
-            f"(가칭)송파1동 하단 모아타운 {idx}구역입니다. " + IMAGE_NOTE
+            f"(가칭)송파1동 하단 모아타운 {idx}구역(지도 표기 `{SHORT_NAMES[n]}`)입니다. " + IMAGE_NOTE
         ),
         "areaNote": f"{idx}구역 계측 면적 {AREAS[n]:,}㎡ — " + AREA_NOTE,
         "boundaryNote": BOUNDARY_NOTE,
@@ -234,6 +255,8 @@ def parent_props() -> dict:
             "송파 모아타운",
             "송파 모아통합기획",
             "모아통합기획 송파",
+            "송파117",
+            "송파117 모아타운",
         ],
         "type": "모아타운",
         "kind": "모아타운(모아통합기획)",
@@ -334,6 +357,8 @@ def _baseline_ids():
 def check() -> int:
     bad = 0
     src = json.loads(SOURCE.read_text(encoding="utf-8"))
+    _hy = next((x for x in src if x.get("id") == HANYANG_ID), None)
+    hanyang = (_hy or {}).get("polygon") or None
     geo = json.loads(GEOJSON.read_text(encoding="utf-8"))
     meta = json.loads(META.read_text(encoding="utf-8"))
     ids = {z.get("id") for z in src}
@@ -369,6 +394,14 @@ def check() -> int:
         print(f"[{'OK' if ok else 'FAIL'}] {zid} 꼭짓점 {len(ring)} · 계측 {a:,.0f}㎡ · 표기 {(z or {}).get('area')}㎡ · geojson {g.get('type')}")
         bad += 0 if ok else 1
 
+        # 지도 배지 이름 — 잘리지 않는 짧은 이름(10자 이하) + 기존 긴 이름은 alias 에 그대로
+        name_ok = (z or {}).get("name") == SHORT_NAMES[n] and len(SHORT_NAMES[n]) <= 10
+        alias_ok = all(m in ((z or {}).get("alias") or []) for m in OLD_NAMES[n])
+        print(f"[{'OK' if name_ok else 'FAIL'}] {zid} name='{(z or {}).get('name')}'({len((z or {}).get('name') or '')}자)"
+              f" · [{'OK' if alias_ok else 'FAIL'}] 기존 이름 {len(OLD_NAMES[n])}개 alias 유지")
+        bad += 0 if name_ok else 1
+        bad += 0 if alias_ok else 1
+
         sc = _overlap(ring, SCHOOL_RING) if ring else 0
         pk = _overlap(ring, PARK_RING) if ring else 0
         ok2 = sc < 0.01 and pk < 0.01
@@ -376,11 +409,25 @@ def check() -> int:
               f" · 이격 {_distance(ring, SCHOOL_RING):.1f}m / {_distance(ring, PARK_RING):.1f}m")
         bad += 0 if ok2 else 1
 
+        if hanyang is not None:
+            hy = _overlap(ring, hanyang) if ring else 0
+            hd = _distance(ring, hanyang) if ring else -1
+            # 3구역은 송파한양1차 서쪽 담장·도로에 맞닿고(도로 폭만큼), 5구역도 겹치지 않아야 한다
+            ok3 = hy < 0.01 and (hd <= 8.0 if n == "3" else True)
+            print(f"[{'OK' if ok3 else 'FAIL'}] {zid} ∩ 송파한양1차(119) = {hy:.2f}㎡ · 이격 {hd:.1f}m")
+            bad += 0 if ok3 else 1
+
     p = next((x for x in src if x.get("id") == "songpa117-moa"), None)
     pf = next((x for x in geo["features"] if x["properties"]["id"] == "songpa117-moa"), None)
-    okp = bool(p) and len(p.get("parts") or []) == 4 and (pf or {}).get("geometry", {}).get("type") == "MultiPolygon"
+    total = sum(AREAS.values())
+    okp = (
+        bool(p) and len(p.get("parts") or []) == 4
+        and (pf or {}).get("geometry", {}).get("type") == "MultiPolygon"
+        and (p or {}).get("area") == total
+        and len(((pf or {}).get("geometry", {}) or {}).get("coordinates") or []) == 5
+    )
     print(f"[{'OK' if okp else 'FAIL'}] songpa117-moa parent parts={len((p or {}).get('parts') or [])} "
-          f"geojson={(pf or {}).get('geometry', {}).get('type')} · 합계 {(p or {}).get('area')}㎡")
+          f"geojson={(pf or {}).get('geometry', {}).get('type')} · 합계 {(p or {}).get('area')}㎡ (기대 {total:,}㎡)")
     bad += 0 if okp else 1
 
     # 구역끼리 겹치지 않는지
@@ -399,6 +446,44 @@ def check() -> int:
     print(f"[{'OK' if ok_meta else 'FAIL'}] zones-meta {META_KEY}")
     bad += 0 if ok_meta else 1
     return bad
+
+
+def _restore_untouched() -> None:
+    """이 스크립트가 건드리지 않는 구역의 properties 를 직전 커밋 그대로 되돌린다.
+
+    export-geojson 은 경계가 있는 구역의 `center` 를 일부러 빼기도 하는데(화면이 bbox 로 다시 계산),
+    그렇게 다른 구역의 바이트가 조용히 달라지면 "송파117 말고는 아무것도 안 바뀌었다"를 증명할 수 없다.
+    songpa117-moa* 를 뺀 나머지 구역은 properties 를 직전 커밋 값으로 되돌리고, 도형은 같아야 한다.
+    """
+    try:
+        raw = subprocess.run(
+            ["git", "show", "HEAD:public/data/zones.geojson"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout
+        prev = {f["properties"]["id"]: f for f in json.loads(raw)["features"]}
+    except Exception as exc:  # noqa: BLE001 — git 이 없으면 건너뛴다
+        print("[참고] 직전 커밋 비교 불가 — 건너뜀: %s" % exc)
+        return
+    geo = json.loads(GEOJSON.read_text(encoding="utf-8"))
+    restored, geom_bad = 0, 0
+    for f in geo["features"]:
+        fid = f["properties"]["id"]
+        if fid.startswith("songpa117-moa"):
+            continue
+        old = prev.get(fid)
+        if not old:
+            continue
+        if json.dumps(old.get("geometry"), sort_keys=True) != json.dumps(f.get("geometry"), sort_keys=True):
+            geom_bad += 1
+        if json.dumps(old["properties"], ensure_ascii=False, sort_keys=True) != json.dumps(
+            f["properties"], ensure_ascii=False, sort_keys=True
+        ):
+            f["properties"] = old["properties"]
+            restored += 1
+    if geom_bad:
+        raise SystemExit(f"[중단] 송파117 밖 구역의 도형이 {geom_bad}곳 바뀌었습니다 — 원인을 확인하세요")
+    if restored:
+        GEOJSON.write_text(json.dumps(geo, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"[보존] 송파117 밖 구역 properties 되돌림 {restored}곳 · 도형 변경 0곳")
 
 
 def apply() -> int:
@@ -422,6 +507,7 @@ def apply() -> int:
     # 이 작업 환경에서는 npm 이 HOME 캐시를 못 써 exit 1 로 끝난다 — 같은 일을 하는 node 스크립트를 직접 부른다
     print("[내보내기] node scripts/export-geojson.mjs (= npm run geojson)")
     subprocess.run(["node", "scripts/export-geojson.mjs"], cwd=ROOT, check=True)
+    _restore_untouched()
     print("[색인] node scripts/build-zone-index.mjs")
     subprocess.run(["node", "scripts/build-zone-index.mjs"], cwd=ROOT, check=True)
     return check()

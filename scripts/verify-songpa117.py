@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""송파동 117 일대(송파1동 하단) 모아타운 1~5구역계 — 배포본 검수 + 스크린샷
+"""송파동 117 일대(송파1동 하단) 모아타운 1~5구역계 — 배포본 검수 + 스크린샷 (3차 블록 기준)
 
   TARGET_URL=https://redev-platform-iota.vercel.app python3 scripts/verify-songpa117.py
 
-  확인
-    1) 배포본 zones.geojson 의 5개 구역이 새 도형(꼭짓점 4·4·6·4·5)과 계측 면적으로 실렸는가
-    2) 서울송파초등학교(송파동 114학)·송파근린공원(송파동 113공) 필지와 교집합이 0㎡ 인가
-    3) `?zone=` 상세 패널이 '참고도'·면적·새 경계 설명을 보여주는가
-    4) 지도에 경계가 그려지고(지적편집도 켜고) 콘솔 오류 0건인가
-    5) 스크린샷 — 앱의 카카오맵 투영으로 위경도→화면 픽셀을 받아, 학교·공원 필지와 1~5구역계를
-       화면 위에 겹쳐 그린 검수 이미지를 남긴다
-         downloads/redev_songpa117_fixed.png        (1~5구역 전체)
-         downloads/redev_songpa117_fixed_school.png (학교 담장·공원 경계 확대)
-         downloads/redev_songpa117_fixed*_raw.png   (주석 없는 원본 화면)
+  3차(2026-11-23 밤) 확인 항목
+    1) 배포본 zones.geojson 2,440곳 — 5개 구역이 새 블록 도형(꼭짓점 4·5·5·4·7)과 계측 면적으로 실렸는가
+    2) 지도 배지 이름이 `송파117 1구역`~`송파117 5구역`으로 **잘리지 않고** 뜨는가
+       (지도 이름표는 12~14자에서 잘린다 — DOM .zone-tag 글자에 `…` 가 없어야 한다)
+       + 기존 긴 이름(`(가칭)송파1동 하단 모아타운 N구역` 등)이 alias 로 살아 검색되는가
+    3) 3구역이 송파한양1차와 맞닿고(이격 ≤ 8m) 5구역이 송파한양1차와 겹치지 않는가(교집합 0㎡)
+    4) 서울송파초등학교(114학)·송파근린공원(113공)과 교집합 0㎡
+    5) 부모 `songpa117-moa` MultiPolygon 5장 · 합계 83,193㎡
+    6) 콘솔 오류 0건
+    7) 스크린샷 — 앱의 카카오맵 투영으로 위경도→화면 픽셀을 받아 구역계·송파한양1차·학교·공원을 겹쳐 그린다
+         downloads/redev_songpa117_v3.png      (1~5구역 + 송파한양1차 + 학교·공원)
+         downloads/redev_songpa117_v3_raw.png  (주석 없는 원본 화면)
 """
 import json
 import os
@@ -27,8 +29,14 @@ BASE = os.environ.get("TARGET_URL", "https://redev-platform-iota.vercel.app").rs
 D = "/workspace/downloads"
 SS = 2  # device_scale_factor
 
-VERTS = {"1": 4, "2": 4, "3": 6, "4": 4, "5": 5}
-AREAS = {"1": 15611, "2": 16385, "3": 16043, "4": 13142, "5": 19514}
+# 2026-11-23 3차(블록 기준) — tmp/songpa117_clean_rings.json 과 같은 값
+VERTS = {"1": 4, "2": 5, "3": 5, "4": 4, "5": 7}
+AREAS = {"1": 15196, "2": 17426, "3": 17786, "4": 12862, "5": 19923}
+NAMES = {n: f"송파117 {n}구역" for n in "12345"}
+OLD_NAMES = {n: f"(가칭)송파1동 하단 모아타운 {n}구역" for n in "12345"}
+TOTAL = 83193
+HANYANG_ID = "11000UQ120PS202502050014"
+
 # 브이월드 연속지적도 그대로 — 서울송파초등학교(송파동 114학) / 송파근린공원(송파동 113공)
 SCHOOL = [[37.507824, 127.110755], [37.507618, 127.111079], [37.507570, 127.111153], [37.507270, 127.111626],
           [37.507242, 127.111669], [37.507197, 127.111674], [37.507153, 127.111626], [37.506790, 127.111229],
@@ -56,6 +64,15 @@ def overlap_area(a, b) -> float:
         return [(p[1] * 88300.0, p[0] * 110540.0) for p in ring]
 
     return Polygon(xy(a)).intersection(Polygon(xy(b))).area
+
+
+def gap(a, b) -> float:
+    from shapely.geometry import Polygon
+
+    def xy(ring):
+        return [(p[1] * 88300.0, p[0] * 110540.0) for p in ring]
+
+    return Polygon(xy(a)).distance(Polygon(xy(b)))
 
 
 def rings_of(feats, zid):
@@ -116,8 +133,8 @@ def project(page, rings):
     )
 
 
-def annotate(raw_path, out_path, screens, title, pad=70):
-    """원본 화면 위에 학교·공원 필지와 1~5구역계를 겹쳐 그린 검수 이미지(3:2 로 잘라 냄)."""
+def annotate(raw_path, out_path, screens, title, pad=90):
+    """원본 화면 위에 송파한양1차·학교·공원 필지와 1~5구역계를 겹쳐 그린 검수 이미지(3:2 로 잘라 냄)."""
     im = Image.open(raw_path).convert("RGB")
     xs = [p[0] for pts in screens.values() for p in pts]
     ys = [p[1] for pts in screens.values() for p in pts]
@@ -146,24 +163,35 @@ def annotate(raw_path, out_path, screens, title, pad=70):
     d = ImageDraw.Draw(ov)
     font = ImageFont.truetype("/workspace/fonts/NanumGothic-Regular.ttf", 26)
     small = ImageFont.truetype("/workspace/fonts/NanumGothic-Regular.ttf", 22)
-    for key, col, label in (("school", (0, 160, 0), "서울송파초등학교 (송파동 114학)"),
-                            ("park", (235, 110, 0), "송파근린공원 (송파동 113공)")):
-        pts = [tuple(p) for p in screens[key]]
-        d.polygon(pts, fill=col + (60,))
-        d.line(pts + [pts[0]], fill=col + (255,), width=5)
+
+    def label(pts, col, text, dy=-16):
         cx2 = sum(p[0] for p in pts) / len(pts)
-        cy2 = sum(p[1] for p in pts) / len(pts)
-        tw = d.textlength(label, font=small)
+        cy2 = sum(p[1] for p in pts) / len(pts) + dy
+        tw = d.textlength(text, font=small)
         d.rectangle([cx2 - tw / 2 - 8, cy2 - 16, cx2 + tw / 2 + 8, cy2 + 16], fill=(255, 255, 255, 225))
-        d.text((cx2 - tw / 2, cy2 - 13), label, fill=col + (255,), font=small)
+        d.text((cx2 - tw / 2, cy2 - 13), text, fill=col + (255,), font=small)
+
+    for key, col, text in (("hanyang", (110, 60, 180), "송파한양1차(필지 119)"),
+                           ("school", (0, 160, 0), "서울송파초등학교(114학)"),
+                           ("park", (235, 110, 0), "송파근린공원(113공)")):
+        pts = [tuple(p) for p in screens[key]]
+        d.polygon(pts, fill=col + (46,))
+        d.line(pts + [pts[0]], fill=col + (255,), width=4)
+        label(pts, col, text)
+
     for n in "12345":
         pts = [tuple(p) for p in screens[f"zone{n}"]]
         d.line(pts + [pts[0]], fill=ZCOL[n] + (255,), width=4)
         cx2 = sum(p[0] for p in pts) / len(pts)
         cy2 = sum(p[1] for p in pts) / len(pts)
-        d.ellipse([cx2 - 17, cy2 - 17, cx2 + 17, cy2 + 17], fill=(255, 255, 255, 230), outline=ZCOL[n] + (255,), width=3)
-        d.text((cx2 - 7, cy2 - 14), n, fill=ZCOL[n] + (255,), font=small)
-    lines = ["굵은 초록 = 서울송파초등학교 필지", "굵은 주황 = 송파근린공원 필지", "색선 1~5 = 모아타운 구역계(참고도)"]
+        d.ellipse([cx2 - 19, cy2 - 19, cx2 + 19, cy2 + 19], fill=(255, 255, 255, 235), outline=ZCOL[n] + (255,), width=3)
+        d.text((cx2 - 7, cy2 - 15), n, fill=ZCOL[n] + (255,), font=small)
+
+    lines = [
+        "굵은 남색 = 송파한양1차 필지(겹침 0㎡)",
+        "굵은 초록 = 서울송파초등학교 · 주황 = 송파근린공원 (겹침 0㎡)",
+        "색선 1~5 = 모아타운 구역계(연속지적도 블록 기준·참고도 ±5m)",
+    ]
     bw = max(d.textlength(t, font=small) for t in lines) + 26
     d.rectangle([24, 24, 24 + bw, 24 + 30 * len(lines) + 46], fill=(255, 255, 255, 235))
     d.text((36, 32), title, fill=(20, 20, 20, 255), font=font)
@@ -177,17 +205,48 @@ def run():
     geo = fetch_geojson()
     feats = {f["properties"]["id"]: f for f in geo["features"]}
     check("배포본 zones.geojson 2,440곳", len(geo["features"]) == 2440, str(len(geo["features"])))
+
+    hanyang = rings_of(feats, HANYANG_ID)
+    check("송파한양1차(119) 도형 확보", len(hanyang) >= 3, f"정점 {len(hanyang)}")
+
     zones = {}
     for n in "12345":
-        ring = rings_of(feats, f"songpa117-moa-{n}")
+        zid = f"songpa117-moa-{n}"
+        ring = rings_of(feats, zid)
         zones[n] = ring
-        p = (feats.get(f"songpa117-moa-{n}") or {}).get("properties", {})
-        ok = len(ring) == VERTS[n] and p.get("geom") == "참고도" and abs((p.get("area") or 0) - AREAS[n]) < 1
+        p = (feats.get(zid) or {}).get("properties", {})
         sc = overlap_area(ring, SCHOOL) if ring else -1
         pk = overlap_area(ring, PARK) if ring else -1
-        ok = ok and sc < 0.5 and pk < 0.5
-        check(f"{n}구역 — 꼭짓점 {VERTS[n]}·{AREAS[n]:,}㎡·학교/공원 교집합 0",
-              ok, f"정점 {len(ring)} · area={p.get('area')} · geom={p.get('geom')} · 학교 {sc:.1f}㎡ · 공원 {pk:.1f}㎡")
+        hy = overlap_area(ring, hanyang) if ring and hanyang else -1
+        hd = gap(ring, hanyang) if ring and hanyang else -1
+        ok = (
+            len(ring) == VERTS[n]
+            and p.get("geom") == "참고도"
+            and abs((p.get("area") or 0) - AREAS[n]) < 1
+            and p.get("name") == NAMES[n]
+            and len(p.get("name") or "") <= 10
+            and OLD_NAMES[n] in (p.get("alias") or [])
+            and sc < 0.5 and pk < 0.5 and hy < 0.5
+        )
+        check(
+            f"{n}구역 — 정점 {VERTS[n]}·{AREAS[n]:,}㎡·배지 '{NAMES[n]}'·alias 유지·학교/공원/한양 교집합 0",
+            ok,
+            f"정점 {len(ring)} · area={p.get('area')} · name={p.get('name')} · alias {len(p.get('alias') or [])}개"
+            f" · 학교 {sc:.1f}㎡ · 공원 {pk:.1f}㎡ · 한양 {hy:.1f}㎡(이격 {hd:.1f}m)",
+        )
+        if n == "3":
+            check("3구역이 송파한양1차에 맞닿음(이격 ≤ 8m)", 0 <= hd <= 8.0, f"{hd:.1f}m")
+        if n == "5":
+            check("5구역이 송파한양1차와 겹치지 않음", abs(hy) < 0.5, f"교집합 {hy:.1f}㎡ · 이격 {hd:.1f}m")
+
+    pp = (feats.get("songpa117-moa") or {}).get("properties", {})
+    pg = (feats.get("songpa117-moa") or {}).get("geometry") or {}
+    parts = len(pg.get("coordinates") or [])
+    check(
+        f"부모 songpa117-moa — MultiPolygon {parts}장 · 합계 {TOTAL:,}㎡",
+        pg.get("type") == "MultiPolygon" and parts == 5 and (pp.get("area") or 0) == TOTAL,
+        f"{pg.get('type')} {parts}장 · area={pp.get('area')}",
+    )
 
     with sync_playwright() as pw:
         b = pw.chromium.launch(args=["--no-sandbox"])
@@ -197,49 +256,43 @@ def run():
         page.on("pageerror", lambda e: errs.append("pageerror: " + str(e)[:200]))
         page.on("console", lambda m: errs.append("console: " + m.text[:160]) if m.type == "error" else None)
 
-        # ① 1~5구역 전체 — 부모 구역 딥링크(레벨 4) → 확대 1회(레벨 3)
         page.goto(f"{BASE}/?zone=songpa117-moa&diag=1", wait_until="domcontentloaded")
         page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
         time.sleep(8)
         body = page.locator("body").inner_text()
-        check("부모 구역 패널 — 참고도·80,695㎡", "참고도" in body and "80,695" in body, "")
-        check("부모 구역 패널 — 새 경계 설명(정합·직선)", "직선" in body and "송파초등학교" in body, "")
+        check("부모 구역 패널 — 참고도·83,193㎡", "참고도" in body and "83,193" in body, "")
+        check("부모 구역 패널 — 블록 기준·송파한양1차 설명", "필지" in body and "송파한양1차" in body, "")
         zoom_in(page, 1)
         cadastral_on(page)
-        time.sleep(1.0)
+        time.sleep(1.5)
+
         st = map_state(page)
-        check("지도 중심이 구역 안(37.5063±0.002)", abs((st or {}).get("lat", 0) - 37.5063) < 0.002, str(st))
-        raw_full = f"{D}/redev_songpa117_fixed_raw.png"
+        check("지도 중심이 구역 안(37.5063±0.003)", abs((st or {}).get("lat", 0) - 37.5063) < 0.003, str(st))
+
+        # 지도 배지 — DOM .zone-tag 글자 그대로(잘리면 이름 뒤에 … 가 붙는다)
+        tags = page.eval_on_selector_all("[data-testid='zone-tag'] b", "els => els.map(e => e.textContent.trim())")
+        mine = [t for t in tags if "송파117" in t]
+        check("지도 배지 5개가 모두 뜸", len(set(mine)) >= 5, f"배지 {sorted(set(mine))}")
+        check("배지 이름이 잘리지 않음(… 없음)", all("…" not in t for t in mine) and set(NAMES.values()) <= set(mine),
+              f"{sorted(set(mine))}")
+        for n in "12345":
+            el = page.locator("[data-testid='zone-tag']", has_text=NAMES[n]).first
+            if el.count():
+                clip = el.evaluate("e => {const b=e.querySelector('b'); return {sw:b.scrollWidth, cw:b.clientWidth, text:b.textContent};}")
+                check(f"배지 '{NAMES[n]}' 넘침 없음", clip["sw"] <= clip["cw"] + 1, str(clip))
+
+        raw_full = f"{D}/redev_songpa117_v3_raw.png"
         page.screenshot(path=raw_full)
-        rings = {"school": SCHOOL, "park": PARK}
+        rings = {"hanyang": hanyang, "school": SCHOOL, "park": PARK}
         for n, ring in zones.items():
             rings[f"zone{n}"] = ring
-        annotate(raw_full, f"{D}/redev_songpa117_fixed.png", project(page, rings), "송파1동 하단 모아타운 — 수정 후")
-
-        # ② 학교 담장·공원 확대 — 3구역 딥링크(레벨 4) → 확대 2회(레벨 2) + 서쪽으로 이동
-        page.goto(f"{BASE}/?zone=songpa117-moa-3&diag=1", wait_until="domcontentloaded")
-        page.wait_for_selector(".kakao-zone-canvas", timeout=90000)
-        time.sleep(8)
-        body = page.locator("body").inner_text()
-        check("3구역 패널 — 참고도·16,043㎡", "참고도" in body and "16,043" in body, "")
-        zoom_in(page, 2)
-        page.mouse.move(700, 520)
-        page.mouse.down()
-        for x in range(700, 980, 28):
-            page.mouse.move(x, 520)
-            time.sleep(0.04)
-        page.mouse.up()
-        time.sleep(2.0)
-        cadastral_on(page)
-        time.sleep(1.0)
-        raw_close = f"{D}/redev_songpa117_fixed_school_raw.png"
-        page.screenshot(path=raw_close)
-        annotate(raw_close, f"{D}/redev_songpa117_fixed_school.png", project(page, rings),
-                 "학교 담장·공원 경계 확대")
+        annotate(raw_full, f"{D}/redev_songpa117_v3.png", project(page, rings),
+                 "송파117 모아타운 1~5구역 — 블록 기준 재작성(2026-11-23 3차)")
 
         real = [e for e in errs if "favicon" not in e and "ResizeObserver" not in e]
         check("콘솔 오류 0", len(real) == 0, str(real[:3]))
         b.close()
+
     print("실패", len(failures), failures)
     return 0 if not failures else 1
 
