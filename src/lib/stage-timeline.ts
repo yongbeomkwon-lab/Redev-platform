@@ -150,7 +150,7 @@ export const FAMILY_LABEL: Record<StageFamily, string> = {
 export function pickFamily(type: MapZoneType | string, kind: string | undefined, stage: string): StageFamily {
   const k = kind ?? "";
   const s = stage ?? "";
-  if (type === "모아타운") return "moa";
+  if (type === "모아타운" || type === "모아타운통합기획") return "moa";
   if (type === "가로주택" || type === "소규모") {
     // 가로주택 부지가 모아타운 관리계획에 묶여 고시된 경우(예: 중화1동 3구역)는 모아타운 절차로 본다
     return s.includes("모아타운") ? "moa" : "small";
@@ -453,6 +453,8 @@ export const HALTED_STAGE: Record<string, string> = {
 export const EXACT_BY_TYPE: Partial<Record<string, Record<string, StageEvent[]>>> = {
   // 모아타운의 '위원회심의'는 관리계획(수립·공람) 심의라 구역지정이 아니다
   "모아타운": { "위원회심의": [E("plan", undefined, true)] },
+  // 모아타운통합기획도 같은 모아타운 절차를 따른다(통합기획 단계가 앞에 붙을 뿐 관리계획 심의 자리는 같다)
+  "모아타운통합기획": { "위원회심의": [E("plan", undefined, true)] },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -581,6 +583,7 @@ export function buildStageTimeline(zone: {
     !!zone.selectedAt &&
     (zone.type === "신통기획" ||
       zone.type === "모아타운" ||
+      zone.type === "모아타운통합기획" ||
       zone.type === "도공복" ||
       (zone.type ?? "").toString().startsWith("민간도심복합") ||
       zone.type === "공공재개발");

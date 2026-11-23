@@ -17,11 +17,13 @@ import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS } from "@/components/map/colors";
 import { ZONE_TYPE_KIND, zoneFromRow, type ZoneRecord } from "@/lib/db-mapping";
 
-/** 사업유형 — 기존 8분류 + 민간도심복합 2유형 + 재건축 + 기타(직접 입력 구역) */
+/** 사업유형 — 기존 8분류 + 민간도심복합 2유형 + 재건축 + 모아타운통합기획 + 기타(직접 입력 구역) */
 export const CUSTOM_ZONE_TYPES = [
   "재건축",
   "신통기획",
   "모아타운",
+  // 모아타운 바로 아래에 둔다 — 같은 사업의 갈래라 고를 때 눈에 바로 걸리게
+  "모아타운통합기획",
   "일반재개발",
   "도공복",
   "민간도심복합(성장거점형)",

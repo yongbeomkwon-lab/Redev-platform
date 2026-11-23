@@ -113,7 +113,7 @@ const LEGEND_GROUPS: { label: string; color: string; types: MapZoneType[] }[] = 
   { label: "일반재개발", color: TYPE_COLORS["일반재개발"], types: ["일반재개발"] },
   { label: "공공재개발", color: TYPE_COLORS["공공재개발"], types: ["공공재개발"] },
   { label: "신속통합기획", color: TYPE_COLORS["신통기획"], types: ["신통기획"] },
-  { label: "모아타운", color: TYPE_COLORS["모아타운"], types: ["모아타운"] },
+  { label: "모아타운", color: TYPE_COLORS["모아타운"], types: ["모아타운", "모아타운통합기획"] },
   { label: "도공복", color: TYPE_COLORS["도공복"], types: ["도공복"] },
   {
     label: "민간도심복합",

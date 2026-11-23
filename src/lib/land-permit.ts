@@ -96,7 +96,7 @@ const BLOCKS: { gu: string; keywords: string[]; label: string; period: string; n
 ];
 
 /** 사업구역 단위로 개별 지정되는 사업유형 — 지정 여부는 구역마다 다르다 */
-const POLICY_TYPES = ["신통기획", "모아타운"];
+const POLICY_TYPES = ["신통기획", "모아타운", "모아타운통합기획"];
 const POLICY_KIND_WORDS = ["공공재개발", "신속통합기획", "모아타운"];
 
 /**

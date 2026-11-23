@@ -126,10 +126,12 @@ export type ZoneRecord = {
   updatedAt: string;
 };
 
-/** 사업유형 → 서울시 사업유형 소분류(kind). 민간도심복합만 소분류 이름이 유형에 들어 있다 */
+/** 사업유형 → 서울시 사업유형 소분류(kind). 민간도심복합·모아타운통합기획만 소분류 이름이 유형에 들어 있다 */
 export const ZONE_TYPE_KIND: Partial<Record<string, string>> = {
   "민간도심복합(성장거점형)": "민간도심복합개발(성장거점형)",
   "민간도심복합(주거중심형)": "민간도심복합개발(주거중심형)",
+  // 서울시가 쓰는 소분류 이름 그대로 — 양재동 397-1 일대가 이 소분류로 들어와 있다
+  "모아타운통합기획": "모아타운(모아통합기획)",
 };
 
 const isFinitePair = (p: unknown): p is [number, number] =>
