@@ -22,7 +22,7 @@ import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
 import { DEV_GRADE_COLOR, loadDevPressure, type DevHotspot, type RecentZone } from "@/lib/dev-pressure";
-import { TYPE_COLORS } from "@/components/map/colors";
+import { TYPE_COLORS, TYPE_INK, TYPE_TINT } from "@/components/map/colors";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import ZoneTransactions from "@/components/ZoneTransactions";
@@ -36,6 +36,8 @@ import {
   meters,
   prepareAllZones,
   verdictHeadline,
+  zoneByJibunName,
+  zonesAtAddress,
   type AddressVerdict,
 } from "@/lib/address-verdict";
 import type {
@@ -121,6 +123,49 @@ const LEGEND_GROUPS: { label: string; color: string; types: MapZoneType[] }[] = 
   { label: "역세권", color: TYPE_COLORS["역세권"], types: ["역세권"] },
   { label: "장기전세", color: TYPE_COLORS["장기전세"], types: ["장기전세"] },
 ];
+
+/** 주소 자동완성 줄에 붙는 구역명 — 어느 구역을 찾았는지와 그 근거를 함께 들고 다닌다 */
+type AddrZoneBadge = {
+  name: string;
+  type: MapZoneType;
+  completed: boolean;
+  /** 겹친 구역 수 — 2곳 이상이면 '+N' 으로 접고 title 에 전부 적는다 */
+  count: number;
+  /** 경계 도형이 아니라 '동+지번 = 구역 이름'으로 찾은 경우(경계 미고시·보정 경계) */
+  byJibun: boolean;
+  /** 마우스를 올리면 보이는 설명(구역명·단계·근거) */
+  title: string;
+};
+
+/**
+ * 주소 자동완성 줄의 구역명 배지.
+ *   · 사업유형 색은 지도 폴리곤·상세 패널 뱃지와 같은 팔레트를 쓴다 — 어느 구역인지 색으로도 이어진다.
+ *   · 준공 구역과 '지번 기준'으로 찾은 구역은 슬레이트로 눌러 쓴다(진행 중 구역과 헷갈리지 않게).
+ *   · 주소가 길어도 배지는 줄지 않게 두고, 주소 쪽을 말줄임한다(구역명이 이 기능의 핵심).
+ */
+function AddressZoneBadge({ badge }: { badge: AddrZoneBadge }) {
+  const muted = badge.completed || badge.byJibun;
+  const color = TYPE_COLORS[badge.type] ?? "#64748B";
+  const ink = muted ? "#475569" : TYPE_INK[badge.type] ?? "#334155";
+  const tint = muted ? "#F1F5F9" : TYPE_TINT[badge.type] ?? "#F1F5F9";
+  return (
+    <span
+      data-testid="address-zone-badge"
+      title={badge.title}
+      className="inline-flex max-w-[54%] shrink-0 items-center gap-1 rounded-[5px] px-1.5 py-[2px] text-[11px] font-bold leading-[14px]"
+      style={{ backgroundColor: tint, color: ink, boxShadow: `inset 0 0 0 1px ${color}30` }}
+    >
+      <i
+        aria-hidden
+        className="h-[5px] w-[5px] shrink-0 rounded-full"
+        style={{ backgroundColor: muted ? "#94A3B8" : color }}
+      />
+      {badge.completed && <span className="shrink-0 opacity-70">준공</span>}
+      <span className="min-w-0 truncate">{badge.name}</span>
+      {badge.count > 1 && <span className="shrink-0 opacity-70">+{badge.count - 1}</span>}
+    </span>
+  );
+}
 
 /**
  * YYYYMM 이 지금부터 몇 달 전인가 — `/api/transactions/building` 의 `offset` 과 같은 셈법(0 = 이번 달).
@@ -699,6 +744,55 @@ export default function ZoneExplorer() {
   //   준공 구역도 "주소가 속한 곳"을 말할 때는 빠지면 안 된다 — 표시 여부(visibleSeoulZones)와
   //   무관하게 전체(진행 중 1,822 + 준공 357)에 대고 판정하고, 숨겨졌으면 안내문으로 알린다.
   const allPrep = useMemo(() => prepareAllZones(seoulZones), [seoulZones]);
+
+  // ── 주소 자동완성 줄의 구역명 (2026-11-23 요청) ─────────────────────────────
+  //   재개발닷컴처럼 "주소 + 그 주소가 속한 구역"이 한 줄에서 바로 읽히게 한다.
+  //     · 포함 판정만 한다(거리 계산 없음) — 타이핑할 때마다 후보 8건을 판정해도 가볍다.
+  //     · 경계 도형이 없거나(점 표시) 보정 경계가 지번 대표점을 살짝 벗어난 구역은
+  //       '동+지번 = 구역 이름'으로 찾는다(신길동 113-5·방배동 2732번지 일대 같은 구역).
+  //     · 구역 밖 주소는 배지를 달지 않는다 — 줄이 지저분해지고, 틀린 구역명은 오해를 만든다.
+  const addrZoneBadges = useMemo(() => {
+    const out = new Map<string, AddrZoneBadge>();
+    if (!addrCandidates.length || !seoulZones.length) return out;
+    for (const c of addrCandidates) {
+      const hits = zonesAtAddress(allPrep, c.lat, c.lng);
+      // 지번이 곧 구역 이름인 구역(신길동 113-5·행촌동 210-2 일대)을 먼저 본다 — 사용자가 친
+      // 지번과 이름이 같은 구역이 곧 그 주소의 구역이고, 경계가 점으로만 표시된 후보지도 여기서 잡힌다.
+      const byJibun = zoneByJibunName(seoulZones, c.dong, c.jibun, c.gu);
+      const named = byJibun && !hits.some((h) => h.zone.id === byJibun.id) ? byJibun : null;
+
+      if (named) {
+        out.set(c.key, {
+          name: named.name,
+          type: named.type,
+          completed: isCompletedZone(named),
+          count: 1,
+          // 경계 도형으로 확인한 것이 아니라 지번(이름)으로 찾은 경우만 눌러 쓴다
+          byJibun: !named.polygon,
+          title:
+            `${named.name} · ${named.stage}\n지번(대표 필지) 기준` +
+            (named.polygon ? "" : " — 구역 경계 도형이 아직 고시되지 않았습니다") +
+            (hits.length ? `\n이 지점은 ${hits[0].zone.name} 경계 안에 있습니다` : ""),
+        });
+        continue;
+      }
+
+      if (hits.length) {
+        const first = hits[0];
+        out.set(c.key, {
+          name: first.zone.name,
+          type: first.zone.type,
+          completed: first.completed,
+          count: hits.length,
+          byJibun: false,
+          title:
+            hits.map((h) => `${h.zone.name} · ${h.completed ? "준공" : h.zone.stage}`).join("\n") +
+            (hits.length > 1 ? `\n겹친 구역 ${hits.length}곳 — 안쪽 구역부터` : ""),
+        });
+      }
+    }
+    return out;
+  }, [addrCandidates, seoulZones, allPrep]);
 
   // ── 지도에서 찍은 지번 ────────────────────────────────────────────────
   //   · 즉시 핀을 꽂고(로딩 상태) 역지오코딩으로 법정동·지번을 채운다.
@@ -1764,7 +1858,21 @@ export default function ZoneExplorer() {
                               ⌖
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium text-slate-800">{c.label}</span>
+                              {/* 주소 + 소속 구역명 — 재개발닷컴처럼 한 줄에서 바로 읽히게(2026-11-23).
+                                  · 카카오 주소 검색은 서울만 돌려주므로 앞의 `서울 ` 은 떼고 동·번지가 먼저 오게 한다
+                                    (전체 주소는 title 로 남긴다).
+                                  · 주소가 길면 주소만 말줄임하고 구역명 배지는 줄이지 않는다. */}
+                              <span className="flex items-center gap-1.5">
+                                <span
+                                  className="min-w-0 shrink truncate text-sm font-medium text-slate-800"
+                                  title={c.label}
+                                >
+                                  {c.label.replace(/^서울(특별시)?\s+/, "")}
+                                </span>
+                                {addrZoneBadges.get(c.key) && (
+                                  <AddressZoneBadge badge={addrZoneBadges.get(c.key)!} />
+                                )}
+                              </span>
                               {c.detail && (
                                 <span className="block truncate text-[11px] text-slate-500">{c.detail}</span>
                               )}

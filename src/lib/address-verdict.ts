@@ -75,6 +75,60 @@ export function judgeAddress(
   return { address, inside, completedHits, nearCandidates, nearest, status };
 }
 
+/**
+ * 검색 자동완성용 — 주소가 **속한 구역**만 빠르게 돌려준다(거리·최근접 계산 없이 포함 판정만).
+ *   · judgeAddress 는 '가까운 구역'까지 재느라 모든 링의 선분을 훑는다 — 타이핑할 때마다
+ *     후보 8건에 돌리면 무겁다. 자동완성 줄의 구역명 배지는 포함 판정(광선교차)만 있으면 된다.
+ *   · 안쪽(작은) 구역부터 — 겹친 구역 가운데 사용자가 보려는 것은 안쪽 구역이다.
+ */
+export function zonesAtAddress(prep: PreparedZones, lat: number, lng: number): ZoneHit[] {
+  return zonesContaining(prep, lat, lng).map((z) => ({
+    zone: z.zone,
+    completed: z.completed || isCompletedZone(z.zone),
+  }));
+}
+
+/**
+ * 주소의 '법정동 + 지번'이 **구역 이름·별칭과 같은** 구역 — 경계 도형이 없거나(점 표시)
+ * 보정 경계가 지번 대표점을 살짝 벗어난 경우의 안전망이다.
+ *   · 예: `신길동 113-5`(신통기획 후보지), `방배동 2732번지 일대` — 지번이 곧 구역 이름인 구역.
+ *   · 이름이 정확히 같은 구역을 먼저 찾고, 없으면 `… 번지 일대`처럼 뒤에 말이 붙은 이름을 본다.
+ *   · 숫자 경계를 엄격히 본다 — `신길동 113-5`가 `신길동 113-55`나 `성수동2가 …`에 걸리면 안 된다.
+ *   · 자치구가 다르면 다른 동이므로 넘긴다(신사동은 강남구·은평구에 함께 있다).
+ */
+export function zoneByJibunName(
+  zones: SeoulZone[],
+  dong?: string,
+  jibun?: string,
+  gu?: string
+): SeoulZone | null {
+  const d = (dong ?? "").trim();
+  const j = (jibun ?? "").trim();
+  if (!d || !j) return null;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // `산` 지번은 주소에 `산12-3`으로 오고 구역 이름에는 `12-3`으로 적힌 경우가 있어 둘 다 본다
+  const numbers = Array.from(new Set([j, j.replace(/^산/, "")])).filter((v) => v.length > 0);
+  const patterns = numbers.map(
+    (num) => new RegExp(`^${esc(d)}\\s*${esc(num)}(?![0-9가-])`)
+  );
+  const candidates = zones.filter((z) => !gu || z.gu === gu);
+
+  for (const exact of [true, false]) {
+    for (const z of candidates) {
+      for (const name of [z.name, ...(z.alias ?? [])]) {
+        const n = (name ?? "").trim();
+        if (!n) continue;
+        if (exact) {
+          if (numbers.some((num) => n === `${d} ${num}`)) return z;
+        } else if (patterns.some((re) => re.test(n))) {
+          return z;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /** 말풍선·카드에 쓰는 한 줄 판정 문구 — 구역 밖은 빈 문자열(문구 없이 지점만) */
 export function verdictHeadline(v: AddressVerdict): string {
   switch (v.status) {
