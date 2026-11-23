@@ -79,23 +79,25 @@ export function addressPinHtml(pin: AddressPin): string {
 }
 
 /**
- * 필지 '보는중' 말풍선 — 주소로 고른 지번의 지적 경계 위에 얹는다(2026-11-23 요청).
+ * 필지 '보는중' 말풍선 — 주소로 고른 지번의 지적 경계에 붙여 띄운다(2026-11-23 요청).
  *   · 레퍼런스(타 앱 캡처)처럼 **짙은 회색 반투명 알약 + 흰 글씨**로, 파란 필지 채움 위에서도 읽힌다.
- *   · 한 줄로 짧게 둔다 — 필지는 작게 보이는 일이 많아(수십 px) 두 줄이면 채움을 다 덮는다.
- *     어느 필지인지는 바로 위 주소 핀 카드가 이미 말해 준다.
+ *   · 자리는 **필지 남쪽 변 아래** — 필지가 작게(30~60px) 보이는 일이 많아 가운데에 얹으면
+ *     파란 채움을 다 덮는다. 위를 가리키는 꼬리로 어느 필지인지 이어 준다.
+ *   · 한 줄로 짧게 — 어느 필지인지는 바로 위 주소 핀 카드가 이미 말해 준다.
  */
 export function parcelBubbleHtml(): string {
   return `
-  <div style="transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;pointer-events:none;">
+  <div style="transform:translate(-50%,7px);display:flex;flex-direction:column;align-items:center;pointer-events:none;">
+    <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:6px solid rgba(17,24,39,.92);"></div>
     <div style="border-radius:8px;background:rgba(17,24,39,.92);padding:2px 8px 3px;box-shadow:0 4px 14px rgba(15,23,42,.38);white-space:nowrap;">
       <span style="display:inline-block;width:4px;height:4px;border-radius:999px;background:#fbbf24;vertical-align:middle;margin-right:4px;"></span>
       <span style="font-size:10.5px;font-weight:800;line-height:1.3;color:#ffffff;letter-spacing:-0.2px;vertical-align:middle;">보는중</span>
     </div>
-    <div style="width:0;height:0;margin-top:-1px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid rgba(17,24,39,.92);"></div>
   </div>`;
 }
 
 /**
+ * 지하철역 핀 한 벌/**
  * 지하철역 핀 한 벌/**
  * 지하철역 핀 한 벌 — [흰 카드: 역명 + 노선 배지][꼬리][파란 드롭핀].
  *  · 주소 핀과 같은 생김새를 쓰되 색은 지하철 파랑(#0054a6) — 두 핀이 겹쳐도 구분된다.

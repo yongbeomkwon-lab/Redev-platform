@@ -125,7 +125,12 @@ function ParcelLayer({ parcel }: { parcel?: Parcel | null }) {
         ))}
       </Pane>
       <Pane name="redevParcelLabel" style={{ zIndex: 905 }}>
-        <Marker position={parcel.center} icon={icon} interactive={false} keyboard={false} />
+        <Marker
+          position={[parcel.bounds.minLat, (parcel.bounds.minLng + parcel.bounds.maxLng) / 2]}
+          icon={icon}
+          interactive={false}
+          keyboard={false}
+        />
       </Pane>
     </>
   );

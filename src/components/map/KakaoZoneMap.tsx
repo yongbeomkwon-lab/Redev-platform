@@ -916,7 +916,7 @@ export default function KakaoZoneMap({
     if (parcelLayer) {
       const at = parcelAtRef.current;
       const px = parcelPxRef.current;
-      const tooSmall = !px || Math.max(px.w, px.h) < 30;
+      const tooSmall = !px || Math.max(px.w, px.h) < 18;
       if (!at || tooSmall) parcelLayer.style.visibility = "hidden";
       else placeOnMap(parcelLayer, at.lat, at.lng);
     }
@@ -1752,7 +1752,8 @@ export default function KakaoZoneMap({
       const b = parcelShape.bounds;
       const [bx0, by0] = toXY(b.minLat, b.minLng);
       const [bx1, by1] = toXY(b.maxLat, b.maxLng);
-      parcelAtRef.current = visible ? { lat: (b.minLat + b.maxLat) / 2, lng: (b.minLng + b.maxLng) / 2 } : null;
+      // 말풍선은 **남쪽 변 아래**에 붙인다 — 필지 가운데에 얹으면 작은 필지의 파란 채움을 다 덮는다
+      parcelAtRef.current = visible ? { lat: b.minLat, lng: (b.minLng + b.maxLng) / 2 } : null;
       parcelPxRef.current = visible ? { w: Math.abs(bx1 - bx0), h: Math.abs(by1 - by0) } : null;
     } else {
       parcelAtRef.current = null;
