@@ -408,7 +408,8 @@ export default function CasesPage() {
               <ol className="space-y-2">
                 {c.law.map((l, i) => (
                   <li key={i} className="text-[12.5px] leading-[1.75] text-slate-700">
-                    <span className="mr-1 text-[11px] font-extrabold text-brand">{i + 1}</span>
+                    {/* 숫자 대신 원문자 — '1 구 도시정비법'처럼 숫자와 조문이 붙어 읽히는 것을 막는다 */}
+                    <span className="mr-1 font-bold text-brand">{["①", "②", "③", "④"][i]}</span>
                     {l.text}
                     {l.cite && (
                       <span className="mt-0.5 block text-[11px] font-medium text-slate-500">
