@@ -1478,7 +1478,7 @@ export default function ZoneExplorer() {
     setDraft(null);
     setAdminMeta(null);
     setSelectedCustomId(zone.id);
-    setAdminFit({ id: zone.id, token: Date.now() });
+    // 저장한 뒤에는 화면을 그 구역에 맞추지 않는다 — 배율을 유지해야 바로 다음 구역을 이어서 그린다.
     setAdminMsg(`‘${zone.name}’ 저장 중 — 공용 DB에 올리는 중…`);
 
     // 공용 DB(Supabase)에 올린다 — 성공하면 모든 방문자·기기에서 같은 구역이 보인다
@@ -1494,9 +1494,22 @@ export default function ZoneExplorer() {
     );
   }
 
+  /**
+   * 지도에서 관리자 구역을 **직접 눌러** 고른 경우 — 화면(줌·위치)은 그대로 둔다.
+   *   · 사용자 제보(2026-11-24): “그리기(관리자) 모드에서 구역을 클릭하면 줌이 줄어들어”
+   *     — 클릭 한 번에 그 구역 전체가 화면에 들어오도록 맞추면서(adminFit) 배율이 풀렸다.
+   *   · 일반 구역(서울시 고시)도 지도에서 누를 때는 화면을 맞추지 않는 규칙과 같게 둔다.
+   */
+  function selectCustomZoneOnMap(id: string) {
+    setSelectedCustomId(id);
+    setPanelOpen(true);
+  }
+
+  /** 목록·도구 막대에서 골랐을 때 — 그 구역으로 이동한다(그리는/고치는 중에는 화면을 흔들지 않는다) */
   function selectCustomZone(id: string) {
     setSelectedCustomId(id);
-    setAdminFit({ id, token: Date.now() });
+    setPanelOpen(true);
+    if (!draft) setAdminFit({ id, token: Date.now() });
   }
 
   /** 목록의 ‘경계·정보 수정’ — 경계 핸들과 함께 정보 입력 폼을 바로 연다 */
@@ -1637,7 +1650,7 @@ export default function ZoneExplorer() {
         onMovePoint: moveDraftPoint,
         onInsertPoint: insertDraftPoint,
         onRemovePoint: removeDraftPoint,
-        onSelectZone: selectCustomZone,
+        onSelectZone: selectCustomZoneOnMap,
       }
     : undefined;
 

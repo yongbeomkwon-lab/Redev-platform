@@ -945,6 +945,14 @@ export default function KakaoZoneMap({
     if (tagLayerRef.current) {
       const tagT0 = performance.now();
       const tagLayer = tagLayerRef.current;
+      /**
+       * 그리기·경계 수정 중에는 이름표가 클릭을 가로채지 않는다.
+       *   · 사용자 제보(2026-11-24): “그리기(관리자) 모드에서 구역을 클릭하면 줌이 줄어들어”
+       *     — 이름표는 지도 위에 얹힌 버튼이라, 그 위를 누르면 꼭짓점이 찍히는 대신
+       *     구역이 선택되고 화면이 그 구역에 맞춰졌다(초안이 있으면 선택도 막혀 클릭이 먹혔다).
+       *   · 초안이 떠 있는 동안 이름표를 통과시켜, 누른 자리에 그대로 꼭짓점이 찍히게 한다.
+       */
+      tagLayer.style.pointerEvents = adminRef.current?.draft ? "none" : "";
       const selTag = selectedRef.current;
       // 카드형 뱃지를 쓰는 배율인지 — 이제 사실상 모든 배율에서 카드가 기본이다
       const level = mapLevel;
@@ -1210,6 +1218,8 @@ export default function KakaoZoneMap({
             node.className = "zone-tag";
             node.dataset.testid = "zone-tag";
             node.addEventListener("click", (ev) => {
+              // 그리기·수정 중에는 이름표 클릭으로 구역을 고르지 않는다(그 자리에 점을 찍는다)
+              if (adminRef.current?.draft) return;
               ev.preventDefault();
               ev.stopPropagation();
               const id = node?.dataset.zoneId;
@@ -2539,7 +2549,9 @@ export default function KakaoZoneMap({
   useEffect(() => {
     const map = mapRef.current as unknown as { setOptions?: (o: Record<string, unknown>) => void } | null;
     if (!map?.setOptions) return;
-    const drawing = !!(admin?.adding && admin?.draft && admin.draft.length > 0);
+    // 초안이 하나라도 있으면(새로 그리기 0점 포함) 더블클릭 확대를 끈다 — 빠르게 연달아
+    //   점을 찍는 클릭이 더블클릭으로 잡혀 화면 배율이 바뀌는 것을 막는다(2026-11-24 제보).
+    const drawing = !!admin?.draft;
     try {
       map.setOptions({ disableDoubleClickZoom: drawing });
     } catch {
@@ -2597,6 +2609,12 @@ export default function KakaoZoneMap({
     const req = admin?.fit;
     const list = admin?.zones;
     if (!k || !map || !req || !list) return;
+    // 그리기·경계 수정 중에는 화면(줌·위치)을 절대 건드리지 않는다 — 사용자가 맞춰 둔
+    //   배율에서 점을 찍고 있는데 fit 이 돌면 지도가 줄어들어 정밀 작업이 어긋난다.
+    if (admin?.draft) {
+      lastAdminFitRef.current = req.token;
+      return;
+    }
     if (lastAdminFitRef.current === req.token) return;
     lastAdminFitRef.current = req.token;
     const z = list.find((v) => v.id === req.id);
@@ -2869,6 +2887,12 @@ export default function KakaoZoneMap({
       return;
     }
 
+    // 그리기·경계 수정 중에는 선택이 바뀌어도 화면을 맞추지 않는다(이름표·구역·목록 어느 쪽이든).
+    if (admin?.draft) {
+      draw();
+      return;
+    }
+
     // 지도에서 직접 눌러 고른 구역 — 보고 있던 줌·위치를 그대로 유지한다(그리기만).
     const clickedOnMap = mapClickZoneRef.current;
     if (clickedOnMap && clickedOnMap.id === selectedZoneId && Date.now() - clickedOnMap.t < 3000) {
@@ -2907,7 +2931,7 @@ export default function KakaoZoneMap({
     }
     draw();
     settleView();
-  }, [selectedZoneId, labelZoneId, seoulZones, zones, addressPin, draw, settleView, admin?.zones]);
+  }, [selectedZoneId, labelZoneId, seoulZones, zones, addressPin, draw, settleView, admin?.zones, admin?.draft]);
 
   // ── ‘구역 전체 보기’ 요청 — 주소 핀 화면에서 구역 경계 전체로 넓힌다 ─────────
   //   요청 토큰이 **바뀐 순간에만** 움직인다(다른 구역을 골랐을 때 다시 맞추지 않도록).
