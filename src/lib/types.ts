@@ -91,6 +91,8 @@ export type Zone = {
   center: [number, number];
   /** 폴리곤 보조 링(여러 필지로 나뉜 구역) */
   parts?: [number, number][][];
+  /** 구역 안에서 빼낸 시설(성당·공원 등) — GeoJSON inner ring, 이 안은 구역 밖 */
+  holes?: [number, number][][];
   /** 서울시 고시 데이터 매칭 정보 */
   official?: ZoneOfficial;
   /** 요약 지표 (listing/transaction에서 파생 계산도 가능하지만 캐시용으로 보관) */

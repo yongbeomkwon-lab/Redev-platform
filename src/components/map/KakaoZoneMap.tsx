@@ -187,6 +187,16 @@ type MapAnchor = {
   color: string;
 };
 
+/** 링의 감기 부호(화면좌표 기준) — 구멍을 바깥과 반대로 감아 nonzero 채움에서 뚫리게 한다 */
+function ringSign(pts: Float64Array): number {
+  const n = pts.length / 2;
+  let s = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    s += pts[j * 2] * pts[i * 2 + 1] - pts[i * 2] * pts[j * 2 + 1];
+  }
+  return s;
+}
+
 /** 기준점 SVG path 를 찾는다(고유한 stroke 색으로 식별 — 캐시가 끊겼을 때만 다시 부른다) */
 function findAnchorEl(container: HTMLElement, color: string): SVGPathElement | null {
   const paths = container.querySelectorAll("svg path");
@@ -1706,6 +1716,49 @@ export default function KakaoZoneMap({
         target.moveTo(buf[0], buf[1]);
         for (let i = 1; i < n; i++) target.lineTo(buf[i * 2], buf[i * 2 + 1]);
         target.closePath();
+      }
+
+      // 구역 안에서 빼낸 시설(성당·공원 등) — 구멍(inner ring)으로 뚫는다.
+      //   · 같은 Path2D 에 넣고 nonzero 로 채우려면 **감기는 방향이 바깥과 반대**여야 한다.
+      //     그래서 바깥 링의 감기 부호를 재고, 같은 부호면 좌표를 뒤집어 넣는다.
+      //   · 테두리는 그대로 긋는다 — 뚫린 자리가 어디인지 선으로 드러난다.
+      if (pz.holes.length) {
+        const outerSign = pz.rings[0] ? ringSign(pz.rings[0].pts) : 0;
+        for (const hole of pz.holes) {
+          const n = hole.pts.length / 2;
+          if (n < 3) continue;
+          if (buf.length < hole.pts.length) {
+            buf = new Float32Array(hole.pts.length);
+            bufRef.current = buf;
+          }
+          let sMinX = Infinity;
+          let sMaxX = -Infinity;
+          let sMinY = Infinity;
+          let sMaxY = -Infinity;
+          for (let i = 0; i < n; i++) {
+            const lat = hole.pts[i * 2];
+            const lng = hole.pts[i * 2 + 1];
+            const x = p0x + (lng - lng0) * pxPerLng;
+            const y = p0y + (mercator(lat) - m0) * pxPerMerc;
+            buf[i * 2] = x;
+            buf[i * 2 + 1] = y;
+            if (x < sMinX) sMinX = x;
+            if (x > sMaxX) sMaxX = x;
+            if (y < sMinY) sMinY = y;
+            if (y > sMaxY) sMaxY = y;
+          }
+          if (sMaxX < -8 || sMinX > cw + 8 || sMaxY < -8 || sMinY > ch + 8) continue;
+          const holeSign = ringSign(hole.pts);
+          const reverse = outerSign !== 0 && holeSign !== 0 && Math.sign(holeSign) === Math.sign(outerSign);
+          if (reverse) {
+            target.moveTo(buf[(n - 1) * 2], buf[(n - 1) * 2 + 1]);
+            for (let i = n - 2; i >= 0; i--) target.lineTo(buf[i * 2], buf[i * 2 + 1]);
+          } else {
+            target.moveTo(buf[0], buf[1]);
+            for (let i = 1; i < n; i++) target.lineTo(buf[i * 2], buf[i * 2 + 1]);
+          }
+          target.closePath();
+        }
       }
 
       if (activePath) {

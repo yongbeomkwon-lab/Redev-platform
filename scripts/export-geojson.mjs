@@ -77,15 +77,42 @@ const features = zones.map((z) => {
   }
 
   const rings = [z.polygon, ...(z.parts ?? [])].map(toRing);
-  return {
-    type: "Feature",
-    id: z.id,
-    properties,
-    geometry:
+  // 구역 안에서 빼낸 시설(성당·공원 등) — GeoJSON inner ring(구멍)으로 내보낸다.
+  //   Polygon 이면 외곽 링 뒤에 그대로 붙이고, MultiPolygon 이면 그 구멍을 품은 조각에 붙인다.
+  const holes = (z.holes ?? [])
+    .filter((h) => Array.isArray(h) && h.length >= 3)
+    .map(toRing);
+  let geometry;
+  if (holes.length === 0) {
+    geometry =
       rings.length > 1
         ? { type: "MultiPolygon", coordinates: rings.map((r) => [r]) }
-        : { type: "Polygon", coordinates: [rings[0]] },
-  };
+        : { type: "Polygon", coordinates: [rings[0]] };
+  } else if (rings.length === 1) {
+    geometry = { type: "Polygon", coordinates: [rings[0], ...holes] };
+  } else {
+    const polys = rings.map((r) => [r]);
+    for (const hole of holes) {
+      const [x, y] = hole[0];
+      let target = 0;
+      for (let i = 0; i < rings.length; i++) {
+        const ring = rings[i];
+        let inside = false;
+        for (let a = 0, b = ring.length - 1; a < ring.length; b = a++) {
+          const [xi, yi] = ring[a];
+          const [xj, yj] = ring[b];
+          if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+        }
+        if (inside) {
+          target = i;
+          break;
+        }
+      }
+      polys[target].push(hole);
+    }
+    geometry = { type: "MultiPolygon", coordinates: polys };
+  }
+  return { type: "Feature", id: z.id, properties, geometry };
 });
 
 // ── 지워지는 것이 없는지 검사 ────────────────────────────────────────────────

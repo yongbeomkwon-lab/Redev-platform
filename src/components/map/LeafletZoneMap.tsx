@@ -628,7 +628,13 @@ function SeoulZoneLayer({
           properties: { id: z.id, name: z.name, alias: z.alias, type: z.type, kind: z.kind, stage: z.stage, gu: z.gu, area: z.area, boundaryApprox: z.boundaryApprox, approxCircle: isApproxCircleZone(z) },
           geometry: {
             type: "Polygon" as const,
-            coordinates: [[...z.polygon, z.polygon[0]].map(([lat, lng]) => [lng, lat])],
+            // 구역 안에서 빼낸 시설(성당·공원 등)은 inner ring 으로 — Leaflet 이 알아서 뚫어 그린다
+            coordinates: [
+              [...z.polygon, z.polygon[0]].map(([lat, lng]) => [lng, lat]),
+              ...(z.holes ?? [])
+                .filter((h) => h.length >= 3)
+                .map((h) => [...h, h[0]].map(([lat, lng]) => [lng, lat])),
+            ],
           },
         })),
     };
@@ -857,7 +863,7 @@ export default function LeafletZoneMap({
         return rings.map((ring, i) => (
           <Polygon
             key={`fg-${zone.id}-${i}`}
-            positions={ring}
+            positions={i === 0 && zone.holes?.length ? [ring, ...zone.holes] : ring}
             pathOptions={zoneStyle(zone.type, active, true, zoom)}
             eventHandlers={{ click: () => onSelectZone(zone.id) }}
           />
