@@ -946,13 +946,18 @@ export default function KakaoZoneMap({
       const tagT0 = performance.now();
       const tagLayer = tagLayerRef.current;
       /**
-       * 그리기·경계 수정 중에는 이름표가 클릭을 가로채지 않는다.
-       *   · 사용자 제보(2026-11-24): “그리기(관리자) 모드에서 구역을 클릭하면 줌이 줄어들어”
-       *     — 이름표는 지도 위에 얹힌 버튼이라, 그 위를 누르면 꼭짓점이 찍히는 대신
-       *     구역이 선택되고 화면이 그 구역에 맞춰졌다(초안이 있으면 선택도 막혀 클릭이 먹혔다).
-       *   · 초안이 떠 있는 동안 이름표를 통과시켜, 누른 자리에 그대로 꼭짓점이 찍히게 한다.
+       * 이름표 레이어는 **늘** 마우스(클릭·휠·드래그)를 지도로 통과시킨다.
+       *   · 레이어 자체는 pointer-events:none 이고, 이름표 버튼만 CSS `.zone-tag` 의
+       *     pointer-events:auto 로 클릭을 받는다(ZONE_TAG_LAYER_STYLE 주석 참고).
+       *   · 사용자 제보(2026-11-24 2차): “지도가 작아진 상태에서 마우스 휠로 확대 축소했으나 그대로임”
+       *     — 직전 커밋(그리기 중 이름표 클릭 통과)이 초안이 없을 때 `pointerEvents = ""` 로
+       *     되돌렸는데, 그 빈 값이 레이어의 인라인 `pointer-events:none` 을 **지워** 버렸다.
+       *     그러자 화면 전체를 덮는 이 레이어(z-index 90)가 휠·드래그·빈 곳 클릭을 모두 삼켜
+       *     지도에 닿지 못했다(휠 확대·축소가 통째로 먹통).
+       *   · 그래서 되돌릴 값을 "none" 으로 고정한다 — 절대 빈 값으로 지우지 않는다.
        */
-      tagLayer.style.pointerEvents = adminRef.current?.draft ? "none" : "";
+      const drawingTags = !!adminRef.current?.draft;
+      tagLayer.style.pointerEvents = "none";
       const selTag = selectedRef.current;
       // 카드형 뱃지를 쓰는 배율인지 — 이제 사실상 모든 배율에서 카드가 기본이다
       const level = mapLevel;
@@ -1244,6 +1249,15 @@ export default function KakaoZoneMap({
             });
           }
           node.dataset.zoneId = c.id;
+          /**
+           * 그리기·경계 수정 중에는 이름표 버튼도 클릭을 가로채지 않는다.
+           *   · 사용자 제보(2026-11-24): “그리기(관리자) 모드에서 구역을 클릭하면 줌이 줄어들어”
+           *     — 이름표는 지도 위에 얹힌 버튼이라, 그 위를 누르면 꼭짓점이 찍히는 대신
+           *     구역이 선택되고 화면이 그 구역에 맞춰졌다.
+           *   · 초안이 떠 있는 동안 이름표를 통과시켜, 누른 자리에 그대로 꼭짓점이 찍히게 한다.
+           *   · 휠 확대·축소는 어느 경우에도 막지 않는다(레이어는 늘 none).
+           */
+          node.style.pointerEvents = drawingTags ? "none" : "";
           // 1줄 칩 ↔ 2단 카드 — 모드가 바뀌면 클래스·마크업·크기를 함께 갈아 준다
           const mode = c.card ? "card" : "chip";
           const key = `${mode}|${c.name}|${c.typeText}|${c.stageText}`;
