@@ -2481,6 +2481,42 @@ export default function KakaoZoneMap({
     const wrap = wrapRef.current ?? el;
     wrap.addEventListener("dblclick", onMapDblClick);
     wrap.addEventListener("contextmenu", onMapContextMenu);
+
+    /**
+     * 지도 위에 얹힌 우리 요소(이름표·매물/경매/실거래 핀·꼭짓점 핸들·선택 이름표)는 카카오 지도
+     *   DOM 바깥(같은 래퍼의 형제)이라, 그 위에서 굴린 휠은 카카오에 닿지 않는다.
+     *   · 사용자 제보(2026-11-24): “지도가 작아진 상태에서 마우스 휠로 확대 축소했으나 그대로임”
+     *     — 이름표가 화면을 넓게 덮는 배율에서는 커서가 이름표 위에 있다는 것만으로 휠이 먹통이 됐다.
+     *   · 그래서 지도 자신이 아닌 곳(래퍼 안 우리 레이어)에서 온 휠만 받아 **지도 배율**로 바꾼다.
+     *     지도 위 휠은 `mapEl` 안쪽이 대상이므로 여기서 손대지 않고 카카오가 그대로 처리한다.
+     *   · 노치(델타 100) 하나 = 한 단계. 트랙패드처럼 잘게 오는 휠은 쌓아서 한 단계씩 움직인다.
+     *     핀치(트랙패드 ctrl+휠)는 델타가 작아 기준을 낮춘다.
+     */
+    let wheelAcc = 0;
+    let wheelAt = 0;
+    const onOverlayWheel = (ev: WheelEvent) => {
+      const map0 = mapRef.current;
+      if (!map0) return;
+      const t = ev.target as Node | null;
+      if (!t || el.contains(t)) return; // 지도 자신이 처리
+      // 폼·스크롤 상자가 래퍼 안에 들어와도 그 스크롤을 빼앗지 않는다
+      if (t instanceof Element && t.closest("input,textarea,select,[data-wheel-scroll]")) return;
+      ev.preventDefault();
+      const now = performance.now();
+      if (now - wheelAt > 350) wheelAcc = 0;
+      wheelAt = now;
+      const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 100 : 1;
+      wheelAcc += ev.deltaY * unit;
+      const step = ev.ctrlKey ? 40 : 100; // 핀치(ctrl+휠)는 델타가 작다
+      const steps = Math.trunc(Math.abs(wheelAcc) / step);
+      if (!steps) return;
+      const dir = wheelAcc > 0 ? 1 : -1; // deltaY>0 = 축소(레벨 증가)
+      wheelAcc -= dir * steps * step;
+      const lv = map0.getLevel();
+      const next = Math.max(1, Math.min(MAX_LEVEL, lv + dir * Math.min(steps, 3)));
+      if (next !== lv) map0.setLevel(next, { animate: { duration: 200 } });
+    };
+    wrap.addEventListener("wheel", onOverlayWheel, { passive: false });
     // 마우스가 지도 밖(도구 막대·왼쪽/오른쪽 패널)으로 나가면 커서 위치를 버려 점선이 남지 않게 한다
     el.addEventListener("mouseleave", dropRubberBand);
     el.addEventListener("pointerleave", dropRubberBand);
@@ -2517,6 +2553,7 @@ export default function KakaoZoneMap({
       passthroughRef.current = { click: null, move: null };
       wrap.removeEventListener("dblclick", onMapDblClick);
       wrap.removeEventListener("contextmenu", onMapContextMenu);
+      wrap.removeEventListener("wheel", onOverlayWheel);
       el.removeEventListener("mouseleave", dropRubberBand);
       el.removeEventListener("pointerleave", dropRubberBand);
       adminCursorRef.current = null;
