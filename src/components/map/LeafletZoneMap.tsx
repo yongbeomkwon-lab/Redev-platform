@@ -408,6 +408,8 @@ function JibunPicker({
       pickRef.current?.(e.latlng.lat, e.latlng.lng);
     };
     const onContext = (e: L.LeafletMouseEvent) => {
+      // 지번 찍기를 켰을 때만 — 예전에는 우클릭이면 늘 지번이 찍혔다(2026-11-24 지적)
+      if (!onRef.current) return;
       pickRef.current?.(e.latlng.lat, e.latlng.lng);
     };
     const blockMenu = (ev: MouseEvent) => {

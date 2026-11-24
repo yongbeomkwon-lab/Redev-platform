@@ -1975,9 +1975,16 @@ export default function KakaoZoneMap({
         ctx.stroke();
 
         // 이름표 — 화면에서 글자가 들어갈 만큼 큰 구역만(작은 구역은 목록에서 확인)
+        //   · 지도에 그리는 이 이름표가 **흰 배지(구역 이름표 카드)와 겹쳐** 글자가 두 번 보였다
+        //     (2026-11-24 지적: “흰 배지 뒤로 작은 검은 테두리 텍스트가 삐져나온다”).
+        //     관리자 구역이 공식 데이터와 같은 구역이면 배지가 이미 이름을 띄우므로 캔버스 글자는
+        //     걷어 내고, 선택해서 큰 이름표가 뜬 구역도 같은 이유로 건너뛴다.
         const c = ringCentroid(z.ring);
         const [lx, ly] = projectXY(c[0], c[1]);
-        if (lx > -80 && lx < cw + 80 && ly > -40 && ly < ch + 40) {
+        const dupBadge =
+          z.id === adm.selectedId ||
+          prepRef.current.zones.some((pz) => pz.zone.name === z.name);
+        if (!dupBadge && lx > -80 && lx < cw + 80 && ly > -40 && ly < ch + 40) {
           ctx.font = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -2507,11 +2514,11 @@ export default function KakaoZoneMap({
         onSelectRef.current(hit.id);
         return;
       }
-      // 구역 밖을 눌렀다 — 기본 모드에서도 그 자리의 지번을 찍어 준다(편의)
-      if (pick.pick) {
-        clearHoverCursor();
-        pick.pick(lat, lng);
-      }
+      // 구역 밖(빈 곳)을 눌렀다 — 아무 일도 하지 않는다.
+      //   · 예전에는 기본 모드에서도 그 자리의 지번을 찍어 줬다(편의). 그 탓에 지도를 조금만
+      //     눌러도 지번 핀·필지 강조가 따라붙어 불편하다는 지적(2026-11-24). 이제 지번 찍기는
+      //     아래 `지번 찍기` 토글을 켰을 때(위 분기)와, 주소 검색으로 주소를 골랐을 때만 뜬다.
+      clearHoverCursor();
     };
 
     passthroughRef.current = { click: onMapClick, move: onMousemove };
