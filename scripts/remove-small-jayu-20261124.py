@@ -50,6 +50,8 @@ EXPECTED_BEFORE = 2430
 EXPECTED_AFTER = EXPECTED_BEFORE - EXPECTED_REMOVE  # 2376
 # 자율주택정비사업 500㎡ 이상 — 지우지 않고 그대로 남아야 한다
 EXPECTED_JAYU_KEEP = 22
+# 비교 기준 커밋 — 삭제 직전 상태(2,430곳). HEAD 는 이미 지운 뒤라 기준으로 쓰지 않는다.
+BASELINE = "9170dae"
 
 COMPACT = {"ensure_ascii": False, "separators": (",", ":")}
 
@@ -77,8 +79,9 @@ def _build_index() -> None:
 
 
 def _head_geojson() -> dict:
+    """삭제 직전 기준(BASELINE 커밋)의 zones.geojson — 헤드가 아니라 고정 기준을 본다."""
     raw = subprocess.run(
-        ["git", "show", "HEAD:public/data/zones.geojson"], cwd=ROOT, capture_output=True, text=True, check=True
+        ["git", "show", f"{BASELINE}:public/data/zones.geojson"], cwd=ROOT, capture_output=True, text=True, check=True
     ).stdout
     return json.loads(raw)
 
