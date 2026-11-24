@@ -26,6 +26,8 @@ export type PreparedZone = {
   rings: Ring[];
   /** 구멍(홀) 링 — 이 안은 구역 밖이다 */
   holes: Ring[];
+  /** 구역 안을 나누는 점선(사업예정구역 1·2 등) — 없으면 빈 배열 */
+  dividers: PreparedDivider[];
   minLat: number;
   minLng: number;
   maxLat: number;
@@ -75,6 +77,13 @@ export function isApproxCircleZone(z: {
   for (const r of radii) maxDev = Math.max(maxDev, Math.abs(r - mean));
   return maxDev / mean <= 0.08;
 }
+
+/** 구역 안 구분선(점선) — 도면 표기를 그대로 옮긴 선 + 하위 구역 이름표 */
+export type PreparedDivider = {
+  /** [lat0, lng0, lat1, lng1, ...] */
+  pts: Float64Array;
+  labels: { text: string; lat: number; lng: number }[];
+};
 
 export type PreparedZones = {
   zones: PreparedZone[];
@@ -149,6 +158,14 @@ export function prepareZones(list: SeoulZone[]): PreparedZones {
       zone: z,
       rings,
       holes,
+      dividers: (z.dividers ?? [])
+        .filter((d) => d && Array.isArray(d.coords) && d.coords.length >= 2)
+        .map((d) => ({
+          pts: Float64Array.from(d.coords.flatMap(([lat, lng]) => [lat, lng])),
+          labels: (d.labels ?? [])
+            .filter((l) => l && Array.isArray(l.at) && l.at.length === 2 && l.text)
+            .map((l) => ({ text: l.text, lat: l.at[0], lng: l.at[1] })),
+        })),
       minLat,
       minLng,
       maxLat,

@@ -1798,6 +1798,65 @@ export default function KakaoZoneMap({
     }
     ctx.setLineDash([]);
 
+    // 2-1) 구역 안 구분선 — 모아통합기획 '사업예정구역 1·2' 처럼 **도면에 점선으로 그어진 선**
+    //   · 구역 자체는 하나로 둔다(클릭·검색·매물 연결은 그대로) — 선과 이름표만 위에 얹는다.
+    //   · 도면 표기(보라 굵은 점선)를 그대로 살려 7-5 점선·보라색으로 긋는다(2026-11-24 양재동 397-1).
+    //   · 이름표는 동네 확대(레벨 6 이하)하거나 구역을 골랐을 때만 — 광역 화면의 글자 더미를 막는다.
+    {
+      const divLevel = map.getLevel();
+      for (const pz of districtMode ? [] : data.zones) {
+        if (!pz.dividers.length) continue;
+        if (pz.maxLat < vMinLat || pz.minLat > vMaxLat || pz.maxLng < vMinLng || pz.minLng > vMaxLng) continue;
+        const isSel = pz.zone.id === selId;
+        const isHover = !isSel && pz.zone.id === hoverId;
+        if (divLevel > 7 && !isSel && !isHover) continue;
+
+        ctx.save();
+        ctx.setLineDash([7, 5]);
+        ctx.lineJoin = "round";
+        ctx.lineCap = "butt";
+        ctx.lineWidth = isSel || isHover ? 3.4 : 2.6;
+        ctx.strokeStyle = isSel || isHover ? "rgba(91,33,182,1)" : "rgba(109,40,217,0.95)";
+        ctx.beginPath();
+        for (const d of pz.dividers) {
+          const n = d.pts.length / 2;
+          if (n < 2) continue;
+          let started = false;
+          for (let i = 0; i < n; i++) {
+            const x = p0x + (d.pts[i * 2 + 1] - lng0) * pxPerLng;
+            const y = p0y + (mercator(d.pts[i * 2]) - m0) * pxPerMerc;
+            if (!started) {
+              ctx.moveTo(x, y);
+              started = true;
+            } else ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (divLevel <= 6 || isSel || isHover) {
+          ctx.font = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          for (const d of pz.dividers) {
+            for (const lb of d.labels) {
+              const x = p0x + (lb.lng - lng0) * pxPerLng;
+              const y = p0y + (mercator(lb.lat) - m0) * pxPerMerc;
+              if (x < -60 || x > cw + 60 || y < -20 || y > ch + 20) continue;
+              ctx.lineWidth = 3.2;
+              ctx.strokeStyle = "rgba(255,255,255,0.95)";
+              ctx.strokeText(lb.text, x, y);
+              ctx.fillStyle = "rgba(76,29,149,0.98)";
+              ctx.fillText(lb.text, x, y);
+            }
+          }
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
+      }
+    }
+
     // 2-2) 주소로 고른 **필지** — 지적 경계를 파란 반투명 + 진한 파란 선으로 칠한다(2026-11-23 요청)
     //   · 구역 폴리곤 위에 얹어야 "이 필지를 보고 있다"가 읽힌다(구역 채움 20%에 묻히지 않게).
     //   · 이름표는 캔버스가 아니라 DOM(아래 '보는중' 말풍선)이 그린다 — 글자가 선명해야 한다.

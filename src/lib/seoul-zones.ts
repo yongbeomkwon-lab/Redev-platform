@@ -13,7 +13,7 @@
 //     → 지도에는 폴리곤 대신 점으로 그린다. 없는 경계를 지어내지 않는다.
 //   · 페이지 번들에 넣지 않고 클라이언트에서 fetch한다(2,179구역 ≈ 1.6MB → gzip 300KB대).
 // ─────────────────────────────────────────────────────────────────────────────
-import type { MapZoneType } from "@/lib/types";
+import type { MapZoneType, ZoneDivider } from "@/lib/types";
 
 /** 공식 확인 출처(고시·정보몽땅·자치구) */
 export type ZoneSource = { label: string; url: string };
@@ -43,6 +43,8 @@ export type SeoulZone = {
   parts?: [number, number][][];
   /** 구역 안에 뚫린 구멍(홀) 링 — 있으면 그 안은 구역 밖이다 */
   holes?: [number, number][][];
+  /** 구역 안을 나누는 점선(사업예정구역 1·2 등) — 도면 표기를 지도에 그대로 옮긴 것 */
+  dividers?: ZoneDivider[];
   /** 신속통합기획 후보지 선정일 등 공식 일자 */
   selectedAt?: string;
   /** 경계가 없을 때 대표 지점 설명 */

@@ -50,6 +50,7 @@ const EXTRA = [
   "badgeType", // 사업유형 대신 띄울 말 (예: 신통모아미정)
   "asOf", // 자료 기준일
   "areaShape", // 도형 계측 면적
+  "dividers", // 구역 안을 나누는 점선(사업예정구역 1·2 등) + 이름표 자리
   "households", // 세대수(보도 기준)
   "rightsDate", // 권리산정기준일
   "drawing", // 구역계 도면 파일 경로(작업 참고)

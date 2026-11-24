@@ -37,6 +37,17 @@ export type MapZoneType =
   | PrivateComplexType
   | MoaIntegrationType;
 
+/**
+ * 구역 안을 둘로 나누는 점선 — 모아통합기획의 '사업예정구역 1·2' 처럼 도면에 보라 점선으로 그어진 선.
+ *   · 구역은 하나로 두고(클릭·검색·매물 연결은 그대로) 지도 위에 점선만 얹어 도면 표기를 살린다.
+ *   · coords 는 [위도, 경도] 꼭짓점 — 보통 구역 경계에서 경계까지 두 점.
+ *   · labels 는 점선이 나누는 하위 구역 이름표 자리(없으면 선만 긋는다).
+ */
+export type ZoneDivider = {
+  coords: [number, number][];
+  labels?: { text: string; at: [number, number] }[];
+};
+
 /** 서울시 도시계획사업(서울플랜+) 공식 레코드 — 구역 경계·면적·추진단계의 근거 */
 export type ZoneOfficial = {
   sourceId: string; // 서울 열린데이터광장 PRESENT_SN
@@ -93,6 +104,8 @@ export type Zone = {
   parts?: [number, number][][];
   /** 구역 안에서 빼낸 시설(성당·공원 등) — GeoJSON inner ring, 이 안은 구역 밖 */
   holes?: [number, number][][];
+  /** 구역 안을 나누는 점선(사업예정구역 1·2 등) — 지도에 보라 점선으로 긋는다 */
+  dividers?: ZoneDivider[];
   /** 서울시 고시 데이터 매칭 정보 */
   official?: ZoneOfficial;
   /** 요약 지표 (listing/transaction에서 파생 계산도 가능하지만 캐시용으로 보관) */

@@ -675,6 +675,38 @@ function SeoulZoneLayer({
     };
   }, [collection, map]);
 
+  // ── 구역 안 구분선(점선) — 모아통합기획 '사업예정구역 1·2' 처럼 도면에 점선으로 그어진 선
+  //    · 구역 폴리곤 위에 보라 점선만 덧그린다(클릭은 폴리곤이 그대로 받는다).
+  //    · 이름표는 동네 확대(줌 15 이상)하거나 그 구역을 골랐을 때만 보인다.
+  const dividerGroup = useMemo(() => {
+    return zones.filter((z) => (z.dividers ?? []).some((d) => d && d.coords && d.coords.length >= 2));
+  }, [zones]);
+
+  useEffect(() => {
+    const group = L.layerGroup().addTo(map);
+    for (const z of dividerGroup) {
+      for (const d of z.dividers ?? []) {
+        if (!d || !Array.isArray(d.coords) || d.coords.length < 2) continue;
+        L.polyline(d.coords as [number, number][], {
+          color: "#6d28d9",
+          weight: 3,
+          opacity: 0.9,
+          dashArray: "7 5",
+          interactive: false,
+        }).addTo(group);
+        for (const lb of d.labels ?? []) {
+          L.marker(lb.at as [number, number], {
+            interactive: false,
+            icon: L.divIcon({ className: "zone-divider-label", html: lb.text, iconSize: [0, 0] }),
+          }).addTo(group);
+        }
+      }
+    }
+    return () => {
+      group.remove();
+    };
+  }, [dividerGroup, map]);
+
   // 선택·줌 변경 → 폴리곤 스타일만 갱신 (레이어 재생성 없이)
   useEffect(() => {
     selectedRef.current = selectedId;
