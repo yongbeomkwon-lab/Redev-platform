@@ -206,6 +206,11 @@ export default function ZoneOfficialPanel({
                   {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
                 </span>
               </>
+            ) : zone.geom === "직접작도" ? (
+              <>
+                지도에서 직접 그린 경계(직접작도) — 고시·공고 도면 참고, 정밀 측량값 아님
+                {zone.boundaryNote && <span className="text-emerald-700/70"> · {zone.boundaryNote}</span>}
+              </>
             ) : zone.geom === "근사원" ? (
               <>
                 근사 경계 — 실제 구역계 아님(경계 미고시)
