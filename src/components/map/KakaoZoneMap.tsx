@@ -2112,7 +2112,9 @@ export default function KakaoZoneMap({
       if (draft && draft.length > 0) {
         const pts = draft.map(([la, ln]) => projectXY(la, ln));
 
-        if (pts.length >= 3) {
+        // 그리는 중(adm.adding)에는 삼각형·파란 면 채우기와 닫는 변을 그리지 않고 단순 선(Polyline)만 표시한다.
+        //   완료(✓ 완료·더블클릭·우클릭·Enter·첫 점 클릭)로 adding 이 꺼진 뒤에 닫힌 다각형으로 채운다.
+        if (pts.length >= 3 && !adm.adding) {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
           for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -2800,18 +2802,23 @@ export default function KakaoZoneMap({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const a = adminRef.current;
-      if (!a?.adding || !a.draft) return;
+      if (!a?.draft) return;
       if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) {
         return;
       }
       if (e.key === "Enter") {
+        if (!a.adding) {
+          // 완료 후 편집/정보입력 상태에서 버튼 포커스(새 구역 그리기·취소)가 Enter 로 눌려 0점으로 초기화되는 것을 막는다
+          e.preventDefault();
+          return;
+        }
         if (a.draft.length < 3) return;
         e.preventDefault();
         adminCursorRef.current = null;
         a.onFinishByFirstPoint();
-      } else if (e.key === "Escape") {
+      } else if (e.key === "Escape" && a.adding) {
         e.preventDefault();
         adminCursorRef.current = null;
         document.querySelector<HTMLButtonElement>('[data-testid="admin-cancel"]')?.click();

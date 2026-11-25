@@ -1345,6 +1345,10 @@ export default function ZoneExplorer() {
   const canEditSelectedRing = !!selectedRing && selectedRing.length >= 3;
 
   function startNewDraw() {
+    // 버튼 포커스가 남아 완료 후 Enter 를 눌렀을 때 0점으로 재시작되는 것을 막는다
+    if (typeof document !== "undefined") {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    }
     // 경계를 그리기 시작하면 지도에 떠 있던 지번 핀·필지 강조를 치운다(초안 클릭을 가리지 않게)
     clearJibunPick();
     setSelectedCustomId(undefined);
