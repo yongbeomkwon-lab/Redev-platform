@@ -2932,6 +2932,9 @@ export default function KakaoZoneMap({
   // ── 꼭짓점 드래그 — iPad 터치에서도 지도가 끌리지 않도록 포인터를 붙잡고 처리한다.
   //    래퍼(`touch-action:none`) + setPointerCapture 라 손가락이 핸들 밖으로 나가도 계속 따라온다.
   const onVertexDown = (e: ReactPointerEvent<HTMLButtonElement>, index: number) => {
+    // 마우스 우클릭(button === 2)은 드래그·점추가·첫점완료를 타지 않게 막는다
+    //   (그렇지 않으면 시작점 우클릭 시 pointerUp 완료 + contextMenu 점삭제가 동시에 돈다)
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     try {
@@ -4554,6 +4557,10 @@ export default function KakaoZoneMap({
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (adminDrawingNew) {
+                    if (adminDraft.length >= 3) admin?.onFinishByFirstPoint();
+                    return;
+                  }
                   admin?.onRemovePoint(i);
                 }}
                 style={{
