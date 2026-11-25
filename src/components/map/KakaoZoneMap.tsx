@@ -736,9 +736,15 @@ export default function KakaoZoneMap({
   /** 그리는 중 마우스 커서(또는 마지막 터치) 위치 — 마지막 점에서 고무줄 선을 긋는다 */
   const adminCursorRef = useRef<[number, number] | null>(null);
   /** 꼭짓점 드래그 상태 */
-  const adminDragRef = useRef<{ index: number; pointerId: number; raf: number; latest: [number, number] | null } | null>(
-    null
-  );
+  const adminDragRef = useRef<{
+    index: number;
+    pointerId: number;
+    raf: number;
+    latest: [number, number] | null;
+    /** 누른 자리 — 그리기 중 ‘톡’과 ‘끌기’를 가른다 */
+    startX?: number;
+    startY?: number;
+  } | null>(null);
   /**
    * 그리기 중 마지막으로 점을 찍은 화면 좌표 — 더블클릭의 **두 번째 클릭**이 점을 또 찍지 않게 한다.
    * (더블클릭 = ‘그 자리에서 완료’. 그냥 두면 꼭짓점 두 개가 겹쳐 찍힌 뒤 완료된다)
@@ -2926,7 +2932,14 @@ export default function KakaoZoneMap({
     } catch {
       /* 캡처 미지원 시에도 move 이벤트는 온다 */
     }
-    adminDragRef.current = { index, pointerId: e.pointerId, raf: 0, latest: null };
+    adminDragRef.current = {
+      index,
+      pointerId: e.pointerId,
+      raf: 0,
+      latest: null,
+      startX: e.clientX,
+      startY: e.clientY,
+    };
   };
 
   const onVertexMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
@@ -2951,10 +2964,25 @@ export default function KakaoZoneMap({
     if (!d || d.pointerId !== e.pointerId) return;
     e.stopPropagation();
     if (d.raf) window.cancelAnimationFrame(d.raf);
-    const last = d.latest ?? clientToLatLng(e.clientX, e.clientY);
     adminDragRef.current = null;
-    if (last) adminRef.current?.onMovePoint(d.index, last[0], last[1]);
     adminCursorRef.current = null;
+    const adm = adminRef.current;
+    // 그리기 중 꼭짓점을 **끌지 않고 톡** 누른 경우 → 그 자리에 새 점을 찍는 것으로 본다.
+    //   (예전에는 핸들 44px 안의 탭이 ‘그 점을 그 자리로 옮기기’가 되어, 짧은 ㄱ자 구간을 찍으려던
+    //   클릭이 앞 점을 끌어당겨 윗변이 대각선으로 꼬였습니다 — 2026-11-25 제보)
+    const movedPx =
+      d.startX != null && d.startY != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
+    if (movedPx < 6 && adm?.adding && adm.draft) {
+      if (d.index === 0 && adm.draft.length >= 3) {
+        adm.onFinishByFirstPoint();
+        return;
+      }
+      const at = clientToLatLng(e.clientX, e.clientY);
+      if (at) adm.onAddPoint(at[0], at[1]);
+      return;
+    }
+    const last = d.latest ?? clientToLatLng(e.clientX, e.clientY);
+    if (last) adm?.onMovePoint(d.index, last[0], last[1]);
   };
 
   // ── 매물 배지 — 매물이 있는 구역의 중심 목록 ────────────────────────
@@ -3575,6 +3603,19 @@ export default function KakaoZoneMap({
 
   /** 관리자 초안 — JSX 에서 좁힌 타입으로 쓰기 위해 변수로 꺼내 둔다 */
   const adminDraft = admin?.draft ?? null;
+  /**
+   * 새 구역을 **처음부터 그리는 중**인지(`adding` = 초안이 있고 정보 폼이 아직 없다).
+   *   · 이때는 점을 찍어 나가는 단계라, 변 가운데 `+` 핸들과 꼭짓점 `✕` 배지를 띄우면
+   *     4·5번째 점을 찍으려다 `+` 를 눌러 점이 중간에 끼어들어 도형이 꼬인다(2026-11-25 제보).
+   *   · 기존 구역을 골라 ‘경계·정보 수정’으로 들어간 편집 상태나, 그리기를 마친 뒤
+   *     (정보 입력 폼이 열린 상태)에만 `+`·`✕` 를 보여 준다.
+   */
+  const adminDrawingNew = !!admin?.adding; // 이름: drawingNew — 편집(=이미 닫힌 도형)과 구분한다
+  /**
+   * 꼭짓점 핸들 — 그리기 중에도 끌어서 바로잡을 수 있게 살려 둔다.
+   *   끌지 않고 ‘톡’ 누른 경우는 onVertexUp 이 새 점 찍기로 처리한다(핸들이 탭을 먹지 않게).
+   */
+  const adminVertexClass = "pointer-events-auto flex items-center justify-center rounded-full outline-none";
 
   /**
    * 자치구 뱃지를 눌렀을 때 — 그 구의 구역들이 화면을 채우도록 부드럽게 확대한다.
@@ -4494,7 +4535,11 @@ export default function KakaoZoneMap({
                 type="button"
                 data-testid={`admin-vertex-${i}`}
                 aria-label={`꼭짓점 ${i + 1} — 끌어서 옮기기`}
-                title={`꼭짓점 ${i + 1} — 끌어서 옮기기 · 우클릭으로 삭제`}
+                title={
+                  adminDrawingNew
+                    ? undefined // 그리기 중에는 안내 툴팁이 커서를 가리지 않게 띄우지 않는다
+                    : `꼭짓점 ${i + 1} — 끌어서 옮기기 · 우클릭으로 삭제`
+                }
                 onPointerDown={(e) => onVertexDown(e, i)}
                 onPointerMove={onVertexMove}
                 onPointerUp={onVertexUp}
@@ -4514,11 +4559,11 @@ export default function KakaoZoneMap({
                   touchAction: "none",
                   cursor: "grab",
                 }}
-                className="pointer-events-auto flex items-center justify-center rounded-full outline-none"
+                className={adminVertexClass}
               >
                 <span className="block h-4 w-4 rounded-full border-2 border-white bg-sky-700 shadow-[0_1px_4px_rgba(0,0,0,0.5)]" />
               </button>
-              {adminDraft.length > 3 && (
+              {!adminDrawingNew && adminDraft.length > 3 && (
                 <button
                   type="button"
                   data-testid={`admin-vertex-del-${i}`}
@@ -4549,41 +4594,42 @@ export default function KakaoZoneMap({
               )}
             </div>
           ))}
-          {adminDraft.map((_, i) => (
-            <div
-              key={`m${i}`}
-              data-mid={i}
-              className="absolute left-0 top-0"
-              style={{ visibility: "hidden", willChange: "transform" }}
-            >
-              <button
-                type="button"
-                data-testid={`admin-mid-${i}`}
-                aria-label={`${i + 1}번째 변 가운데에 점 추가`}
-                title="이 변 가운데에 점을 추가"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const a = adminDraft[i];
-                  const b = adminDraft[(i + 1) % adminDraft.length];
-                  if (!a || !b) return;
-                  admin?.onInsertPoint(i + 1, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
-                }}
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  width: 34,
-                  height: 34,
-                  transform: "translate(-50%,-50%)",
-                  touchAction: "none",
-                }}
-                className="pointer-events-auto flex items-center justify-center rounded-full border border-sky-400 bg-white/95 pb-0.5 text-[15px] font-bold leading-none text-sky-700 shadow"
+          {!adminDrawingNew &&
+            adminDraft.map((_, i) => (
+              <div
+                key={`m${i}`}
+                data-mid={i}
+                className="absolute left-0 top-0"
+                style={{ visibility: "hidden", willChange: "transform" }}
               >
-                +
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  data-testid={`admin-mid-${i}`}
+                  aria-label={`${i + 1}번째 변 가운데에 점 추가`}
+                  title="이 변 가운데에 점을 추가"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const a = adminDraft[i];
+                    const b = adminDraft[(i + 1) % adminDraft.length];
+                    if (!a || !b) return;
+                    admin?.onInsertPoint(i + 1, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+                  }}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 34,
+                    height: 34,
+                    transform: "translate(-50%,-50%)",
+                    touchAction: "none",
+                  }}
+                  className="pointer-events-auto flex items-center justify-center rounded-full border border-sky-400 bg-white/95 pb-0.5 text-[15px] font-bold leading-none text-sky-700 shadow"
+                >
+                  +
+                </button>
+              </div>
+            ))}
         </div>
       )}
 
