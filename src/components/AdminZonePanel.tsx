@@ -352,7 +352,11 @@ export function AdminZonePanel(props: AdminPanelProps) {
           </p>
         ) : (
           <ul className="mt-1 space-y-1">
-            {zones.map((z) => (
+            {[...zones]
+              .sort((a, b) =>
+                (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
+              )
+              .map((z) => (
               <li
                 key={z.id}
                 data-testid="admin-zone-item"
