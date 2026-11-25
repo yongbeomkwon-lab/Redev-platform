@@ -144,6 +144,10 @@ export function parseCustomZones(raw: string | null): CustomZone[] {
         ...(typeof z.replacesZoneId === "string" ? { replacesZoneId: z.replacesZoneId } : {}),
         ...(typeof z.replacesName === "string" ? { replacesName: z.replacesName } : {}),
         ...(Number.isFinite(z.replacesArea) ? { replacesArea: z.replacesArea as number } : {}),
+        // 동의율 — 이 브라우저 저장본에도 남긴다(DB 가 없을 때도 값이 살아 있게)
+        ...(typeof z.consentRate === "number" ? { consentRate: z.consentRate } : {}),
+        ...(typeof z.consentDate === "string" && z.consentDate ? { consentDate: z.consentDate } : {}),
+        ...(typeof z.consentNote === "string" && z.consentNote ? { consentNote: z.consentNote } : {}),
         createdAt: typeof z.createdAt === "string" ? z.createdAt : new Date().toISOString(),
         updatedAt: typeof z.updatedAt === "string" ? z.updatedAt : new Date().toISOString(),
       });
@@ -433,6 +437,9 @@ export function customZonesToGeoJSON(list: CustomZone[]): string {
       sourceId: z.id,
       geom: "가상경계",
       note: z.note,
+      ...(typeof z.consentRate === "number" ? { consentRate: z.consentRate } : {}),
+      ...(z.consentDate ? { consentDate: z.consentDate } : {}),
+      ...(z.consentNote ? { consentNote: z.consentNote } : {}),
       ...(z.replacesZoneId ? { replacesZoneId: z.replacesZoneId } : {}),
       ...(z.replacesName ? { replacesName: z.replacesName } : {}),
       ringLatLng: z.ring.map(([lat, lng]) => [Number(lat.toFixed(7)), Number(lng.toFixed(7))]),

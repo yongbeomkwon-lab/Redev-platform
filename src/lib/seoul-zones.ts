@@ -74,6 +74,23 @@ export type SeoulZone = {
    * (lib/zone-overrides.ts) 상세 패널이 ‘관리자 보정’ 표시를 띄우는 데 쓴다.
    */
   adminEdited?: boolean;
+  /**
+   * 토지등소유자 동의율(%) — 사업 추진을 가르는 핵심 수치라 모든 구역 상세에 한 줄로 붙는다.
+   *   · 값이 없으면 화면은 '미공개'로 보여 준다(0%와 다른 상태다 — 없는 값을 지어내지 않는다).
+   *   · 기준일은 "YYYY-MM-DD" 또는 월까지만 아는 경우 "YYYY-MM".
+   *   · 비고에는 진행 경과·출처(예: 11/10 약 56% → 11/25 60% 도달)를 적는다.
+   */
+  consentRate?: number | null;
+  consentDate?: string;
+  consentNote?: string;
+  /** 토지등소유자 수(명) — 공개 자료 기준 */
+  owners?: number;
+  /** 기존 세대수 */
+  householdsNow?: number;
+  /** 계획(구상) 세대수 */
+  householdsPlan?: number;
+  /** 노후도 % */
+  deterioration?: number;
 };
 
 /**

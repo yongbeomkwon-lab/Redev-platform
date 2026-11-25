@@ -8,6 +8,7 @@
 //   · 값이 비었거나 깨진 행은 null 로 버려 화면이 죽지 않게 한다(예전과 같은 원칙).
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Listing } from "@/lib/types";
+import { packConsentNote, parseConsentRate, unpackConsentNote } from "@/lib/consent";
 
 const strOf = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v : undefined);
 const numOf = (v: unknown): number | undefined => {
@@ -122,6 +123,14 @@ export type ZoneRecord = {
   replacesZoneId?: string;
   replacesName?: string;
   replacesArea?: number;
+  /**
+   * 토지등소유자 동의율(%) · 기준일 · 비고 — 관리자 화면에서 입력·수정한다.
+   *   · `custom_zones` 테이블에 동의율 컬럼이 없어서 **note 끝의 표식 한 줄**(⟦동의율⟧{...})로 같이 보관한다
+   *     (lib/consent.ts). 그래서 DB 를 직접 열어 봐도 값이 함께 있습니다.
+   */
+  consentRate?: number | null;
+  consentDate?: string;
+  consentNote?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -181,17 +190,26 @@ export function zoneFromRow(row: Record<string, unknown>): ZoneRecord | null {
   const updatedAt = strOf(row.updated_at) ?? strOf(row.updatedAt) ?? createdAt;
   const replacesZoneId = strOf(pickOf(row, "replaces_zone_id", "replacesZoneId"));
   const replacesName = strOf(pickOf(row, "replaces_name", "replacesName"));
+  // 동의율 — ① 화면이 보낸 값(API 응답) ② DB 에 컬럼이 생긴 경우 ③ note 끝 표식 순으로 읽는다
+  const packed = unpackConsentNote(strOf(row.note));
+  const colRate = parseConsentRate(pickOf(row, "consent_rate", "consentRate"));
+  const consentRate = colRate !== null ? colRate : (packed.consent.rate ?? undefined);
+  const consentDate = strOf(pickOf(row, "consent_date", "consentDate")) ?? packed.consent.date;
+  const consentNote = strOf(pickOf(row, "consent_note", "consentNote")) ?? packed.consent.note;
   return {
     id,
     name,
     type: strOf(row.type) ?? "기타",
     stage: strOf(row.stage) ?? "추진준비",
     gu: strOf(row.gu) ?? "",
-    note: strOf(row.note) ?? "",
+    note: packed.note,
     ring,
     areaSqm: area && area > 0 ? area : Math.round(ringAreaSqm(ring)),
     ...(replacesZoneId ? { replacesZoneId } : {}),
     ...(replacesName ? { replacesName } : {}),
+    ...(consentRate !== undefined ? { consentRate } : {}),
+    ...(consentDate ? { consentDate } : {}),
+    ...(consentNote ? { consentNote } : {}),
     createdAt,
     updatedAt,
   };
@@ -212,7 +230,8 @@ export function zoneToRow(z: ZoneRecord): Record<string, unknown> {
     gu: z.gu,
     area: Math.round(z.areaSqm),
     geom: "가상경계",
-    note: z.note,
+    // 동의율은 별도 컴럼이 없어 note 끝 표식으로 함께 저장한다(lib/consent.ts)
+    note: packConsentNote(z.note, { rate: z.consentRate ?? null, date: z.consentDate, note: z.consentNote }),
     replaces_zone_id: z.replacesZoneId ?? null,
     replaces_name: z.replacesName ?? null,
     ring_lat_lng: z.ring.map(([lat, lng]) => [Number(lat.toFixed(7)), Number(lng.toFixed(7))]),

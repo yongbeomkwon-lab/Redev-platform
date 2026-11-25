@@ -101,6 +101,12 @@ export function applyCustomZoneOverrides(zones: SeoulZone[], custom: CustomZone[
         ? { parts: undefined, holes: undefined, geom: "직접작도" as SeoulZone["geom"] }
         : {}),
       note,
+      // 동의율 — 관리자가 값을 넣었거나 지웠을 때만 바꿀다(안 건드렸으면 서울시 원본 값을 그대로 둔다)
+      ...(o.consentRate !== undefined
+        ? { consentRate: o.consentRate }
+        : {}),
+      ...(o.consentDate?.trim() ? { consentDate: o.consentDate.trim() } : {}),
+      ...(o.consentNote?.trim() ? { consentNote: o.consentNote.trim() } : {}),
       adminEdited: true,
     } satisfies SeoulZone;
   });

@@ -70,6 +70,7 @@ import { MY_LISTINGS, MY_LISTINGS_COUNT, MY_LISTINGS_AS_OF, MY_LISTING_ZONE_IDS 
 // 지도 위 `🏠 매물 N` 배지 노출 스위치 — 지금은 초기 화면에서 숨김(마이페이지에서 되살린다)
 import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
+import ZoneConsent from "@/components/ZoneConsent";
 import {
   ADMIN_STORAGE_KEY,
   CUSTOM_ZONE_TYPES,
@@ -89,6 +90,7 @@ import {
   type CustomZoneType,
 } from "@/lib/custom-zones";
 import { applyCustomZoneOverrides, customOverrideFor } from "@/lib/zone-overrides";
+import { parseConsentRate } from "@/lib/consent";
 import { loadRecentTx } from "@/lib/tx-recent";
 
 const ZONE_TYPES: (MapZoneType | "전체")[] = [
@@ -1372,6 +1374,7 @@ export default function ZoneExplorer() {
     const base = d.editingId ? customZones.find((z) => z.id === d.editingId) : undefined;
     const official = d.replacesZoneId ? seoulZones.find((z) => z.id === d.replacesZoneId) : undefined;
     const officialType = official?.type as CustomZoneType | undefined;
+    const consentRate = base?.consentRate ?? official?.consentRate;
     return {
       name: base?.name ?? d.replacesName ?? official?.name ?? "",
       type:
@@ -1382,6 +1385,11 @@ export default function ZoneExplorer() {
       stage: base?.stage ?? official?.stage ?? "추진준비",
       gu: base?.gu ?? official?.gu ?? "",
       note: base?.note ?? "",
+      // 동의율 — 저장본이 있으면 그 값, 없으면 서울시 구역에 이미 있는 값(예: 기존 자료에서 옮긴 동의율)을 채운다
+      consentRate:
+        consentRate === null || consentRate === undefined ? "" : String(consentRate),
+      consentDate: base?.consentDate ?? official?.consentDate ?? "",
+      consentNote: base?.consentNote ?? official?.consentNote ?? "",
     };
   }
 
@@ -1404,7 +1412,7 @@ export default function ZoneExplorer() {
       setDraft(next);
       setAdminMeta(metaFromDraft(next));
       setAdminMsg(
-        `‘${selectedCustom.name}’ 경계·정보를 고칩니다 — 경계는 그대로 두고 사업유형·추진단계만 바꿔 저장해도 됩니다.`
+        `‘${selectedCustom.name}’ 경계·정보를 고칩니다 — 경계는 그대로 두고 사업유형·추진단계·동의율만 바꿔 저장해도 됩니다.`
       );
       return;
     }
@@ -1434,7 +1442,7 @@ export default function ZoneExplorer() {
     setDraft(next);
     setAdminMeta(metaFromDraft(next));
     setAdminMsg(
-      `${name} 경계·정보를 고칩니다 — 점을 끌어 경계를 고치거나, 경계는 그대로 두고 사업유형·추진단계만 바꿔 저장하세요.`
+      `${name} 경계·정보를 고칩니다 — 점을 끌어 경계를 고치거나, 경계는 그대로 두고 사업유형·추진단계·동의율만 바꿔 저장하세요.`
     );
   }
 
@@ -1514,6 +1522,8 @@ export default function ZoneExplorer() {
     }
     const now = new Date().toISOString();
     const existing = draft.editingId ? customZones.find((z) => z.id === draft.editingId) : undefined;
+    // 동의율 — 빈 칸은 '미공개'(null)로 저장해, 기존 값이 남아 있는 일이 없게 한다
+    const consentRate = parseConsentRate(adminMeta.consentRate);
     const zone: CustomZone = {
       id: existing?.id ?? newCustomZoneId(),
       name,
@@ -1523,6 +1533,9 @@ export default function ZoneExplorer() {
       note: adminMeta.note.trim(),
       ring: draft.points.map(([lat, lng]) => [lat, lng] as [number, number]),
       areaSqm: ringAreaSqm(draft.points),
+      consentRate,
+      ...(adminMeta.consentDate.trim() ? { consentDate: adminMeta.consentDate.trim() } : {}),
+      ...(adminMeta.consentNote.trim() ? { consentNote: adminMeta.consentNote.trim() } : {}),
       ...(draft.replacesZoneId ? { replacesZoneId: draft.replacesZoneId } : {}),
       ...(draft.replacesName ? { replacesName: draft.replacesName } : {}),
       ...(draft.replacesArea ? { replacesArea: draft.replacesArea } : {}),
@@ -1535,7 +1548,10 @@ export default function ZoneExplorer() {
     setAdminMeta(null);
     setSelectedCustomId(zone.id);
     // 저장한 뒤에는 화면을 그 구역에 맞추지 않는다 — 배율을 유지해야 바로 다음 구역을 이어서 그린다.
-    setAdminMsg(`‘${zone.name}’ 저장 중 — 공용 DB에 올리는 중…`);
+    setAdminMsg(
+      `‘${zone.name}’ 저장 중 — 공용 DB에 올리는 중…` +
+        (consentRate !== null ? ` (동의율 ${consentRate}%)` : " (동의율 미공개)")
+    );
 
     // 공용 DB(Supabase)에 올린다 — 성공하면 모든 방문자·기기에서 같은 구역이 보인다
     const pushed = await pushCustomZoneToDb(zone);
@@ -1591,7 +1607,7 @@ export default function ZoneExplorer() {
     };
     setDraft(next);
     setAdminMeta(metaFromDraft(next));
-    setAdminMsg(`‘${z.name}’ 경계·정보를 고칩니다 — 사업유형·추진단계만 바꿔 저장해도 됩니다.`);
+    setAdminMsg(`‘${z.name}’ 경계·정보를 고칩니다 — 사업유형·추진단계·동의율만 바꿔 저장해도 됩니다.`);
   }
 
   async function deleteCustomZone(id: string) {
@@ -2597,7 +2613,7 @@ export default function ZoneExplorer() {
               >
                 <span className="rounded-md bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">관리자</span>
                 <b className="min-w-0 flex-1 truncate text-[11px] font-semibold text-sky-950">
-                  {selectedSeoul?.name ?? selected?.name} 경계·정보 수정
+                  {selectedSeoul?.name ?? selected?.name} 경계·정보(동의율) 수정
                 </b>
                 <button
                   type="button"
@@ -2660,6 +2676,13 @@ export default function ZoneExplorer() {
                 {selectedCustom.note && (
                   <p className="whitespace-pre-wrap text-[11px] leading-snug text-slate-600">{selectedCustom.note}</p>
                 )}
+                <ZoneConsent
+                  rate={selectedCustom.consentRate}
+                  date={selectedCustom.consentDate}
+                  note={selectedCustom.consentNote}
+                  dense
+                  edited={typeof selectedCustom.consentRate === "number"}
+                />
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
@@ -2701,6 +2724,13 @@ export default function ZoneExplorer() {
                   {selected.toehoApplied && <Badge tone="gold">토허제 적용</Badge>}
                   <Badge tone="blue">예상 입주 {selected.moveInEstimate}</Badge>
                 </div>
+
+                {/* 동의율 — 모든 구역 상세에 같은 자리로 붙는다(값이 없으면 '미공개') */}
+                <ZoneConsent
+                  rate={selected.consentRate}
+                  date={selected.consentDate}
+                  note={selected.consentNote}
+                />
 
                 <div>
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">사업개요</h3>

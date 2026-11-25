@@ -26,6 +26,12 @@ export type AdminMetaForm = {
   stage: string;
   gu: string;
   note: string;
+  /** 동의율 % — 입력란은 문자열로 다룬다("60", "60%", 빈 값=미공개) */
+  consentRate: string;
+  /** 동의율 기준일 — "YYYY-MM-DD" */
+  consentDate: string;
+  /** 동의율 비고 — 진행 경과·출처 */
+  consentNote: string;
 };
 
 export type AdminPanelProps = {
@@ -169,7 +175,7 @@ export function AdminZonePanel(props: AdminPanelProps) {
       {!draftPoints && (
         <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
           구역을 고른 뒤 <b className="text-slate-700">경계·정보 수정</b>을 누르면 경계를 안 고쳐도
-          사업유형·추진단계·비고를 바로 고쳐 저장할 수 있습니다.
+          사업유형·추진단계·동의율·비고를 바로 고쳐 저장할 수 있습니다.
         </p>
       )}
 
@@ -226,7 +232,7 @@ export function AdminZonePanel(props: AdminPanelProps) {
           </div>
           <p className="mt-1 text-[10px] leading-snug text-sky-900/80">
             {meta
-              ? "아래 정보 입력 폼이 열려 있습니다 — 경계를 안 고쳐도 사업유형·추진단계만 바꿔 저장할 수 있습니다."
+              ? "아래 정보 입력 폼이 열려 있습니다 — 경계를 안 고쳐도 사업유형·추진단계·동의율만 바꿔 저장할 수 있습니다."
               : adding
                 ? // 그리기 중에는 ✕·+ 핸들을 띄우지 않는다(점이 끼어들어 도형이 꼬이던 문제) —
                   //   잘못 찍은 점은 ↶ 실행취소로 되돌린다.
@@ -246,7 +252,7 @@ export function AdminZonePanel(props: AdminPanelProps) {
           <p className="text-[11px] font-bold text-slate-800">구역 정보 입력</p>
           {editingZone && (
             <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-              경계는 고친 그대로, 사업유형·추진단계·비고는 여기 값으로 저장됩니다.
+              경계는 고친 그대로, 사업유형·추진단계·동의율·비고는 여기 값으로 저장됩니다.
             </p>
           )}
           <label className="mt-1.5 block text-[10px] font-semibold text-slate-500">
@@ -321,6 +327,47 @@ export function AdminZonePanel(props: AdminPanelProps) {
               className="mt-0.5 w-full resize-y rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
             />
           </label>
+
+          {/* ── 동의율 — 모든 구역 상세에 한 줄로 보이는 값. 비우면 '미공개' ── */}
+          <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50/60 p-1.5">
+            <p className="text-[10px] font-bold text-sky-900">동의율</p>
+            <div className="mt-1 grid grid-cols-2 gap-1.5">
+              <label className="block text-[10px] font-semibold text-slate-500">
+                동의율 %
+                <input
+                  data-testid="admin-consent-rate"
+                  value={meta.consentRate}
+                  onChange={(e) => props.onMetaChange({ consentRate: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="예: 60 (비우면 미공개)"
+                  className="mt-0.5 w-full rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold tabular-nums text-slate-900 focus:border-sky-500 focus:outline-none"
+                />
+              </label>
+              <label className="block text-[10px] font-semibold text-slate-500">
+                기준일
+                <input
+                  data-testid="admin-consent-date"
+                  value={meta.consentDate}
+                  onChange={(e) => props.onMetaChange({ consentDate: e.target.value })}
+                  type="date"
+                  className="mt-0.5 w-full rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+                />
+              </label>
+            </div>
+            <label className="mt-1 block text-[10px] font-semibold text-slate-500">
+              동의율 비고
+              <input
+                data-testid="admin-consent-note"
+                value={meta.consentNote}
+                onChange={(e) => props.onMetaChange({ consentNote: e.target.value })}
+                placeholder="예: 11/10 약 56% → 11/25 60% 도달"
+                className="mt-0.5 w-full rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+              />
+            </label>
+            <p className="mt-1 text-[9.5px] leading-snug text-sky-900/70">
+              입력하면 구역 상세에 <b>동의율 N% (기준일 기준)</b> 카드로 보입니다. 비우면 ‘미공개’로 보입니다.
+            </p>
+          </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             <button type="button" data-testid="admin-save" onClick={props.onSave} className={BTN_DARK}>
               저장

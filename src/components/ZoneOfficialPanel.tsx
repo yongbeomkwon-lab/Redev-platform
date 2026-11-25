@@ -24,6 +24,7 @@ import type { BuildingTradeTarget } from "@/lib/molit";
 import type { AuctionItem, AuctionsMeta } from "@/lib/auctions";
 import ZoneAuctions from "./ZoneAuctions";
 import StageTimeline from "./StageTimeline";
+import ZoneConsent from "./ZoneConsent";
 
 const PYEONG = 3.305785;
 
@@ -111,6 +112,15 @@ export default function ZoneOfficialPanel({
         </button>
       </div>
 
+      {/* 동의율 — 사업 추진을 가르는 핵심 수치라 단계 타임라인보다 위에 둔다.
+          값이 없는 구역은 '미공개' 한 줄로만 보여 준다(0%와 다른 상태). */}
+      <ZoneConsent
+        rate={zone.consentRate}
+        date={zone.consentDate}
+        note={zone.consentNote}
+        edited={zone.adminEdited && typeof zone.consentRate === "number"}
+      />
+
       {/* 사업 진행단계 — 지금이 어느 단계인지, 지나온 단계·남은 단계까지 한눈에.
           별칭·지번 목록보다 위에 둔다(지번이 많은 구역에서도 스크롤 없이 바로 보이도록) */}
       <StageTimeline zone={zone} />
@@ -166,6 +176,21 @@ export default function ZoneOfficialPanel({
               ({(zone.area / 10000).toFixed(1)}만㎡ · {pyeong.toLocaleString()}평)
             </span>
           </dd>
+          {(zone.owners || zone.householdsNow || zone.householdsPlan || zone.deterioration) && (
+            <>
+              <dt className="whitespace-nowrap text-emerald-700/80">사업 개요</dt>
+              <dd className="min-w-0 text-[11px] leading-relaxed">
+                {[
+                  zone.owners ? `토지등소유자 약 ${zone.owners.toLocaleString()}명` : "",
+                  zone.householdsNow ? `기존 ${zone.householdsNow.toLocaleString()}세대` : "",
+                  zone.householdsPlan ? `계획 ${zone.householdsPlan.toLocaleString()}세대(구상)` : "",
+                  zone.deterioration ? `노후도 ${zone.deterioration}%` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </dd>
+            </>
+          )}
           <dt className="whitespace-nowrap text-emerald-700/80">경계 도형</dt>
           <dd className="min-w-0 break-words text-[11px] leading-relaxed">
             {zone.geom === "UQ181" ? (

@@ -111,6 +111,12 @@ export type Zone = {
   /** 요약 지표 (listing/transaction에서 파생 계산도 가능하지만 캐시용으로 보관) */
   lowestPrice?: number; // 최저 매매가 (만원)
   lowestInitialInvestment?: number; // 최저 초기투자금 (만원)
+  /** 토지등소유자 동의율(%) — 없으면 상세 패널이 '미공개'로 보여 준다(0%와 다른 상태) */
+  consentRate?: number | null;
+  /** 동의율 기준일 — "YYYY-MM-DD" 또는 "YYYY-MM" */
+  consentDate?: string;
+  /** 동의율 비고(진행 경과·출처) */
+  consentNote?: string;
   summary: string;
 };
 

@@ -54,6 +54,15 @@ const EXTRA = [
   "households", // 세대수(보도 기준)
   "rightsDate", // 권리산정기준일
   "drawing", // 구역계 도면 파일 경로(작업 참고)
+  // 동의율 — 모든 구역 상세에 한 줄로 붙는 핵심 수치(2026-11-26)
+  "consentRate",
+  "consentDate",
+  "consentNote",
+  // 사업 개요 수치(공개 자료)
+  "owners",
+  "householdsNow",
+  "householdsPlan",
+  "deterioration",
 ];
 
 const features = zones.map((z) => {

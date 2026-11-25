@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import type { ZoneRecord } from "@/lib/db-mapping";
 import { zoneFromRow, zoneToRow } from "@/lib/db-mapping";
+import { parseConsentRate } from "@/lib/consent";
 import { sbDelete, sbSelect, sbUpsert, supabaseConfigured } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,11 @@ function readZone(body: unknown): ZoneRecord | null {
   if (!id || !name || ring.length < 3) return null;
   const areaSqm = typeof b.areaSqm === "number" && b.areaSqm > 0 ? b.areaSqm : 0;
   const now = new Date().toISOString();
+  // 동의율 — 숫자·문자열("60%") 모두 받고, null 은 '지움(미공개)'으로 그대로 보낸다
+  const consentRate =
+    b.consentRate === null ? null : parseConsentRate(b.consentRate) ?? undefined;
+  const consentDate = typeof b.consentDate === "string" ? b.consentDate.trim() : "";
+  const consentNote = typeof b.consentNote === "string" ? b.consentNote.trim() : "";
   return {
     id,
     name,
@@ -58,6 +64,9 @@ function readZone(body: unknown): ZoneRecord | null {
     note: typeof b.note === "string" ? b.note : "",
     ring,
     areaSqm,
+    ...(consentRate !== undefined ? { consentRate } : {}),
+    ...(consentDate ? { consentDate } : {}),
+    ...(consentNote ? { consentNote } : {}),
     ...(typeof b.replacesZoneId === "string" && b.replacesZoneId ? { replacesZoneId: b.replacesZoneId } : {}),
     ...(typeof b.replacesName === "string" && b.replacesName ? { replacesName: b.replacesName } : {}),
     ...(typeof b.replacesArea === "number" && Number.isFinite(b.replacesArea) ? { replacesArea: b.replacesArea } : {}),
