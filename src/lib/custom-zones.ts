@@ -46,6 +46,9 @@ export const CUSTOM_TYPE_KIND: Partial<Record<CustomZoneType, string>> = ZONE_TY
 export const CUSTOM_ZONE_STAGES = [
   "추진준비",
   "정비예정",
+  "대상지 선정",
+  "관리계획 수립중",
+  "관리계획고시",
   "구역지정",
   "추진위원회",
   "사업시행인가",
