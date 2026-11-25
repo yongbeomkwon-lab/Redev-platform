@@ -1693,6 +1693,7 @@ export default function ZoneExplorer() {
         color: customZoneColor(z.type),
         ring: z.ring,
         replaces: !!z.replacesZoneId,
+        ...(z.replacesZoneId ? { replacesZoneId: z.replacesZoneId } : {}),
       })),
     [customZones]
   );

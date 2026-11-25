@@ -2041,8 +2041,16 @@ export default function KakaoZoneMap({
       ];
 
       // 4-1) 저장된 구역 — 사업유형 색으로 채우고 흰 테두리를 한 번 더 그어 지도 위에서 읽히게
+      //   ⚠️ 기존 서울시 구역을 덮쳐 쓰는 보정본(replacesZoneId)은 여기서 **다시 그리지 않는다.**
+      //     그 구역은 zone-overrides 가 정식 목록에 병합해 정식 레이어가 이미 같은 경계로 그리고 있어,
+      //     관리자 레이어로 한 겹 더 채우면 두 겹이 겹쳐 늘 선택된 것처럼 진하게 보인다
+      //     (2026-11-25 제보: “송파동 117은 4구역만 색이 진하고, 다른 구역을 눌러도 4구역은 그대로”).
+      //     완전 신규로 그린 구역(replacesZoneId 없음)만 여기서 그린다.
+      //     · 선택·수정은 그대로다 — 보정본을 누르면 selectedZoneId 가 원본 구역 id 로 잡혀
+      //       정식 레이어가 선택 색(진한 채움)으로 강조하고, 경계 핸들은 초안(draft)이 그린다.
       for (const z of adm.zones) {
         if (!z.ring || z.ring.length < 3) continue;
+        if (z.replacesZoneId && prepRef.current.zones.some((pz) => pz.zone.id === z.replacesZoneId)) continue;
         const sel = z.id === adm.selectedId;
         ctx.beginPath();
         let minX = Infinity;
