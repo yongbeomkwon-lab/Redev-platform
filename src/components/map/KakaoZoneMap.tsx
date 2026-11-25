@@ -2112,8 +2112,9 @@ export default function KakaoZoneMap({
       if (draft && draft.length > 0) {
         const pts = draft.map(([la, ln]) => projectXY(la, ln));
 
-        // 재개발닷컴 방식: 3점 이상이면 그리는 중에도 실시간 반투명 파란 영역으로 닫아 보여준다(고무줄 선 없음).
-        if (pts.length >= 3) {
+        // 그리는 중(adm.adding)에는 닫는 선·파란 면을 미리 채우지 않고 찍은 순서대로 선만 그린다(ㄱ자·계단식 그릴 때 X자/삼각형 착시 방지).
+        //   [완료] 버튼(또는 Enter)을 눌러 adding 이 꺼진 뒤에 닫힌 다각형으로 채운다.
+        if (pts.length >= 3 && !adm.adding) {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
           for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -2126,10 +2127,10 @@ export default function KakaoZoneMap({
           ctx.lineWidth = 2.5;
           ctx.strokeStyle = "#0284c7";
           ctx.stroke();
-        } else if (pts.length === 2) {
+        } else if (pts.length >= 2) {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
-          ctx.lineTo(pts[1][0], pts[1][1]);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
           ctx.lineWidth = 4;
           ctx.strokeStyle = "rgba(255,255,255,0.85)";
           ctx.stroke();
