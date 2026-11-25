@@ -2113,7 +2113,7 @@ export default function KakaoZoneMap({
         const pts = draft.map(([la, ln]) => projectXY(la, ln));
 
         // 그리는 중(adm.adding)에는 삼각형·파란 면 채우기와 닫는 변을 그리지 않고 단순 선(Polyline)만 표시한다.
-        //   완료(✓ 완료·더블클릭·우클릭·Enter·첫 점 클릭)로 adding 이 꺼진 뒤에 닫힌 다각형으로 채운다.
+        //   완료(✓ 완료·더블클릭·우클릭·Enter·첫 점 클릭)로 adding 이 꺼진 뒤에 닫힌 다각형(실선)으로 채운다.
         if (pts.length >= 3 && !adm.adding) {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
@@ -2121,28 +2121,31 @@ export default function KakaoZoneMap({
           ctx.closePath();
           ctx.fillStyle = "rgba(2,132,199,0.20)";
           ctx.fill();
-          ctx.setLineDash([6, 4]);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = "rgba(2,132,199,0.95)";
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = "rgba(255,255,255,0.8)";
           ctx.stroke();
-          ctx.setLineDash([]);
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#0369a1";
+          ctx.stroke();
         }
 
-        // 열린 선(그리는 중 마지막 점 → 커서) — 흰 테두리 위에 파란 선
-        ctx.beginPath();
-        ctx.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-        const cur = adminCursorRef.current;
-        if (adm.adding && cur) {
-          const [ex, ey] = projectXY(cur[0], cur[1]);
-          ctx.lineTo(ex, ey);
+        // 그리는 중 열린 선(마지막 점 → 커서) — 흰 테두리 위에 파란 선
+        if (adm.adding) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+          const cur = adminCursorRef.current;
+          if (cur) {
+            const [ex, ey] = projectXY(cur[0], cur[1]);
+            ctx.lineTo(ex, ey);
+          }
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = "rgba(255,255,255,0.8)";
+          ctx.stroke();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#0369a1";
+          ctx.stroke();
         }
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = "rgba(255,255,255,0.8)";
-        ctx.stroke();
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = "#0369a1";
-        ctx.stroke();
 
         // 꼭짓점 점(핸들과 같은 자리 — 캔버스에도 그려 두면 핸들 렌더 전에도 점이 보인다)
         for (const [x, y] of pts) {
@@ -4577,35 +4580,6 @@ export default function KakaoZoneMap({
               >
                 <span className="block h-4 w-4 rounded-full border-2 border-white bg-sky-700 shadow-[0_1px_4px_rgba(0,0,0,0.5)]" />
               </button>
-              {!adminDrawingNew && adminDraft.length > 3 && (
-                <button
-                  type="button"
-                  data-testid={`admin-vertex-del-${i}`}
-                  aria-label={`꼭짓점 ${i + 1} 삭제`}
-                  title="이 꼭짓점 삭제"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    admin?.onRemovePoint(i);
-                  }}
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    width: 30,
-                    height: 30,
-                    transform: "translate(4px,-34px)",
-                    touchAction: "none",
-                  }}
-                  className="pointer-events-auto flex items-center justify-center rounded-full border border-rose-300 bg-white text-[12px] font-bold text-rose-600 shadow"
-                >
-                  ✕
-                </button>
-              )}
             </div>
           ))}
           {!adminDrawingNew &&
@@ -4633,12 +4607,12 @@ export default function KakaoZoneMap({
                     position: "absolute",
                     left: 0,
                     top: 0,
-                    width: 34,
-                    height: 34,
+                    width: 20,
+                    height: 20,
                     transform: "translate(-50%,-50%)",
                     touchAction: "none",
                   }}
-                  className="pointer-events-auto flex items-center justify-center rounded-full border border-sky-400 bg-white/95 pb-0.5 text-[15px] font-bold leading-none text-sky-700 shadow"
+                  className="pointer-events-auto flex items-center justify-center rounded-full border border-sky-400/80 bg-white/85 pb-0.5 text-[12px] font-bold leading-none text-sky-700 shadow-sm hover:bg-white"
                 >
                   +
                 </button>
