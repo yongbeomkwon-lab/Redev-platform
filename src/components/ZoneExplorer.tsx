@@ -88,6 +88,8 @@ import {
   type CustomZone,
   type CustomZoneType,
 } from "@/lib/custom-zones";
+import { applyCustomZoneOverrides, customOverrideFor } from "@/lib/zone-overrides";
+import { loadRecentTx } from "@/lib/tx-recent";
 
 const ZONE_TYPES: (MapZoneType | "전체")[] = [
   "전체",
@@ -185,7 +187,9 @@ export default function ZoneExplorer() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   // 서울시 정비구역 전수 (public/data/zones.geojson → 클라이언트 fetch)
-  const [seoulZones, setSeoulZones] = useState<SeoulZone[]>([]);
+  //   · 화면이 쓰는 `seoulZones` 는 관리자 저장본을 덮어쓴 목록이다(아래 useMemo).
+  //     여기 상태는 서울시 원본만 담는다.
+  const [seoulZonesBase, setSeoulZonesBase] = useState<SeoulZone[]>([]);
   const [seoulMeta, setSeoulMeta] = useState<SeoulZonesMeta | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<MapZoneType | "전체">("전체");
@@ -243,6 +247,12 @@ export default function ZoneExplorer() {
   //     넘겨 준다. 표시 상태(ON/OFF)는 지도 위 토글이 바꾸도록 여기서 갖는다.
   const [txPins, setTxPins] = useState<TxMapPin[]>([]);
   const [txPinsOn, setTxPinsOn] = useState(true);
+  // ── 지도 전체 실거래 가격표 ─────────────────────────────────────────────
+  //   · 국토부 신고 최근 3개월을 건물(법정동+지번) 단위로 묶은 정적 데이터(lib/tx-recent.ts).
+  //   · 구역을 고르지 않아도 지도 어디에나 가격표가 뜨게 하는 것이 기본값이다(토글로 끈다).
+  const [recentTxPins, setRecentTxPins] = useState<TxMapPin[]>([]);
+  const [recentTxLoading, setRecentTxLoading] = useState(true);
+  const [recentTxMeta, setRecentTxMeta] = useState<{ asOf?: string; months?: number } | null>(null);
   // ── 단지·건물 5년 실거래 이력 창 ─────────────────────────────────────
   //   · 지도 실거래 핀 또는 실거래 목록의 아파트·연립다세대 행을 누르면 그 단지의 5년 흐름이 열린다.
   //   · 열려 있는 동안 지도의 그 지번 핀을 강조(activeTxPin)하고 지도를 그쪽으로 옮긴다.
@@ -318,6 +328,16 @@ export default function ZoneExplorer() {
   const [adminMode, setAdminMode] = useState(false);
   /** 이 브라우저에 저장된 관리자 구역 */
   const [customZones, setCustomZones] = useState<CustomZone[]>([]);
+  /**
+   * 화면이 보는 서울시 구역 목록 = 서울시 원본 + 관리자 저장본 덮어쓰기.
+   *   · 관리자 화면에서 사업유형·추진단계·경계를 고쳐 저장하면 지도 칩·상세 패널·검색이
+   *     **바로** 그 값으로 바뀐다(예전에는 관리자 화면의 반투명 도형에만 반영됐다).
+   *   · 덮어쓸 저장본이 없으면 applyCustomZoneOverrides 가 원본 배열을 그대로 돌려준다.
+   */
+  const seoulZones = useMemo(
+    () => applyCustomZoneOverrides(seoulZonesBase, customZones),
+    [seoulZonesBase, customZones]
+  );
   /** 지금 그리는/고치는 초안 */
   const [draft, setDraft] = useState<{
     points: [number, number][];
@@ -436,7 +456,7 @@ export default function ZoneExplorer() {
   // 서울시 정비구역 전수 레이어
   useEffect(() => {
     loadSeoulZones().then((d) => {
-      setSeoulZones(d.zones);
+      setSeoulZonesBase(d.zones);
       setSeoulMeta(d.meta);
     });
   }, []);
@@ -451,7 +471,7 @@ export default function ZoneExplorer() {
         .then((changed) => (changed ? refreshSeoulZones() : null))
         .then((d) => {
           if (!d) return;
-          setSeoulZones(d.zones);
+          setSeoulZonesBase(d.zones);
           setSeoulMeta(d.meta);
         })
         .catch(() => {});
@@ -492,6 +512,23 @@ export default function ZoneExplorer() {
   // 대표 구역이 아닌 구역 — 서울시 고시 데이터만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
+  // 지도 전체 실거래 가격표 — 지도가 뜬 뒤 한 번만 받아 둔다(700KB급, 화면을 막지 않게)
+  useEffect(() => {
+    let alive = true;
+    loadRecentTx()
+      .then((d) => {
+        if (!alive) return;
+        setRecentTxPins(d.pins);
+        setRecentTxMeta(d.meta ? { asOf: d.meta.asOf, months: d.meta.months } : null);
+      })
+      .finally(() => {
+        if (alive) setRecentTxLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // 구역을 바꾸거나 닫으면 이전 구역의 실거래 핀·경매 위치 핀을 지도에서 지운다
   useEffect(() => {
     setTxPins([]);
@@ -1255,6 +1292,12 @@ export default function ZoneExplorer() {
    */
   function pickZone(id: string, opts?: { auction?: boolean }) {
     setSelectedId(id);
+    // 관리자 구역 선택은 공식 구역 선택과 **함께 살아 있으면 안 된다.**
+    //   (예전: 4구역을 고쳐 둔 뒤 5구역을 누르면 상세는 5구역인데 「경계·정보 수정」 버튼은
+    //    계속 4구역을 가리켜, 5구역을 클릭해도 수정 화면이 안 나오는 것처럼 보였다 — 2026-11-25 제보)
+    //   · 이 구역을 덮어쓴 관리자 저장본이 있으면 그것을 선택해 둔다(수정은 저장본을 고친다).
+    const override = adminMode ? customOverrideFor(customZones, id) : undefined;
+    setSelectedCustomId(override?.id);
     setPanelOpen(true);
     setAuctionFocus(null);
     // 유형 필터가 켜져 있어 고른 구역이 지도 레이어에서 빠져 있으면 지도에서 사라진 것처럼 보인다
@@ -1369,6 +1412,15 @@ export default function ZoneExplorer() {
     }
     const name = selectedSeoul?.name ?? selected?.name ?? "선택 구역";
     const officialArea = selectedSeoul?.area ?? ringAreaSqm(ring);
+    // 이미 이 구역을 덮어쓴 저장본이 있으면 **그것을 고친다** — 같은 구역에 저장본이 둘로 늘지 않게.
+    const officialId = selectedSeoul?.id ?? selected?.id;
+    const existing = officialId
+      ? customZones.find((z) => z.replacesZoneId === officialId)
+      : undefined;
+    if (existing) {
+      editCustomGeometry(existing.id);
+      return;
+    }
     const next = {
       points: ring.map(([lat, lng]) => [lat, lng] as [number, number]),
       replacesZoneId: selectedSeoul?.id ?? selected?.id,
@@ -1484,7 +1536,7 @@ export default function ZoneExplorer() {
     // 공용 DB(Supabase)에 올린다 — 성공하면 모든 방문자·기기에서 같은 구역이 보인다
     const pushed = await pushCustomZoneToDb(zone);
     const officialNote = draft.replacesZoneId
-      ? " 지도에는 저장한 사업유형 색으로 그려지고, 오른쪽 ‘서울시 고시 구역’ 카드는 서울시 공식 데이터 그대로입니다."
+      ? " 저장한 경계·사업유형·추진단계는 이제 지도 칩과 ‘서울시 고시 구역’ 상세 카드에 그대로 반영됩니다(모든 방문자)."
       : "";
     setAdminMsg(
       pushed.shared
@@ -1502,12 +1554,18 @@ export default function ZoneExplorer() {
    */
   function selectCustomZoneOnMap(id: string) {
     setSelectedCustomId(id);
+    // 덮어쓰기 저장본이면 그 원본 서울시 구역을 상세 패널에도 열어 둔다 —
+    //   패널(공식 구역)과 수정 대상(관리자 저장본)이 같은 구역을 가리키게.
+    const z = customZones.find((v) => v.id === id);
+    setSelectedId(z?.replacesZoneId);
     setPanelOpen(true);
   }
 
   /** 목록·도구 막대에서 골랐을 때 — 그 구역으로 이동한다(그리는/고치는 중에는 화면을 흔들지 않는다) */
   function selectCustomZone(id: string) {
     setSelectedCustomId(id);
+    const z = customZones.find((v) => v.id === id);
+    setSelectedId(z?.replacesZoneId);
     setPanelOpen(true);
     if (!draft) setAdminFit({ id, token: Date.now() });
   }
@@ -1691,6 +1749,8 @@ export default function ZoneExplorer() {
           txPins={txPins}
           txPinsOn={txPinsOn}
           onToggleTxPins={() => setTxPinsOn((v) => !v)}
+          recentTxPins={recentTxPins}
+          recentTxLoading={recentTxLoading}
           auctionPins={mapAuctionPins}
           auctionPinsOn={auctionPinsOn}
           onToggleAuctionPins={() => setAuctionPinsChoice(!auctionPinsOn)}
@@ -2465,6 +2525,11 @@ export default function ZoneExplorer() {
               <b>옅은 점선 원</b>은 위치만 알려 주는 근사 경계(실제 구역계 아님)
             </p>
             <p className="text-[10px] leading-snug text-slate-500">
+              <b>지도 가격표</b>는 국토교통부 신고 실거래 최근 {recentTxMeta?.months ?? 3}개월을 건물(법정동+지번) 단위로 묶은 것입니다
+              {recentTxPins.length > 0 ? ` (${recentTxPins.length.toLocaleString()}곳${recentTxMeta?.asOf ? ` · ${recentTxMeta.asOf} 기준` : ""})` : ""} ·
+              지도 위 <b>「실거래」</b> 토글로 켜고 끌 수 있습니다. 서울 전체(구 배지) 화면에서는 구를 눌러 확대하면 가격표가 보입니다.
+            </p>
+            <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["재건축"] }}>재건축</b> = 서울시 사업유형 재건축(단독·공동) ·
               아파트 단지 재건축은 재개발과 사업 절차·권리가 달라 따로 표시합니다 ·{" "}
               <b style={{ color: TYPE_COLORS["역세권"] }}>역세권</b> = 역세권활성화·청년안심주택 ·{" "}
@@ -2518,6 +2583,27 @@ export default function ZoneExplorer() {
             </button>
           </div>
           <div className="ui-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            {/* 0-0) 관리자 — 고른 구역의 경계·정보를 바로 고치는 자리.
+                왼쪽 관리자 패널까지 가지 않아도, 구역을 클릭한 그 자리에서 수정 화면이 열린다. */}
+            {adminMode && !selectedCustom && (selectedSeoul || selected) && (
+              <div
+                data-testid="admin-edit-selected-bar"
+                className="mb-3 flex flex-wrap items-center gap-1.5 rounded-xl border-2 border-sky-300 bg-sky-50/70 p-2"
+              >
+                <span className="rounded-md bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">관리자</span>
+                <b className="min-w-0 flex-1 truncate text-[11px] font-semibold text-sky-950">
+                  {selectedSeoul?.name ?? selected?.name} 경계·정보 수정
+                </b>
+                <button
+                  type="button"
+                  data-testid="admin-edit-selected-inline"
+                  onClick={startEditSelected}
+                  className="shrink-0 rounded-lg bg-sky-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-sky-800"
+                >
+                  수정하기
+                </button>
+              </div>
+            )}
             {/* 내 매물만 보기 요약 — 핀을 누르기 전에 무엇이 달려 있는지 한눈에 */}
             {myOnly && !selected && !selectedSeoul && (
               <div data-testid="my-listings-summary" className="mb-3 space-y-1.5 rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3">

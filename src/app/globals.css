@@ -658,3 +658,9 @@ textarea {
 [data-jibun-pick="1"] .dev-pressure-pin {
   pointer-events: none !important;
 }
+
+/* 관리자 모드(?admin=1)에서는 실거래 가격표가 클릭을 가로채지 않는다 —
+   구역을 눌러 경계·정보를 고치려는데 가격표가 먼저 잡히면 수정 화면이 열리지 않는다(2026-11-25 제보). */
+[data-admin-edit="1"] .tx-price-pin {
+  pointer-events: none !important;
+}

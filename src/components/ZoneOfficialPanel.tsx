@@ -94,6 +94,15 @@ export default function ZoneOfficialPanel({
             구역계 미고시
           </span>
         )}
+        {zone.adminEdited && (
+          <span
+            data-testid="zone-admin-edited"
+            title="관리자 화면에서 경계·정보를 고쳐 저장한 구역입니다(서울시 원본 위에 반영)"
+            className="whitespace-nowrap rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800"
+          >
+            관리자 보정
+          </span>
+        )}
         <button
           onClick={onClose}
           className="ml-auto shrink-0 whitespace-nowrap rounded-lg border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:border-slate-500 hover:text-slate-900"

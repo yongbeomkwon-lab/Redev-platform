@@ -80,6 +80,22 @@ const TX_PIN_LAYER_STYLE = {
 };
 
 /**
+ * 지도 전체 실거래 가격표 레이어 — 같은 자리에 핀을 몰아 그리지 않도록 draw 가 자리를 골라 놓는다.
+ *   · z-index 92: 선택 구역 실거래 핀(95)·이름표(100)·내 매물 핀(102) 보다 아래.
+ *   · 레이어·가격표 모두 pointer-events:none — **구역 클릭·그리기·확대를 절대 가로채지 않는다.**
+ *     (가격표는 참고용 라벨이다. 자세한 거래는 구역 상세·5년 이력 창에서 본다 — 2026-11-25 제보 대응)
+ */
+const RECENT_TX_LAYER_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
+  zIndex: 92,
+  pointerEvents: "none" as const,
+};
+
+/**
  * 내 매물 핀 레이어 — 폴리곤 캔버스(2)·실거래 핀(95)·매물 배지(100) 위(z-index 102).
  *   · 「내 매물만 보기」일 때만 채워지고, 상담의 중심이라 배지·이름표보다 위에 둔다
  *     (핀을 눌러 펼친 카드가 다른 배지에 가리지 않게).
@@ -493,6 +509,8 @@ export default function KakaoZoneMap({
   onToggleTxPins,
   onSelectTxPin,
   activeTxPin,
+  recentTxPins = [],
+  recentTxLoading = false,
   auctionPins = [],
   auctionPinsOn = false,
   onToggleAuctionPins,
@@ -589,6 +607,12 @@ export default function KakaoZoneMap({
   const txLayerRef = useRef<HTMLDivElement | null>(null);
   const txElsRef = useRef<Map<string, HTMLElement>>(new Map());
   const txAtRef = useRef<TxMapPin[]>([]);
+  /** 지도 전체 실거래 가격표 — 레이어 + 재사용 요소 풀 + 지금 그릴 목록 */
+  const recentLayerRef = useRef<HTMLDivElement | null>(null);
+  const recentPoolRef = useRef<HTMLButtonElement[]>([]);
+  const recentAtRef = useRef<TxMapPin[]>([]);
+  /** draw 가 이번 프레임에 놓은 실거래 핀 자리 — 지도 전체 가격표가 그 위에 겹치지 않게 비킨다 */
+  const txPlacedRef = useRef<{ x: number; y: number }[]>([]);
   /** 5년 이력 창에서 보고 있는 단지·지번 키 — 그 핀을 강조하고 겹침에서도 살린다 */
   const activeTxKeyRef = useRef<string>("");
   const activeTxKey = activeTxPin ? txPinKey(activeTxPin.umdNm, activeTxPin.jibun) : "";
@@ -1482,6 +1506,74 @@ export default function KakaoZoneMap({
         node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-100%)`;
         node.style.visibility = "visible";
       }
+      txPlacedRef.current = placedPins;
+    }
+
+    // ── 지도 전체 실거래 가격표 ────────────────────────────────────────────────
+    //   · 구역을 고르지 않아도 지도 어디에나 국토부 신고 최근 3개월 가격표가 뜨게 한다
+    //     (기본 ON · 지도 위「실거래」 토글 OFF 면 recentAtRef 가 비어 있어 모두 감춘다).
+    //   · 레이어·라벨은 pointer-events:none — 구역 클릭·이름표·그리기를 절대 가로채지 않는다.
+    //   · 요소는 **화면에 실제로 놓인 만큼만** 만들어 풀에 재사용한다(7,800여 곳을 DOM 으로 만들지 않는다).
+    //   · 겹치면 숨긴다 — 한 자리에 여러 가격표가 쌓이면 글자가 뭉개진다. 최신 거래부터 자리 잡는다.
+    if (recentLayerRef.current) {
+      const pool = recentPoolRef.current;
+      const list = recentAtRef.current;
+      const showRecent = list.length > 0 && !districtMode && map.getLevel() <= 7;
+      let placedCount = 0;
+      if (showRecent) {
+        const boxes: { x: number; y: number }[] = [...txPlacedRef.current, ...auctionPlacedRef.current];
+        // 좁은 화면(폰)은 라벨 수를 줄인다 — 글자가 겹치기 전에 화면이 먼저 막힌다
+        const MAX = cw < 900 ? 80 : 180;
+        for (const p of list) {
+          if (placedCount >= MAX) break;
+          const x = p0x + (p.lng - lng0) * pxPerLng;
+          const y = p0y + (mercator(p.lat) - m0) * pxPerMerc;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          if (x < -60 || x > cw + 60 || y < -40 || y > ch + 40) continue;
+          let clash = false;
+          for (const q of boxes) {
+            if (Math.abs(q.x - x) < 46 && Math.abs(q.y - y) < 22) {
+              clash = true;
+              break;
+            }
+          }
+          if (clash) continue;
+          boxes.push({ x, y });
+          let node = pool[placedCount];
+          if (!node) {
+            node = document.createElement("button");
+            node.type = "button";
+            node.className = "tx-price-pin is-recent";
+            node.tabIndex = -1;
+            node.setAttribute("aria-hidden", "true");
+            node.dataset.testid = "tx-recent-pin";
+            node.style.cssText =
+              "position:absolute;left:0;top:0;display:block;visibility:hidden;pointer-events:none;" +
+              "border-radius:5px;padding:2px 5px;text-align:center;white-space:nowrap;line-height:13px;" +
+              "background:#ffffff;box-shadow:0 1px 2px rgba(16,24,40,.10),0 6px 14px -8px rgba(16,24,40,.35);";
+            recentLayerRef.current.appendChild(node);
+            pool.push(node);
+          }
+          const accent = TX_PIN_COLORS[p.kind] ?? "#334155";
+          const key = `${p.priceLabel}|${p.areaLabel}|${accent}`;
+          if (node.dataset.key !== key) {
+            node.dataset.key = key;
+            node.dataset.zoneId = p.id;
+            node.style.border = `1px solid ${accent}22`;
+            node.style.borderLeft = `3px solid ${accent}88`;
+            node.innerHTML =
+              `<span style="display:block;font-size:10.5px;font-weight:700;color:#1A1A1A;letter-spacing:-.02em">` +
+              `${escapeHtml(p.priceLabel)}</span>` +
+              `<span style="display:block;font-size:8.5px;font-weight:500;color:#5B6472;letter-spacing:-.01em">` +
+              `${escapeHtml(p.areaLabel || p.kind)}</span>`;
+            node.title = `${p.name || ""} · ${p.dealDate} · ${p.areaLabel} · ${p.priceLabel}`.trim();
+          }
+          node.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px) translate(-50%,-100%)`;
+          node.style.visibility = "visible";
+          placedCount += 1;
+        }
+      }
+      for (let i = placedCount; i < pool.length; i += 1) pool[i].style.visibility = "hidden";
     }
 
     // 지번 핀 — 찍은 자리에 오레오 블루 펄스 핀(카드 포함). 지도 밖이면 숨긴다.
@@ -2887,6 +2979,17 @@ export default function KakaoZoneMap({
   txAtRef.current = visibleTxPins;
   openPinRef.current = openPinId;
 
+  // 지도 전체 실거래 가격표 — 같은 「실거래」 토글이 끈다(켜면 구역 밖까지 모두 보인다)
+  const visibleRecentTx = useMemo(
+    () => (txPinsOn ? recentTxPins : []),
+    [recentTxPins, txPinsOn]
+  );
+  recentAtRef.current = visibleRecentTx;
+  useEffect(() => {
+    if (!recentLayerRef.current) return;
+    draw();
+  }, [visibleRecentTx, draw]);
+
   // ── ⚖️ 경매 물건 핀 ──────────────────────────────────────────────────
   //   · ZoneExplorer 가 고른 구역의 물건(광역이면 매칭된 전체)을 좌표로 묶어 넘긴다.
   //   · 토글이 OFF 면 목록을 비워 핀·카드를 함께 감추고, 토글 자체는 남긴다.
@@ -3522,6 +3625,7 @@ export default function KakaoZoneMap({
       ref={wrapRef}
       className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl"
       data-jibun-pick={jibunPickOn || boundaryBusy ? "1" : undefined}
+      data-admin-edit={admin ? "1" : undefined}
     >
       <div ref={mapElRef} className="h-full w-full" />
 
@@ -3718,6 +3822,8 @@ export default function KakaoZoneMap({
         })}
       </div>
 
+      {/* ── 지도 전체 실거래 가격표 — 구역과 무관하게 어디에나(z 92, 클릭 통과) ── */}
+      <div ref={recentLayerRef} style={RECENT_TX_LAYER_STYLE} data-testid="tx-recent-layer" />
       {/* ── 실거래 가격 핀 — `7.8억 / 전용 59㎡` (z-index 95: 폴리곤 위·매물 배지 아래) ── */}
       <div ref={txLayerRef} style={TX_PIN_LAYER_STYLE} data-testid="tx-pin-layer">
         {visibleTxPins.map((p) => {
@@ -4272,13 +4378,13 @@ export default function KakaoZoneMap({
             )}
           </button>
         )}
-        {onToggleTxPins && txPins.length > 0 && (
+        {onToggleTxPins && (txPins.length > 0 || recentTxPins.length > 0 || recentTxLoading) && (
           <button
             type="button"
             onClick={onToggleTxPins}
             aria-pressed={txPinsOn}
             data-testid="tx-pins-toggle"
-            title="구역 안 실거래 가격 핀 표시"
+            title="국토부 실거래 가격 표시 — 지도 어디에나 최근 3개월 거래를 보여 줍니다. 끄면 모두 감춥니다. (서울 전체 구 뱃지 화면에서는 구를 눌러 확대하면 보입니다)"
             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
               txPinsOn
                 ? "border-brand/35 bg-brand-tint text-brand"
@@ -4286,8 +4392,10 @@ export default function KakaoZoneMap({
             }`}
           >
             <Icon name="tag" size={13} />
-            <span className="hidden md:inline">실거래 핀</span>
-            <span className="font-normal text-slate-400">{txPins.length}</span>
+            <span className="hidden md:inline">실거래</span>
+            <span className="font-normal text-slate-400">
+              {recentTxPins.length > 0 ? recentTxPins.length : recentTxLoading ? "…" : txPins.length}
+            </span>
           </button>
         )}
         {onToggleAuctionPins && auctionPins.length > 0 && (

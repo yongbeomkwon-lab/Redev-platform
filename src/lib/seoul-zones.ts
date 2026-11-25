@@ -69,6 +69,11 @@ export type SeoulZone = {
    * (예: 여의대방 가로주택정비사업 → 여의대방2역세권). 데이터는 남기므로 검색·주소 판정에는 그대로 쓰인다.
    */
   hiddenByDefault?: boolean;
+  /**
+   * 관리자 화면(?admin=1)에서 경계·정보를 고쳐 저장한 구역 — 서울시 원본 위에 관리자 저장본을 얹었다.
+   * (lib/zone-overrides.ts) 상세 패널이 ‘관리자 보정’ 표시를 띄우는 데 쓴다.
+   */
+  adminEdited?: boolean;
 };
 
 /**
@@ -88,6 +93,10 @@ export function resolveZoneType(type: string | undefined, kind: string | undefin
   }
   if (k.startsWith("재건축")) return "재건축";
   if (k === "공공재개발") return "공공재개발";
+  // 모아타운의 통합기획 방식 — 서울시 소분류가 '모아타운(모아통합기획)'이면 사업유형도
+  //   '모아타운통합기획'으로 보여 준다. (원본 type 은 '모아타운'으로 들어오는 레코드가 있어
+  //   소분류를 읽지 않으면 지도 칩·상세 배지가 모두 '모아타운'으로 되돌아갔다 — 2026-11-25 제보)
+  if (k.startsWith("모아타운") && k.includes("모아통합기획")) return "모아타운통합기획";
   return (type as MapZoneType) || "일반재개발";
 }
 
