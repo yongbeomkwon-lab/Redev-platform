@@ -2112,38 +2112,29 @@ export default function KakaoZoneMap({
       if (draft && draft.length > 0) {
         const pts = draft.map(([la, ln]) => projectXY(la, ln));
 
-        // 그리는 중(adm.adding)에는 삼각형·파란 면 채우기와 닫는 변을 그리지 않고 단순 선(Polyline)만 표시한다.
-        //   완료(✓ 완료·더블클릭·우클릭·Enter·첫 점 클릭)로 adding 이 꺼진 뒤에 닫힌 다각형(실선)으로 채운다.
-        if (pts.length >= 3 && !adm.adding) {
+        // 재개발닷컴 방식: 3점 이상이면 그리는 중에도 실시간 반투명 파란 영역으로 닫아 보여준다(고무줄 선 없음).
+        if (pts.length >= 3) {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
           for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
           ctx.closePath();
           ctx.fillStyle = "rgba(2,132,199,0.20)";
           ctx.fill();
-          ctx.lineWidth = 5;
-          ctx.strokeStyle = "rgba(255,255,255,0.8)";
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "rgba(255,255,255,0.85)";
           ctx.stroke();
           ctx.lineWidth = 2.5;
-          ctx.strokeStyle = "#0369a1";
+          ctx.strokeStyle = "#0284c7";
           ctx.stroke();
-        }
-
-        // 그리는 중 열린 선(마지막 점 → 커서) — 흰 테두리 위에 파란 선
-        if (adm.adding) {
+        } else if (pts.length === 2) {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
-          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-          const cur = adminCursorRef.current;
-          if (cur) {
-            const [ex, ey] = projectXY(cur[0], cur[1]);
-            ctx.lineTo(ex, ey);
-          }
-          ctx.lineWidth = 5;
-          ctx.strokeStyle = "rgba(255,255,255,0.8)";
+          ctx.lineTo(pts[1][0], pts[1][1]);
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "rgba(255,255,255,0.85)";
           ctx.stroke();
           ctx.lineWidth = 2.5;
-          ctx.strokeStyle = "#0369a1";
+          ctx.strokeStyle = "#0284c7";
           ctx.stroke();
         }
 
@@ -2542,27 +2533,14 @@ export default function KakaoZoneMap({
       const lat = e.latLng.getLat();
       const lng = e.latLng.getLng();
       const adm = adminRef.current;
-      // ── 관리자 모드: 탭 = 꼭짓점 추가, 첫 점을 다시 탭하면 완료 ──────────────
+      // ── 관리자 모드: 탭 = 꼭짓점 추가 (첫 점 클릭이나 더블클릭으로 실수로 완료되지 않게 단순 점 추가만) ──
       if (adm?.adding && adm.draft) {
-        const view0 = viewRef.current;
-        const pt0 = e.point;
-        const first = adm.draft[0];
-        if (first && adm.draft.length >= 3 && view0 && pt0) {
-          const fx = view0.p0x + (first[1] - view0.cLng) * view0.pxPerLng;
-          const fy = view0.p0y + (mercator(first[0]) - view0.m0) * view0.pxPerMerc;
-          if (Math.hypot(pt0.x - fx, pt0.y - fy) <= 18) {
-            clearHoverCursor();
-            adm.onFinishByFirstPoint();
-            return;
-          }
-        }
         clearHoverCursor();
-        // 더블클릭의 두 번째 클릭 — 같은 자리에서 곧바로 또 찍힌 점은 버린다.
-        //   (첫 클릭이 마지막 꼭짓점이 되고, 이어지는 dblclick 이 완료를 부른다)
+        // 빠르게 두 번 클릭했을 때 같은 자리에 중복 점이 찍히는 것은 막는다.
         const px = e.point;
         const lastAdd = lastAddRef.current;
         const nowMs = performance.now();
-        if (px && lastAdd && nowMs - lastAdd.t < 400 && Math.hypot(px.x - lastAdd.x, px.y - lastAdd.y) <= 6) {
+        if (px && lastAdd && nowMs - lastAdd.t < 350 && Math.hypot(px.x - lastAdd.x, px.y - lastAdd.y) <= 6) {
           return;
         }
         lastAddRef.current = px ? { t: nowMs, x: px.x, y: px.y } : null;
@@ -2665,16 +2643,14 @@ export default function KakaoZoneMap({
       if (!drawingNow()) return;
       ev.preventDefault();
       ev.stopPropagation();
-      finishInPlaceSoon();
     };
     const onMapContextMenu = (ev: MouseEvent) => {
       if (drawingNow()) {
-        // 꼭짓점 핸들 위 우클릭은 ‘점 삭제’가 맡는다(핸들이 직접 처리)
+        // 그리기 중 우클릭: 브라우저 메뉴만 막고 실수로 완료되지 않게 한다(완료는 상단 [완료] 버튼 또는 Enter).
         const t0 = ev.target as HTMLElement | null;
         if (t0?.closest?.("[data-vx],[data-mid]")) return;
         ev.preventDefault();
         ev.stopPropagation();
-        finishInPlaceSoon();
         return;
       }
       // 경계를 고치는 중(아직 점을 안 찍은 새 그리기 포함)에는 우클릭으로도 지번을 찍지 않는다
@@ -2986,10 +2962,6 @@ export default function KakaoZoneMap({
     const movedPx =
       d.startX != null && d.startY != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
     if (movedPx < 6 && adm?.adding && adm.draft) {
-      if (d.index === 0 && adm.draft.length >= 3) {
-        adm.onFinishByFirstPoint();
-        return;
-      }
       const at = clientToLatLng(e.clientX, e.clientY);
       if (at) adm.onAddPoint(at[0], at[1]);
       return;
@@ -4560,11 +4532,9 @@ export default function KakaoZoneMap({
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (adminDrawingNew) {
-                    if (adminDraft.length >= 3) admin?.onFinishByFirstPoint();
-                    return;
+                  if (!adminDrawingNew) {
+                    admin?.onRemovePoint(i);
                   }
-                  admin?.onRemovePoint(i);
                 }}
                 style={{
                   position: "absolute",
@@ -4578,7 +4548,9 @@ export default function KakaoZoneMap({
                 }}
                 className={adminVertexClass}
               >
-                <span className="block h-4 w-4 rounded-full border-2 border-white bg-sky-700 shadow-[0_1px_4px_rgba(0,0,0,0.5)]" />
+                <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-600 text-[10px] font-bold leading-none text-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]">
+                  {i + 1}
+                </span>
               </button>
             </div>
           ))}

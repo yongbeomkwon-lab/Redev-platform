@@ -448,18 +448,25 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
   return (
     <div
       data-testid="admin-toolbar"
-      className="pointer-events-auto flex items-center gap-1 rounded-full border border-sky-300 bg-white/95 px-1.5 py-1 shadow-xl backdrop-blur"
+      className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 shadow-xl backdrop-blur"
     >
-      <span className="ml-0.5 hidden text-[10px] font-bold text-sky-800 lg:inline">
-        {editing?.id || editing?.replacesName ? "경계·정보 수정" : "그리기"}
+      <span className="text-[11px] font-semibold text-slate-700">
+        {adding
+          ? draftPoints.length === 0
+            ? "지도를 클릭해 첫 꼭짓점을 찍으세요"
+            : draftPoints.length < 3
+              ? `한 점 더 찍으면 영역이 됩니다 (${draftPoints.length}/3)`
+              : "점을 더 찍거나 완료를 누르세요"
+          : "꼭짓점을 끌어 수정 · 우클릭: 점 삭제"}
       </span>
-      <span className="text-[10px] font-semibold text-slate-600">{draftPoints.length}점</span>
-      <span
-        data-testid="admin-toolbar-area"
-        className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-extrabold tabular-nums text-sky-950"
-      >
-        {draftPoints.length >= 3 ? formatArea(area) : "면적 —"}
-      </span>
+      {draftPoints.length >= 3 && (
+        <span
+          data-testid="admin-toolbar-area"
+          className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-extrabold tabular-nums text-sky-900"
+        >
+          {formatArea(area)}
+        </span>
+      )}
       <button
         type="button"
         {...guardProps}
@@ -468,25 +475,11 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
           props.onUndo();
         }}
         disabled={draftPoints.length === 0}
-        aria-label="실행취소 — 마지막 점 삭제"
-        title="실행취소 — 마지막 점 삭제"
-        className="rounded-full border border-slate-300 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-slate-500 disabled:opacity-40"
+        aria-label="되돌리기 — 마지막 점 삭제"
+        title="되돌리기 — 마지막 점 삭제"
+        className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-slate-400 hover:bg-slate-50 disabled:opacity-35"
       >
         ↶
-      </button>
-      <button
-        type="button"
-        {...guardProps}
-        data-testid="admin-toolbar-finish"
-        onClick={(e) => {
-          e.stopPropagation();
-          props.onFinish();
-        }}
-        disabled={draftPoints.length < 3}
-        title="경계 고치기 완료 — 구역 정보 입력으로 (지도에서 더블클릭·우클릭·Enter 도 같다)"
-        className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-slate-800 disabled:opacity-40"
-      >
-        ✓ 완료
       </button>
       <button
         type="button"
@@ -497,13 +490,24 @@ export function AdminDrawToolbar(props: AdminPanelProps) {
         }}
         aria-label="취소"
         title="그리기 취소 (Esc)"
-        className="rounded-full border border-slate-300 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-slate-500"
+        className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-slate-400 hover:bg-slate-50"
       >
-        ✕
+        취소
       </button>
-      <span className="mr-1 text-[10px] text-slate-500">
-        {adding ? "지도 탭: 점 추가 · 더블클릭/우클릭/Enter: 완료" : "핸들을 끌어 옮기기 · 변 +: 점 추가"}
-      </span>
+      <button
+        type="button"
+        {...guardProps}
+        data-testid="admin-toolbar-finish"
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onFinish();
+        }}
+        disabled={draftPoints.length < 3}
+        title="완료 — 구역 정보 입력 후 저장 (Enter)"
+        className="rounded-full bg-sky-600 px-3 py-0.5 text-[11px] font-bold text-white shadow-sm hover:bg-sky-700 disabled:bg-slate-300"
+      >
+        완료
+      </button>
     </div>
   );
 }
