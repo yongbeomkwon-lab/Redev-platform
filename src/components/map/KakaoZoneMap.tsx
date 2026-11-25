@@ -1180,6 +1180,51 @@ export default function KakaoZoneMap({
         // 경계가 없어 화면 크기를 잴 수 없다 — 점으로 찍는 후보지도 확대했으면 카드로 이름을 보인다
         pushCand(z, x, y, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
       }
+      // 관리자 모드에서 새로 그린 구역 — 정식 구역과 같은 흰색 배지 카드로 띄워
+      //   하나를 선택해도 다른 직접 그린 구역에 캔버스 글씨만 남지 않게 한다.
+      const admTags = adminRef.current;
+      if (!districtMode && admTags?.zones?.length) {
+        for (const z of admTags.zones) {
+          if (!z.ring || z.ring.length < 3) continue;
+          if (z.id === admTags.selectedId) continue;
+          if (z.replacesZoneId && prepRef.current.zones.some((pz) => pz.zone.id === z.replacesZoneId)) continue;
+          if (prepRef.current.zones.some((pz) => pz.zone.name === z.name)) continue;
+          let zMinLat = Infinity, zMaxLat = -Infinity, zMinLng = Infinity, zMaxLng = -Infinity;
+          for (const pt of z.ring) {
+            if (pt[0] < zMinLat) zMinLat = pt[0];
+            if (pt[0] > zMaxLat) zMaxLat = pt[0];
+            if (pt[1] < zMinLng) zMinLng = pt[1];
+            if (pt[1] > zMaxLng) zMaxLng = pt[1];
+          }
+          if (zMaxLat < tMinLat || zMinLat > tMaxLat || zMaxLng < tMinLng || zMinLng > tMaxLng) continue;
+          const sw = (zMaxLng - zMinLng) * pxPerLng;
+          const sh = (mercator(zMinLat) - mercator(zMaxLat)) * pxPerMerc;
+          if (sw < TAG_MIN_W || sh < TAG_MIN_H) continue;
+          const c = ringCentroid(z.ring);
+          const x = p0x + (c[1] - lng0) * pxPerLng;
+          const y = p0y + (mercator(c[0]) - m0) * pxPerMerc;
+          if (!Number.isFinite(x) || !Number.isFinite(y) || x < -60 || x > cw + 60 || y < -30 || y > ch + 30) continue;
+          pushCand(
+            {
+              id: z.id,
+              name: z.name,
+              gu: z.gu || "",
+              type: z.type as SeoulZone["type"],
+              stage: z.stage || "추진준비",
+              area: 0,
+              center: c,
+              kind: "point",
+              featured: false,
+              sourceId: z.id,
+              geom: "직접작도",
+            },
+            x,
+            y,
+            sw,
+            sh
+          );
+        }
+      }
 
       // 큰 구역부터 자리를 잡는다 — 멀리서 볼수록 주요 구역 이름이 먼저 남는다
       cands.sort((a, b) => b.area - a.area);
@@ -2079,32 +2124,6 @@ export default function KakaoZoneMap({
         ctx.lineWidth = 1.2;
         ctx.strokeStyle = "rgba(255,255,255,0.92)";
         ctx.stroke();
-
-        // 이름표 — 화면에서 글자가 들어갈 만큼 큰 구역만(작은 구역은 목록에서 확인)
-        //   · 지도에 그리는 이 이름표가 **흰 배지(구역 이름표 카드)와 겹쳐** 글자가 두 번 보였다
-        //     (2026-11-24 지적: “흰 배지 뒤로 작은 검은 테두리 텍스트가 삐져나온다”).
-        //     관리자 구역이 공식 데이터와 같은 구역이면 배지가 이미 이름을 띄우므로 캔버스 글자는
-        //     걷어 내고, 선택해서 큰 이름표가 뜬 구역도 같은 이유로 건너뛴다.
-        const c = ringCentroid(z.ring);
-        const [lx, ly] = projectXY(c[0], c[1]);
-        const dupBadge =
-          z.id === adm.selectedId ||
-          prepRef.current.zones.some((pz) => pz.zone.name === z.name);
-        if (!dupBadge && lx > -80 && lx < cw + 80 && ly > -40 && ly < ch + 40) {
-          ctx.font = "700 11px ui-sans-serif, system-ui, -apple-system, sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          const tw = ctx.measureText(z.name).width;
-          if (maxX - minX > tw + 14) {
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "rgba(255,255,255,0.95)";
-            ctx.strokeText(z.name, lx, ly);
-            ctx.fillStyle = "rgba(15,23,42,0.95)";
-            ctx.fillText(z.name, lx, ly);
-          }
-          ctx.textAlign = "left";
-          ctx.textBaseline = "alphabetic";
-        }
       }
 
       // 4-2) 지금 그리는 초안 — 꼭짓점·연결선·닫는 변·면적
