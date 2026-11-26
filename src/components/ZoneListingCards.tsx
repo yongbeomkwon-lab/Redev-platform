@@ -14,6 +14,7 @@ import { formatMan } from "@/lib/format";
 import { isMyListing } from "@/lib/my-listings";
 import { Badge } from "./Badges";
 import Icon from "./Icon";
+import ListingSocial from "./listing/ListingSocial";
 
 /** 임대사업자 승계 · 토허제(실거주) 조건 배지 — 매물 카드·목록에서 같은 말을 쓴다 */
 export function ListingConditionBadges({ listing }: { listing: Listing }) {
@@ -103,6 +104,8 @@ export function ZoneListingCards({
                 {l.brokerName ? ` · ${l.brokerName}` : ""}
                 {l.brokerPhone ? ` · ${l.brokerPhone}` : ""}
               </p>
+              {/* 이 매물에 대한 반응(좋아요·놀람·관심)과 댓글 — 접힌 한 줄로 둔다 */}
+              <ListingSocial listingId={l.id} tone="amber" />
             </li>
           );
         })}

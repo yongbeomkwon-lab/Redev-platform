@@ -18,6 +18,7 @@ import { listingZoneName, LISTINGS_CHANGED_EVENT } from "@/lib/custom-listings";
 import { isMyListing, MY_LISTINGS_COUNT } from "@/lib/my-listings";
 import { formatMan } from "@/lib/format";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
+import ListingSocial from "@/components/listing/ListingSocial";
 
 type SortKey = "initial" | "price" | "recent";
 
@@ -271,6 +272,8 @@ export default function ListingsPage() {
                   {l.landShareSqm ? <span>대지지분 {l.landShareSqm}㎡</span> : null}
                 </div>
                 {l.note && <p className="mt-1.5 text-[11px] leading-snug text-slate-600">{l.note}</p>}
+                {/* 매물별 반응·댓글 — 접힌 한 줄, 누르면 이 카드 안에서 펼쳐진다 */}
+                <ListingSocial listingId={l.id} />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
                   <span className="text-[10px] text-slate-500">
                     {l.brokerAgency}
