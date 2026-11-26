@@ -10,7 +10,8 @@
 //   · 경계가 없는 구역(미고시 후보지)은 부모가 이 컴포넌트를 그리지 않는다.
 //
 //   「🔬 정밀 분석」은 국토교통부 건축물대장 표제부(getBrTitleInfo)를 구역 안 필지마다
-//   조회해 **주구조·사용승인일·세대/가구수**로 서울시 조례 기준 노후도와 추정 호수밀도를 낸다.
+//   조회해 **주구조·사용승인일·세대/가구수·대지면적**으로 서울시 조례 기준 노후도와 추정 호수밀도,
+//   추정 평균 대지지분을 낸다.
 //   필지가 많은 구역도 함수 시간(60초)을 넘지 않도록 50필지씩 나눠 보내고 진행률을 보여 준다.
 //   결과는 구역별로 localStorage 에 남겨 다시 열 때 즉시 보여 주고, ↻ 로 새로 조회한다.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ function Cell({
   tone = "slate",
   testId,
   wrap = false,
+  wide = false,
 }: {
   label: string;
   value: string;
@@ -51,6 +53,8 @@ function Cell({
   testId?: string;
   /** 보조설명을 한 줄로 자르지 않고 두 줄까지 보여 준다(정밀 분석 칸) */
   wrap?: boolean;
+  /** 한 줄을 다 쓰는 칸(2열 그리드에서 col-span-2) */
+  wide?: boolean;
 }) {
   const valueTone =
     tone === "rose"
@@ -63,7 +67,7 @@ function Cell({
             ? "text-emerald-700"
             : "text-slate-900";
   return (
-    <div className="min-w-0 rounded-lg bg-slate-50 px-2 py-1.5">
+    <div className={`min-w-0 rounded-lg bg-slate-50 px-2 py-1.5${wide ? " col-span-2" : ""}`}>
       <div className="truncate text-[10px] font-medium text-slate-500">{label}</div>
       <div className={`flex items-baseline gap-0.5 ${valueTone}`} data-testid={testId}>
         <span className="text-sm font-bold tabular-nums leading-tight">{value}</span>
@@ -109,7 +113,7 @@ function Req({ ok, text, note }: { ok: boolean; text: string; note?: string }) {
 const CHUNK = 50;
 /** 동시에 보내는 청크 수 — 2로 두면 1,400필지 구역도 60초 안에 끝난다 */
 const PARALLEL = 2;
-const CACHE_PREFIX = "redev-precise:v1:";
+const CACHE_PREFIX = "redev-precise:v2:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PreciseState =
@@ -216,23 +220,38 @@ export default function ZoneVitalStats({
   }, []);
 
   /** 구역 안 필지 PNU 목록 — 카드가 이미 받은 stats 를 쓰고, 없으면 다시 한 번 받는다 */
-  const loadPnus = useCallback(async (): Promise<{ pnus: string[]; unknown: string[]; area: number }> => {
-    if (stats?.parcels?.pnus?.length) {
-      return { pnus: stats.parcels.pnus, unknown: stats.unknownPnu ?? [], area: stats.areaSqm };
-    }
-    const res = await fetch("/api/zone-stats", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shape, areaSqm: areaSqm ?? null }),
-    });
-    const data = (await res.json()) as ZoneStatsResponse;
-    if (!data.ok) throw new Error(data.detail || data.error);
-    return {
-      pnus: data.stats.parcels?.pnus ?? [],
-      unknown: data.stats.unknownPnu ?? [],
-      area: data.stats.areaSqm,
-    };
-  }, [stats, shape, areaSqm]);
+  const loadPnus = useCallback(
+    async (): Promise<{
+      pnus: string[];
+      unknown: string[];
+      area: number;
+      /** PNU → 연속지적도 필지면적(㎡) — 대장 대지면적이 빈 필지 보완용 */
+      parcelAreas: Record<string, number>;
+    }> => {
+      if (stats?.parcels?.pnus?.length) {
+        return {
+          pnus: stats.parcels.pnus,
+          unknown: stats.unknownPnu ?? [],
+          area: stats.areaSqm,
+          parcelAreas: stats.parcels.areaByPnu ?? {},
+        };
+      }
+      const res = await fetch("/api/zone-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shape, areaSqm: areaSqm ?? null }),
+      });
+      const data = (await res.json()) as ZoneStatsResponse;
+      if (!data.ok) throw new Error(data.detail || data.error);
+      return {
+        pnus: data.stats.parcels?.pnus ?? [],
+        unknown: data.stats.unknownPnu ?? [],
+        area: data.stats.areaSqm,
+        parcelAreas: data.stats.parcels?.areaByPnu ?? {},
+      };
+    },
+    [stats, shape, areaSqm]
+  );
 
   const runPrecise = useCallback(async () => {
     if (abortRef.current) return; // 이미 돌고 있다
@@ -241,7 +260,7 @@ export default function ZoneVitalStats({
     setPrecise({ status: "running", done: 0, total: 0 });
 
     try {
-      const { pnus, unknown, area } = await loadPnus();
+      const { pnus, unknown, area, parcelAreas } = await loadPnus();
       if (pnus.length === 0) {
         setPrecise({ status: "error", message: "구역 안 필지(PNU)를 받지 못했습니다 — 경계를 다시 확인해 주세요." });
         abortRef.current = null;
@@ -261,10 +280,20 @@ export default function ZoneVitalStats({
       async function worker() {
         while (cursor < chunks.length && !failed) {
           const index = cursor++;
+          // 이 청크 필지의 연속지적도 면적만 보낸다(대장 platArea 가 빈 필지 보완용)
+          const chunkAreas: Record<string, number> = {};
+          for (const pnu of chunks[index]) {
+            const value = parcelAreas[pnu];
+            if (typeof value === "number" && value > 0) chunkAreas[pnu] = value;
+          }
           const res = await fetch("/api/zone-stats/precise", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pnus: chunks[index], unknownPnus: unknown.slice(0, 2000) }),
+            body: JSON.stringify({
+              pnus: chunks[index],
+              unknownPnus: unknown.slice(0, 2000),
+              parcelAreas: chunkAreas,
+            }),
             signal: controller.signal,
           });
           const data = (await res.json()) as PreciseChunkResponse;
@@ -417,7 +446,7 @@ export default function ZoneVitalStats({
         <div className="flex items-center justify-between gap-1">
           <p className="min-w-0 truncate text-[11px] font-bold text-sky-900">
             🔬 정밀 분석{" "}
-            <span className="font-medium text-sky-700">건축물대장 구조·호수밀도</span>
+            <span className="font-medium text-sky-700">건축물대장 구조·호수·대지지분</span>
           </p>
           {precise.status === "running" ? (
             <button
@@ -442,8 +471,8 @@ export default function ZoneVitalStats({
         {precise.status === "idle" && (
           <p className="mt-1 text-[10px] leading-snug text-sky-800/80">
             국토교통부 건축물대장 표제부로 <b className="font-semibold">주구조별 노후도(서울시 조례 기준)</b>와{" "}
-            <b className="font-semibold">추정 호수밀도</b>를 계산합니다. 구역 필지 수만큼 조회해 200필지면 30초 안팎
-            걸립니다.
+            <b className="font-semibold">추정 호수밀도</b>·<b className="font-semibold">추정 평균 대지지분</b>을 계산합니다.
+            구역 필지 수만큼 조회해 200필지면 30초 안팎 걸립니다.
           </p>
         )}
 
@@ -516,6 +545,20 @@ export default function ZoneVitalStats({
                 testId="zone-precise-age"
                 wrap
               />
+              <Cell
+                label="추정 평균 대지지분"
+                value={preciseResult.landSharePyeong != null ? preciseResult.landSharePyeong.toFixed(1) : "—"}
+                unit={preciseResult.landSharePyeong != null ? "평" : undefined}
+                sub={
+                  preciseResult.landShareSqm != null
+                    ? `${preciseResult.landShareSqm.toFixed(1)}㎡ · 대장 대지면적 ÷ 총 호수`
+                    : "대장 대지면적·호수가 없어 산출 불가"
+                }
+                tone="amber"
+                testId="zone-precise-landshare"
+                wrap
+                wide
+              />
             </div>
 
             <div className="mt-1 flex flex-wrap gap-1">
@@ -543,6 +586,15 @@ export default function ZoneVitalStats({
               미조회로 남습니다.
               {precise.status === "ok" &&
                 ` 저장된 결과 ${new Date(precise.at).getMonth() + 1}월 ${new Date(precise.at).getDate()}일.`}
+            </p>
+
+            <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400" data-testid="zone-precise-landshare-note">
+              추정 평균 대지지분 = 필지별 대지면적{preciseResult.landFallbackParcels > 0
+                ? `(대장 값이 빈 ${n(preciseResult.landFallbackParcels)}필지는 연속지적도 면적)`
+                : ""}{" "}
+              합 {n(preciseResult.landArea)}㎡(대지면적 확보 {n(preciseResult.landParcels)}필지) ÷ 총 호수{" "}
+              {n(preciseResult.units)}호. 도로·나대지 필지는 대장이 없어 빠지고, 공동주택·다가구는 실소유자 수와
+              차이가 날 수 있습니다.
             </p>
           </div>
         )}

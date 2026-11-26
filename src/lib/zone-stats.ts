@@ -61,7 +61,14 @@ export type ZoneStatsPayload = {
   /** 단순 동수밀도 — 동수 ÷ 구역면적(ha) */
   density: number;
   /** 필지 수·과소필지(90㎡ 미만)·구역 안 필지의 PNU 목록 — 연속지적도를 못 받았으면 null */
-  parcels: { count: number; under90: number; under90Pct: number; pnus?: string[] } | null;
+  parcels: {
+    count: number;
+    under90: number;
+    under90Pct: number;
+    pnus?: string[];
+    /** PNU → 연속지적도 필지면적(㎡) — 정밀 분석의 대지지분 보완용 */
+    areaByPnu?: Record<string, number>;
+  } | null;
   /** 연식을 몰라 노후도에서 빠진 건물의 PNU — 정밀 분석의 '연식 보정' 대조용 */
   unknownPnu?: string[];
 };
@@ -197,13 +204,18 @@ export function computeZoneStats(input: {
     let pc = 0;
     let small = 0;
     const pnus: string[] = [];
+    const areaByPnu: Record<string, number> = {};
     for (const p of parcels) {
       if (!pointInZone(shape as ZoneShape, p.lat, p.lng)) continue;
       pc++;
       if (p.areaSqm > 0 && p.areaSqm < 90) small++;
-      if (typeof p.pnu === "string" && /^\d{19}$/.test(p.pnu)) pnus.push(p.pnu);
+      if (typeof p.pnu === "string" && /^\d{19}$/.test(p.pnu)) {
+        pnus.push(p.pnu);
+        // 정밀 분석이 대장 대지면적이 빈 필지를 이 값으로 보완한다
+        if (p.areaSqm > 0) areaByPnu[p.pnu] = Math.round(p.areaSqm * 10) / 10;
+      }
     }
-    if (pc > 0) parcelStats = { count: pc, under90: small, under90Pct: pct(small, pc), pnus };
+    if (pc > 0) parcelStats = { count: pc, under90: small, under90Pct: pct(small, pc), pnus, areaByPnu };
   }
 
   return {

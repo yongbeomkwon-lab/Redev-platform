@@ -11,7 +11,7 @@ import {
 /**
  * 구역현황 **정밀 분석** — POST /api/zone-stats/precise
  *
- *   body: { pnus: string[], unknownPnus?: string[] }
+ *   body: { pnus: string[], unknownPnus?: string[], parcelAreas?: { [pnu]: ㎡ } }
  *
  * · 19자리 PNU 목록(구역 안 필지, 클라이언트가 40~60개씩 나눠 보낸다)을 받아
  *   국토교통부 건축HUB 건축물대장 표제부(`BldRgstHubService/getBrTitleInfo`)를 필지별로 조회하고
@@ -240,13 +240,14 @@ function toBuilding(pnu: string, item: RawItem): LedgerBuilding {
     minAdjusted,
     attached,
     floorArea: num(item, "totArea"),
+    platArea: num(item, "platArea"),
   };
 }
 
 export async function POST(request: Request) {
-  let body: { pnus?: unknown; unknownPnus?: unknown } | null = null;
+  let body: { pnus?: unknown; unknownPnus?: unknown; parcelAreas?: unknown } | null = null;
   try {
-    body = (await request.json()) as { pnus?: unknown; unknownPnus?: unknown };
+    body = (await request.json()) as { pnus?: unknown; unknownPnus?: unknown; parcelAreas?: unknown };
   } catch {
     return fail("BAD_JSON", 400, "pnus 목록을 담은 JSON 본문이 필요합니다.");
   }
@@ -258,6 +259,18 @@ export async function POST(request: Request) {
   const unknownPnus = Array.isArray(body?.unknownPnus)
     ? body.unknownPnus.filter((v): v is string => typeof v === "string")
     : [];
+
+  // 연속지적도 필지면적(PNU → ㎡) — 대장 platArea 가 0·빈 값인 필지를 보완한다.
+  //   외부 입력이므로 숫자·양수만 추리고, 이번 조회 필지로 한정한다.
+  const parcelAreas: Record<string, number> = {};
+  if (body?.parcelAreas && typeof body.parcelAreas === "object" && !Array.isArray(body.parcelAreas)) {
+    const limit = new Set(pnus);
+    for (const [pnu, value] of Object.entries(body.parcelAreas as Record<string, unknown>)) {
+      if (!limit.has(pnu)) continue;
+      const area = typeof value === "number" ? value : Number(value);
+      if (Number.isFinite(area) && area > 0 && area < 1_000_000) parcelAreas[pnu] = area;
+    }
+  }
 
   const key = (process.env.MOLIT_API_KEY ?? "").trim();
   if (!key) {
@@ -302,6 +315,7 @@ export async function POST(request: Request) {
     ledgerParcels,
     errors,
     unknownPnus,
+    parcelAreas,
   });
 
   return NextResponse.json(

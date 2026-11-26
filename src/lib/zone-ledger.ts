@@ -13,6 +13,10 @@
 //       둘 다 0인 **주거용** 건축물은 1가구로 보정한다(단독주택 등 대장 미기재).
 //       상가·오피스의 호수(hoCnt)는 주거 호수가 아니라 제외한다.
 //   · 부속건축물(창고·화장실 등)은 동수에서 뺀다 — 주건축물만 센다.
+//   · **추정 평균 대지지분** = 필지별 대지면적 합 ÷ 총 세대·가구수.
+//       대장 `platArea`(대지면적)는 한 필지에 동이 여럿이면 같은 값이 여러 번 오므로
+//       **필지(PNU) 단위로 한 번만** 더한다(동별 중복 합산 금지).
+//       `platArea` 가 0·빈 값인 필지는 연속지적도 필지면적이 있으면 그것으로 보완한다.
 //
 //   이 파일은 **순수 계산·타입**만 둔다(node 모듈 없음). 브라우저에서도 안전하다.
 //   대장 호출은 `src/app/api/zone-stats/precise/route.ts` 한 곳에서만 한다.
@@ -47,6 +51,8 @@ export type LedgerBuilding = {
   attached: boolean;
   /** 연면적(㎡) */
   floorArea: number;
+  /** 대지면적(㎡) — 대장 platArea. 같은 필지의 동마다 같은 값이 오므로 PNU 로 중복 제거한다 */
+  platArea: number;
 };
 
 export type PreciseChunkStats = {
@@ -78,6 +84,12 @@ export type PreciseChunkStats = {
   minUnitAdjusted: number;
   /** 1차 추정에서 연식 미상이던 동을 대장 사용승인일로 확인한 수 */
   ageResolved: number;
+  /** 대지면적을 확보한 필지 수(대장 platArea + 연속지적도 보완) */
+  landParcels: number;
+  /** 필지별 유효 대지면적 합(㎡) — 필지(PNU) 단위로 한 번만 더한다 */
+  landArea: number;
+  /** 대장 platArea 가 0·빈 값이라 연속지적도 필지면적으로 보완한 필지 수 */
+  landFallbackParcels: number;
   /** 업스트림 조회에 실패한 필지 수 */
   errors: number;
   /** 구조 분포(많은 순, 최대 6개) */
@@ -93,6 +105,10 @@ export type PreciseSummary = PreciseChunkStats & {
   ordinancePct: number;
   /** 추정 호수밀도(호/ha) */
   density: number;
+  /** 호수 1호당 대지면적(㎡) — 대지면적 0 이거나 호수 0 이면 null */
+  landShareSqm: number | null;
+  /** 추정 평균 대지지분(평) — 대지면적 ÷ 총 호수 ÷ 3.305785 */
+  landSharePyeong: number | null;
 };
 
 /** POST /api/zone-stats/precise 응답 */
@@ -115,9 +131,15 @@ export const EMPTY_CHUNK: PreciseChunkStats = {
   units: 0,
   minUnitAdjusted: 0,
   ageResolved: 0,
+  landParcels: 0,
+  landArea: 0,
+  landFallbackParcels: 0,
   errors: 0,
   structures: [],
 };
+
+/** 1평 = 3.305785㎡ */
+export const PYEONG_SQM = 3.305785;
 
 /** ㎡ → ha */
 export function toHa(areaSqm: number): number {
@@ -162,6 +184,8 @@ export function isResidential(mainPurpsCd: string, mainPurpsCdNm: string, etcPur
  *   · 노후도 모수(effective)는 주건축물 중 사용승인일이 있는 동수다.
  *   · unknownPnus 는 1차 추정(연식 색인)에서 연식을 몰랐던 건물의 PNU —
  *     그 PNU 의 동이 대장에서 사용승인일을 얻었으면 '연식 보정'으로 센다.
+ *   · parcelAreas 는 연속지적도 필지면적(PNU → ㎡). 대장 platArea 가 0·빈 값인
+ *     필지를 보완하는 데만 쓴다(대장 값이 있으면 대장이 우선).
  */
 export function summarizePreciseBuildings(input: {
   buildings: LedgerBuilding[];
@@ -169,12 +193,15 @@ export function summarizePreciseBuildings(input: {
   ledgerParcels: number;
   errors?: number;
   unknownPnus?: Iterable<string>;
+  parcelAreas?: Record<string, number> | null;
   nowYear?: number;
 }): PreciseChunkStats {
   const nowYear = input.nowYear ?? new Date().getFullYear();
   const cutoff30 = nowYear - 30;
   const cutoff20 = nowYear - 20;
   const unknownSet = new Set(input.unknownPnus ?? []);
+  /** 필지별 대지면적 — 한 필지의 동이 여럿이면 같은 platArea 가 반복되므로 큰 값 하나만 쓴다 */
+  const platByPnu = new Map<string, number>();
   const structureMap = new Map<string, number>();
   const out: PreciseChunkStats = {
     ...EMPTY_CHUNK,
@@ -186,6 +213,8 @@ export function summarizePreciseBuildings(input: {
   };
 
   for (const b of input.buildings) {
+    // 대지면적이 0인 필지도 키를 남겨야 연속지적도 보완 대상이 된다
+    platByPnu.set(b.pnu, Math.max(platByPnu.get(b.pnu) ?? 0, b.platArea));
     if (b.attached) {
       out.attached++;
       continue;
@@ -215,6 +244,22 @@ export function summarizePreciseBuildings(input: {
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 6);
+
+  // 필지(PNU) 단위 대지면적 합 — 대장 값 우선, 0·빈 값이면 연속지적도 필지면적으로 보완
+  for (const [pnu, plat] of platByPnu) {
+    let area = plat;
+    if (!(area > 0)) {
+      const fallback = Number(input.parcelAreas?.[pnu] ?? 0);
+      if (Number.isFinite(fallback) && fallback > 0) {
+        area = fallback;
+        out.landFallbackParcels++;
+      }
+    }
+    if (area > 0) {
+      out.landParcels++;
+      out.landArea += area;
+    }
+  }
   return out;
 }
 
@@ -242,12 +287,21 @@ export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear
   const areaHa = toHa(areaSqm);
   const density = areaHa > 0 ? Math.round((total.units / areaHa) * 10) / 10 : 0;
 
+  // 추정 평균 대지지분 — 유효 대지면적 합 ÷ 총 호수(1평 = 3.305785㎡)
+  const landShareSqm =
+    total.units > 0 && total.landArea > 0 ? Math.round((total.landArea / total.units) * 10) / 10 : null;
+  const landSharePyeong =
+    landShareSqm != null ? Math.round((landShareSqm / PYEONG_SQM) * 10) / 10 : null;
+
   return {
     ...total,
     areaSqm: Math.round(areaSqm),
     areaHa: Math.round(areaHa * 100) / 100,
+    landArea: Math.round(total.landArea),
     effectiveBuildings: effective,
     ordinancePct,
     density,
+    landShareSqm,
+    landSharePyeong,
   };
 }
