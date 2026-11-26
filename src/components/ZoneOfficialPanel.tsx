@@ -312,6 +312,8 @@ export default function ZoneOfficialPanel({
         <ZoneVitalStats
           shape={{ polygon: zone.polygon, parts: zone.parts, holes: zone.holes }}
           areaSqm={zone.area}
+          stage={zone.stage}
+          geom={zone.geom}
         />
       )}
 

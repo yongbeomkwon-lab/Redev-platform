@@ -14,7 +14,21 @@
 //   **조례 기준 호수밀도**, **추정 조합원(토지등소유자) 수**, 추정 대지지분을 낸다.
 //   · 추정 조합원 = 공동주택 세대수 + 단독·다가구 필지당 1명 + 비주거 필지당 1명(집합건물은 호수).
 //     세입자 가구수(fmlyCnt)는 조합원이 아니어서 세지 않는다.
-//   · 노후도는 0~100% 바 위에 모아타운 50%·재개발 60% 눈금을 그려 요건 충족을 한눈에 보여 준다.
+//   · 노후도 요건은 재개발뷰식 가로 눈금바 대신 **모아타운 50%↑ / 신통기획 60%↑ 두 판정 타일**
+//     (원형 게이지 + 충족/미달 + 초과·부족 %p)로 보여 주고, 그 아래에 구조별 기여
+//     (철콘 30년↑ · 비철콘 20년↑ · 유효 동)를 한 줄로 붙인다 — 리디브 고유 표기.
+//
+//   자동 정밀 분석(2026-11-27):
+//   · 구역계·사업이 이미 정해진 구역(정비구역 지정·추진위·조합설립·사업시행·관리처분·착공 등,
+//     경계가 고시·공고 도면인 구역)은 패널을 열면 「분석 실행」 없이 **바로** 정밀 분석을 돌린다.
+//   · 극초기·경계 추정 구역(추진준비·후보지 신청 전·공모·미지정, geom 이 가상경계·참고도·
+//     추진위안내도·근사원·미고시)은 종전처럼 사용자가 「분석 실행」을 눌러야 돈다 —
+//     확정 전 구역에서 대장 수백 건을 미리 조회해 기다리게 하지 않는다.
+//   · 구역 단계는 부모가 `stage`/`geom` 으로 넘겨 주고, 안 넘어오면 지도가 이미 받아 둔
+//     서울시 정비구역 목록(loadSeoulZones 캐시)에서 **같은 도형**을 찾아 단계를 확인한다
+//     (직접 그린 구역처럼 목록에 없는 도형은 자동 분석하지 않는다).
+//   · 필지가 많은 구역(450곳 초과)도 1차 수치를 먼저 그린 뒤 청크 단위로 백그라운드 조회하고
+//     진행률만 갱신한다 — 화면을 막지 않는다. 캐시에 있으면 즉시 표시한다.
 //   · 호수밀도는 서울시 도시 및 주거환경정비 조례 제2조제5호를 따른다 — 공동·다가구주택은
 //     '세대(가구)수가 가장 많은 1개 층'을 1동으로 보고, 비주거용은 건축면적 90㎡당 1동이다.
 //     그래서 표제부 세대수를 그대로 더한 값보다 작게 나온다(과대계상 해소).
@@ -25,6 +39,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ZoneShapeInput, ZoneStatsPayload, ZoneStatsResponse } from "@/lib/zone-stats";
+import { loadSeoulZones, type SeoulZone } from "@/lib/seoul-zones";
 import {
   sumPrecise,
   type PreciseChunkResponse,
@@ -117,6 +132,130 @@ function Req({ ok, text, note }: { ok: boolean; text: string; note?: string }) {
   );
 }
 
+/** 노후도 요건 판정 타일 — 원형 게이지 + 충족/미달 + 초과·부족 %p (리디브 고유 표기) */
+function RequirementTile({
+  label,
+  threshold,
+  pct,
+  tone,
+  testId,
+}: {
+  label: string;
+  threshold: number;
+  pct: number;
+  tone: "amber" | "indigo";
+  testId: string;
+}) {
+  const ok = pct >= threshold;
+  const delta = pct - threshold;
+  const r = 17;
+  const dash = 2 * Math.PI * r;
+  const filled = Math.max(0, Math.min(1, pct / 100));
+  const ring = tone === "amber" ? "#f59e0b" : "#6366f1";
+  const track = tone === "amber" ? "#fef3c7" : "#e0e7ff";
+  return (
+    <div
+      data-testid={testId}
+      data-verdict={ok ? "meet" : "short"}
+      className={`min-w-0 rounded-xl px-2 py-1.5 ring-1 ${
+        ok ? "bg-emerald-50/60 ring-emerald-200" : "bg-slate-50 ring-slate-200"
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <svg viewBox="0 0 44 44" className="h-10 w-10 shrink-0 -rotate-90" aria-hidden>
+          <circle cx="22" cy="22" r={r} fill="none" stroke={track} strokeWidth="6" />
+          <circle
+            cx="22"
+            cy="22"
+            r={r}
+            fill="none"
+            stroke={ring}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={`${dash * filled} ${dash}`}
+          />
+        </svg>
+        <div className="min-w-0">
+          <div className="truncate text-[10px] font-bold text-slate-700">{label}</div>
+          <div className="whitespace-nowrap text-[9.5px] leading-tight text-slate-400">
+            노후도 {threshold}%↑
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span
+              className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
+                ok ? "bg-emerald-600 text-white" : "bg-rose-100 text-rose-700"
+              }`}
+            >
+              {ok ? "충족" : "미달"}
+            </span>
+            <span
+              className={`whitespace-nowrap text-[10px] font-semibold tabular-nums ${
+                ok ? "text-emerald-700" : "text-rose-600"
+              }`}
+            >
+              {delta >= 0 ? "+" : "−"}
+              {Math.abs(delta).toFixed(1)}%p
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-1 flex items-baseline justify-between whitespace-nowrap text-[9.5px] text-slate-500">
+        <span>현재 노후도</span>
+        <span className="text-[11px] font-bold tabular-nums text-slate-800">{pct.toFixed(1)}%</span>
+      </div>
+    </div>
+  );
+}
+
+// ── 자동 정밀 분석 판정 ─────────────────────────────
+//   구역계·사업이 이미 정해진 구역만 자동으로 돌린다.
+/** 경계 자체가 추정인 도형 — 이 위에서 자동 조회하면 엉뚱한 필지를 대장에서 찾게 된다 */
+const PROVISIONAL_GEOM = new Set([
+  "미고시",
+  "고시미반영",
+  "가상경계",
+  "참고도",
+  "근사원",
+  "추진위안내도",
+]);
+/** 구역계·사업이 확정 단계로 넘어간 추진단계 (서울시 추진단계 표기 기준) */
+const AUTO_STAGE =
+  /정비구역\s*지정|구역지정|지구지정|추진위|조합설립|사업시행|관리처분|관리지역\s*고시|착공|건축심의|건축허가|사업계획\s*승인|사용승인|준공|입주|후보지\s*선정|대상지\s*선정|기획완료|신통기획\s*확정|지구변경|촉진계획|권리산정기준일|모집공고|선정구역/;
+/** 아직 확정 전이라는 표시가 붙은 단계 — 자동 분석하지 않는다 */
+const HOLD_STAGE = /\(추진중\)|추진\s*중\)|공람|\(안\)|신청\s*전|미선정|취소|사전|자문|검토|상정|입찰|MOU|심의|대기/;
+
+/** 이 구역을 자동으로 정밀 분석할지 — 진행 단계 + 경계 신뢰도로 판단한다 */
+export function shouldAutoAnalyze(
+  stage: string | null | undefined,
+  geom: string | null | undefined
+): boolean {
+  if (!stage) return false;
+  if (geom && PROVISIONAL_GEOM.has(geom)) return false;
+  if (HOLD_STAGE.test(stage)) return false;
+  return AUTO_STAGE.test(stage);
+}
+
+/** 도형 지문 — 같은 구역을 서울시 목록에서 찾을 때 쓴다(정점 수 + 첫·끝 점) */
+function shapeKey(polygon: [number, number][] | null | undefined): string | null {
+  if (!polygon || polygon.length < 3) return null;
+  const first = polygon[0];
+  const last = polygon[polygon.length - 1];
+  return [polygon.length, first[0].toFixed(6), first[1].toFixed(6), last[0].toFixed(6), last[1].toFixed(6)].join("|");
+}
+
+/** 지도가 이미 받아 둔 서울시 정비구역 목록에서 같은 도형의 구역을 찾는다 */
+function findZoneByShape(
+  zones: SeoulZone[],
+  polygon: [number, number][] | null | undefined
+): SeoulZone | null {
+  const key = shapeKey(polygon);
+  if (!key) return null;
+  for (const zone of zones) {
+    if (shapeKey(zone.polygon) === key) return zone;
+  }
+  return null;
+}
+
 /** 한 번에 보내는 필지 수 — 서버 상한(60)보다 작게 둬 함수 시간을 안전하게 지킨다 */
 const CHUNK = 50;
 /** 동시에 보내는 청크 수 — 2로 두면 1,400필지 구역도 60초 안에 끝난다 */
@@ -133,11 +272,17 @@ type PreciseState =
 export default function ZoneVitalStats({
   shape,
   areaSqm,
+  stage = null,
+  geom = null,
   className = "",
 }: {
   shape: ZoneShapeInput;
   /** 구역면적(㎡) — 고시면적이 있으면 그 값을 동수밀도 분모로 쓴다(없으면 도형 면적) */
   areaSqm?: number | null;
+  /** 추진단계 — 넘기면 이 값으로 자동 분석 여부를 바로 정한다(없으면 도형으로 목록에서 찾는다) */
+  stage?: string | null;
+  /** 경계 도형 출처(고시도면·가상경계 등) — 추정 경계면 자동 분석하지 않는다 */
+  geom?: string | null;
   className?: string;
 }) {
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
@@ -146,6 +291,10 @@ export default function ZoneVitalStats({
   const [error, setError] = useState<string>("");
   const [precise, setPrecise] = useState<PreciseState>({ status: "idle" });
   const abortRef = useRef<AbortController | null>(null);
+  // 구역 단계 — 부모가 주면 그대로, 아니면 도형 지문으로 서울시 목록에서 찾는다(null = 찾는 중)
+  const [stageHint, setStageHint] = useState<{ stage: string | null; geom: string | null } | null>(
+    stage ? { stage, geom: geom ?? null } : null
+  );
 
   // 구역이 바뀌면 다시 계산한다 — 링 전체를 의존성으로 쓰면 매 렌더마다 바뀌므로 요약 키를 쓴다
   const requestKey = useMemo(() => {
@@ -160,6 +309,29 @@ export default function ZoneVitalStats({
       areaSqm ?? 0,
     ].join(":");
   }, [shape, areaSqm]);
+
+  // 구역이 바뀌면 단계 표시를 다시 정한다 — 부모가 준 단계가 있으면 그대로, 없으면 목록에서 찾는다
+  useEffect(() => {
+    if (stage) {
+      setStageHint({ stage, geom: geom ?? null });
+      return;
+    }
+    let alive = true;
+    setStageHint(null);
+    loadSeoulZones()
+      .then(({ zones }) => {
+        if (!alive) return;
+        const hit = findZoneByShape(zones, shape.polygon);
+        setStageHint(hit ? { stage: hit.stage ?? null, geom: hit.geom ?? null } : { stage: null, geom: null });
+      })
+      .catch(() => {
+        if (alive) setStageHint({ stage: null, geom: null });
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey, stage, geom]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -347,6 +519,24 @@ export default function ZoneVitalStats({
     }
   }, [loadPnus, requestKey]);
 
+  // ── 자동 정밀 분석 ────────────────────────────────────────
+  //   진행 단계 구역은 패널이 열리면 알아서 돌린다. 1차 구역현황이 그려진 뒤로 미뤄
+  //   화면이 먼저 뜨게 하고(250ms), 한 번 돌린 구역은 다시 돌리지 않는다.
+  const autoMode = stageHint ? shouldAutoAnalyze(stageHint.stage, stageHint.geom) : false;
+  // 자동 조회를 이미 걸었는지 — 구역이 바뀌면 되돌린다(사용자가 '중단'한 뒤에는 버튼으로 남긴다)
+  const [autoTried, setAutoTried] = useState(false);
+  useEffect(() => {
+    setAutoTried(false);
+  }, [requestKey]);
+  useEffect(() => {
+    if (!autoMode || autoTried) return;
+    if (status !== "ok" || !stats || stats.buildings === 0) return;
+    if (precise.status !== "idle") return;
+    setAutoTried(true);
+    const timer = setTimeout(() => void runPrecise(), 250);
+    return () => clearTimeout(timer);
+  }, [autoMode, autoTried, status, stats, precise.status, runPrecise]);
+
   const hasBuildings = status === "ok" && stats != null && stats.buildings > 0;
   const preciseResult = precise.status === "ok" ? precise.result : null;
   const preciseTotal = precise.status === "running" ? precise.total : 0;
@@ -354,6 +544,8 @@ export default function ZoneVitalStats({
     precise.status === "running" && precise.total > 0
       ? Math.min(99, Math.round((precise.done / precise.total) * 100))
       : 0;
+  /** 필지가 많은 구역 — 자동 조회를 해도 1차 수치를 먼저 보여 주고 백그라운드로 채운다 */
+  const largeZone = preciseTotal > 450;
 
   return (
     <section
@@ -456,32 +648,68 @@ export default function ZoneVitalStats({
             🔬 정밀 분석{" "}
             <span className="font-medium text-sky-700">건축물대장 구조·호수·대지지분</span>
           </p>
-          {precise.status === "running" ? (
-            <button
-              type="button"
-              onClick={cancelPrecise}
-              className="shrink-0 rounded-full border border-sky-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
-            >
-              중단
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void runPrecise()}
-              data-testid="zone-precise-run"
-              className="shrink-0 rounded-full bg-sky-700 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
-            >
-              {precise.status === "ok" ? "↻ 다시" : precise.status === "error" ? "다시 시도" : "분석 실행"}
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-1">
+            {autoMode && (
+              <span
+                data-testid="zone-precise-auto"
+                title="구역계·사업이 정해진 구역이라 자동으로 분석합니다"
+                className="whitespace-nowrap rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9.5px] font-bold text-emerald-800"
+              >
+                자동
+              </span>
+            )}
+            {precise.status === "running" ? (
+              <button
+                type="button"
+                onClick={cancelPrecise}
+                className="shrink-0 rounded-full border border-sky-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
+              >
+                중단
+              </button>
+            ) : precise.status === "ok" ? (
+              <button
+                type="button"
+                onClick={() => void runPrecise()}
+                data-testid="zone-precise-run"
+                className="shrink-0 rounded-full border border-sky-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
+              >
+                ↻ 다시
+              </button>
+            ) : precise.status === "idle" && autoMode && !autoTried && stageHint ? (
+              // 자동 구역 — 돌기 전 짧은 사이에는 버튼 없이 불러오는 표시만
+              <span className="whitespace-nowrap text-[9.5px] font-medium text-sky-700">
+                불러오는 중…
+              </span>
+            ) : stageHint === null ? (
+              // 구역 단계를 목록에서 찾는 동안 — 버튼이 잠깐 번쩍이지 않게
+              <span className="whitespace-nowrap text-[9.5px] font-medium text-sky-700">확인 중…</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void runPrecise()}
+                data-testid="zone-precise-run"
+                className="shrink-0 rounded-full bg-sky-700 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+              >
+                {precise.status === "error" ? "다시 시도" : "분석 실행"}
+              </button>
+            )}
+          </div>
         </div>
 
-        {precise.status === "idle" && (
+        {precise.status === "idle" && !autoMode && (
           <p className="mt-1 text-[10px] leading-snug text-sky-800/80">
             국토교통부 건축물대장 표제부로 <b className="font-semibold">주구조별 노후도(서울시 조례 기준)</b>와{" "}
             <b className="font-semibold">조례 기준 호수밀도</b>·<b className="font-semibold">추정 조합원(토지등소유자) 수</b>·
             <b className="font-semibold">추정 대지지분</b>을 계산합니다.
             복수 세대·가구 필지는 층별개요까지 확인해 200필지면 30초 안팎 걸립니다.
+          </p>
+        )}
+
+        {precise.status === "idle" && autoMode && stageHint && (
+          <p className="mt-1 break-keep text-[10px] leading-snug text-sky-800/80" data-testid="zone-precise-auto-note">
+            <b className="font-semibold">{stageHint.stage}</b> 구역이라 건축물대장을 바로 불러옵니다 —
+            조례 기준 노후도·호수밀도·추정 조합원·대지지분이 아래에 나타나며, 이미 본 구역은 즉시 뜨게
+            저장해 둡니다.
           </p>
         )}
 
@@ -496,8 +724,27 @@ export default function ZoneVitalStats({
             <p className="mt-1 text-[10px] font-medium text-sky-900">
               분석 중 {precisePct}% ({n(precise.done)}/{n(preciseTotal)}필지)…
             </p>
+            {largeZone && (
+              <p className="mt-0.5 break-keep text-[9.5px] leading-snug text-sky-800/80">
+                필지 {n(preciseTotal)}곳 — 위 1차 수치는 이미 나왔고, 이 분석은 뒤에서 진행됩니다. 화면은 그대로
+                쓰셔도 됩니다.
+              </p>
+            )}
+            {!preciseResult && (
+              <div className="mt-1.5 animate-pulse" aria-hidden>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="rounded-lg bg-white/70 px-2 py-1.5 ring-1 ring-sky-100">
+                      <div className="h-2 w-12 rounded bg-sky-100" />
+                      <div className="mt-1.5 h-3 w-16 rounded bg-sky-100" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
+
 
         {precise.status === "error" && (
           <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
@@ -510,33 +757,12 @@ export default function ZoneVitalStats({
           <div className="mt-1.5" data-testid="zone-precise-result">
             <div className="grid grid-cols-2 gap-1.5">
               <Cell
-                label="조례 기준 노후도"
-                value={preciseResult.ordinancePct.toFixed(1)}
-                unit="%"
-                sub={`철콘30↑ ${n(preciseResult.over30Concrete)} + 기타20↑ ${n(preciseResult.over20Other)} / 유효 ${n(
-                  preciseResult.effectiveBuildings
-                )}동`}
-                tone="rose"
-                testId="zone-precise-ordinance"
-                wrap
-              />
-              <Cell
                 label="조례 기준 호수밀도"
                 value={preciseResult.ordinanceDensity.toFixed(1)}
                 unit="동/ha"
                 sub={`조례 환산 ${n(preciseResult.ordinanceDong)}동 (총 ${n(preciseResult.units)}세대·가구) / ${preciseResult.areaHa.toFixed(2)}ha`}
                 tone="sky"
                 testId="zone-precise-density"
-                wrap
-              />
-              <Cell
-                label="구조 분포"
-                value={`철콘 ${n(preciseResult.concrete)}`}
-                unit="동"
-                sub={`비철콘 ${n(preciseResult.other)}동${
-                  preciseResult.unknownStructure > 0 ? ` · 구조 미상 ${n(preciseResult.unknownStructure)}동` : ""
-                }`}
-                testId="zone-precise-structure"
                 wrap
               />
               <Cell
@@ -599,41 +825,40 @@ export default function ZoneVitalStats({
               />
             </div>
 
-            {/* 노후도 요건 바 — 모아타운 50% · 재개발 60% 눈금 */}
+            {/* 노후도 요건 — 재개발뷰식 가로 눈금바 대신 판정 타일 두 장(모아타운 50%↑ · 신통기획 60%↑) */}
             <div
-              className="mt-2 rounded-lg bg-white/70 px-2 pb-1 pt-1.5 ring-1 ring-rose-100"
-              data-testid="zone-precise-agebar"
+              className="mt-2 rounded-xl bg-white/70 px-2 py-1.5 ring-1 ring-slate-200"
+              data-testid="zone-precise-require"
             >
-              <div className="flex items-baseline justify-between gap-1">
-                <span className="text-[10px] font-semibold text-slate-600">노후도 요건 진행</span>
-                <span className="text-[11px] font-bold tabular-nums text-rose-700">
-                  {preciseResult.ordinancePct.toFixed(1)}%
-                </span>
+              <div className="mb-1 flex items-baseline justify-between gap-1">
+                <span className="text-[10px] font-bold text-slate-700">노후도 요건 판정</span>
+                <span className="text-[10px] font-medium text-slate-400">조례 기준 노후도</span>
               </div>
-              <div className="relative mb-3 mt-2 h-2 rounded-full bg-slate-200">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-rose-500"
-                  style={{ width: `${Math.max(0, Math.min(100, preciseResult.ordinancePct))}%` }}
+              <div className="grid grid-cols-2 gap-1.5">
+                <RequirementTile
+                  label="모아타운"
+                  threshold={50}
+                  pct={preciseResult.ordinancePct}
+                  tone="amber"
+                  testId="zone-precise-req-moa"
                 />
-                {[
-                  { p: 50, label: "모아타운", cls: "bg-amber-500" },
-                  { p: 60, label: "재개발", cls: "bg-rose-800" },
-                ].map((t) => (
-                  <span
-                    key={t.p}
-                    className={`absolute -top-1 h-4 w-[2px] -translate-x-1/2 rounded ${t.cls}`}
-                    style={{ left: `${t.p}%` }}
-                    aria-hidden
-                  />
-                ))}
+                <RequirementTile
+                  label="신통기획"
+                  threshold={60}
+                  pct={preciseResult.ordinancePct}
+                  tone="indigo"
+                  testId="zone-precise-req-sin"
+                />
               </div>
-              <p className="break-keep text-[9.5px] leading-snug text-slate-500">
-                눈금 <b className="font-semibold text-amber-700">모아타운 50%</b> ·{" "}
-                <b className="font-semibold text-rose-800">재개발 60%</b> — 현재{" "}
-                {preciseResult.ordinancePct >= 50 ? "모아타운 요건 충족" : "모아타운 요건 미달"} ·{" "}
-                {preciseResult.ordinancePct >= 60 ? "재개발 요건 충족" : "재개발 요건 미달"}
-                {preciseResult.ordinancePct < 60 &&
-                  ` (${(60 - preciseResult.ordinancePct).toFixed(1)}%p 부족)`}
+              <p
+                className="mt-1.5 break-keep text-[10px] leading-snug text-slate-600"
+                data-testid="zone-precise-structure-share"
+              >
+                <span className="font-semibold text-slate-500">구조별 기여</span> ·{" "}
+                <span className="font-semibold text-rose-700">철콘 30년↑ {n(preciseResult.over30Concrete)}동</span> ·{" "}
+                <span className="font-semibold text-amber-700">비철콘 20년↑ {n(preciseResult.over20Other)}동</span>
+                {preciseResult.unknownStructure > 0 && ` · 구조 미상 ${n(preciseResult.unknownStructure)}동`}
+                <span className="text-slate-400"> (유효 {n(preciseResult.effectiveBuildings)}동)</span>
               </p>
             </div>
 
@@ -671,7 +896,6 @@ export default function ZoneVitalStats({
 
             <div className="mt-1 flex flex-wrap gap-1">
               <Req ok={preciseResult.areaSqm >= 10000} text="면적 1만㎡↑" note="필수" />
-              <Req ok={preciseResult.ordinancePct >= 60} text="노후도 60%↑" note="필수" />
               <Req ok={preciseResult.ordinanceDensity >= 60} text="호수밀도 60동/ha↑" note="선택" />
             </div>
 
