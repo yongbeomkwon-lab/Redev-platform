@@ -218,7 +218,7 @@ export default function ZoneVitalStats({
           )}
           {stats.parcels && (
             <Cell
-              label="대지 필지 · 90㎡ 미만 과소필지"
+              label="필지 · 90㎡ 미만 과소필지"
               value={n(stats.parcels.count)}
               unit="필지"
               sub={`과소 ${stats.parcels.under90Pct.toFixed(1)}% (${n(stats.parcels.under90)}필지)`}
@@ -236,8 +236,8 @@ export default function ZoneVitalStats({
 
       <p className="mt-2 text-[10px] leading-snug text-slate-400">
         리디브 건축물대장 연식 색인·연속지적도 기준 <b className="font-semibold text-slate-500">1차 추정치</b>입니다.
-        구조·층별 세대수와 도로·공원 면적은 반영하지 않았고, 필지는 대지(도로·잡종지 제외)만 셌습니다 —
-        재개발닷컴 등 공식 구역현황과 다를 수 있습니다.
+        구조·층별 세대수를 반영하지 않았고, 필지에는 도로·잡종지가 섞여 있어 과소필지율이 실제 대지 기준보다
+        낮게 보일 수 있습니다 — 재개발닷컴 등 공식 구역현황과 다릅니다.
       </p>
     </section>
   );

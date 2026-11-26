@@ -37,8 +37,6 @@ export type ZoneStatParcel = {
   /** 필지 중심 [위도, 경도] */
   lat: number;
   lng: number;
-  /** 대지(지번에 지목 접미사가 없는 필지)인가 — 도로·잿종지·임야는 필지 수에서 빠진다 */
-  isDaeji?: boolean;
 };
 
 export type ZoneStatsPayload = {
@@ -58,7 +56,7 @@ export type ZoneStatsPayload = {
   floorArea: { total: number; over30: number; over30Pct: number | null };
   /** 단순 동수밀도 — 동수 ÷ 구역면적(ha) */
   density: number;
-  /** 대지 필지 수·과소필지(90㎡ 미만) — 연속지적도를 못 받았으면 null */
+  /** 필지 수·과소필지(90㎡ 미만) — 연속지적도를 못 받았으면 null */
   parcels: { count: number; under90: number; under90Pct: number } | null;
 };
 
@@ -186,16 +184,16 @@ export function computeZoneStats(input: {
 
   let parcelStats: ZoneStatsPayload["parcels"] = null;
   if (Array.isArray(parcels) && parcels.length > 0) {
-    const inside = parcels.filter((p) => pointInZone(shape as ZoneShape, p.lat, p.lng));
-    // 대지(도로·잿종지·임야 제외)만으로 센다 — 과소필지 논의는 사업 대상 대지 기준이라,
-    //   도로 필지가 분모에 섞이면 비율이 실제보다 낮게 나온다. 대지를 하나도 못 가려내면 전체로 되돌린다.
-    const daeji = inside.filter((p) => p.isDaeji !== false);
-    const base = daeji.length > 0 ? daeji : inside;
-    if (base.length > 0) {
-      let small = 0;
-      for (const p of base) if (p.areaSqm > 0 && p.areaSqm < 90) small++;
-      parcelStats = { count: base.length, under90: small, under90Pct: pct(small, base.length) };
+    // 연속지적도에는 도로·잡종지 필지도 함께 온다 — 지목을 가려낼 속성이 응답에 없어
+    //   **모든 필지를 센다**. 도로 필지는 보통 커서 과소필지율을 낮추는 쪽으로 작용한다(화면에 밝힌다).
+    let pc = 0;
+    let small = 0;
+    for (const p of parcels) {
+      if (!pointInZone(shape as ZoneShape, p.lat, p.lng)) continue;
+      pc++;
+      if (p.areaSqm > 0 && p.areaSqm < 90) small++;
     }
+    if (pc > 0) parcelStats = { count: pc, under90: small, under90Pct: pct(small, pc) };
   }
 
   return {
