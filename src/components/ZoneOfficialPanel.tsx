@@ -363,9 +363,14 @@ export default function ZoneOfficialPanel({
             <ul className="space-y-0.5">
               {sources.map((s) => (
                 <li key={s.url + s.label} className="break-words">
-                  <a href={s.url} target="_blank" rel="noreferrer" className="underline decoration-slate-300 hover:text-slate-700">
-                    {s.label}
-                  </a>
+                  {s.url ? (
+                    <a href={s.url} target="_blank" rel="noreferrer" className="underline decoration-slate-300 hover:text-slate-700">
+                      {s.label}
+                    </a>
+                  ) : (
+                    // 링크가 없는 출처(고시·공고 원문 등)는 글자로만 둔다 — 빈 링크로 두면 현재 화면을 다시 연다
+                    <span>{s.label}</span>
+                  )}
                 </li>
               ))}
             </ul>

@@ -52,7 +52,7 @@ export function Badge({
   );
 }
 
-/** 단계 진행 표시 (재개발닷컴 스타일 단계 뱃지) */
+/** 단계 진행 표시 (단계 뱃지) */
 export function StageBadge({ stage, stageOrder }: { stage: string; stageOrder: number }) {
   const tone = stageOrder >= 5 ? "green" : stageOrder >= 3 ? "blue" : "amber";
   return <Badge tone={tone as "green" | "blue" | "amber"}>{stage}</Badge>;
