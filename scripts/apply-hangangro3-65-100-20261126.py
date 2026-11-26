@@ -226,7 +226,9 @@ def apply() -> int:
         raise SystemExit(f"[중단] {ZID} 없음")
 
     want = _entry(z)
-    for k in ("holes", "parts", "dividers"):
+    for k in ("holes", "parts", "dividers", "selectedAt"):
+        # selectedAt 은 화면에서 「후보지 선정」 날짜로 쓰인다 — 이 구역은 아직 후보지 신청 전이라
+        #  연번부여일(2026-10-26)을 선정일로 보이게 두지 않는다(단계·타임라인에 날짜는 그대로 남는다).
         old.pop(k, None)
     old.update(want)
     SOURCE.write_text(json.dumps(src, **COMPACT), encoding="utf-8")
