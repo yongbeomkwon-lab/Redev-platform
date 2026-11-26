@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import {
   classifyStructure,
+  householdsFromText,
   isResidential,
   summarizePreciseBuildings,
   yearFromUseAprDay,
   type LedgerBuilding,
+  type LedgerFloor,
   type PreciseChunkStats,
 } from "@/lib/zone-ledger";
 
@@ -13,9 +15,13 @@ import {
  *
  *   body: { pnus: string[], unknownPnus?: string[], parcelAreas?: { [pnu]: ㎡ } }
  *
- * · 19자리 PNU 목록(구역 안 필지, 클라이언트가 40~60개씩 나눠 보낸다)을 받아
+ * · 19자리 PNU 목록(구역 안 필지, 클라이언트가 40~60개씩 나눈다)을 받아
  *   국토교통부 건축HUB 건축물대장 표제부(`BldRgstHubService/getBrTitleInfo`)를 필지별로 조회하고
  *   주구조·사용승인일·세대/가구수를 한 청크 몫으로 접어 돌려준다.
+ * · 세대·가구가 2 이상이거나 공동·다가구 용도인 필지는 **층별개요**(`getBrFlrOulnInfo`)를
+ *   한 번 더 조회해 층별 세대(가구)수를 확인한다 — 조례 호수밀도(제2조제5호)는
+ *   '세대수가 가장 많은 1개 층'을 1동으로 보므로 층 정보가 있어야 과대계상을 피한다.
+ *   모든 필지에 호출하지 않아 국토부 일일 호출량과 응답 시간을 아낀다(약 1/2).
  * · 청크로 나누는 이유: 대구역(1,400필지)도 Vercel 함수 시간(60초) 안에 끝내고,
  *   화면이 `분석 중 45% (120/265필지)` 처럼 진행률을 보여 주기 위해서다.
  * · 키(MOLIT_API_KEY)는 이 파일에서만 읽고 응답에 절대 담지 않는다.
@@ -27,6 +33,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const BASE = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo";
+/** 층별개요 — 표제부에서 복수 세대·가구이거나 공동·다가구로 확인된 필지에만 추가 조회 */
+const BASE_FLR = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrFlrOulnInfo";
 /** 한 요청에 받는 필지 수 상한 — 60개(클라이언트 청크와 같은 값, 방어용) */
 const MAX_PNUS = 60;
 /** 대장 호출 동시성 — 국토부는 초당 요청 수 제한(약 10/s)이 있어 8~12로 올리면 429로 막힌다 */
@@ -42,6 +50,8 @@ type ParcelResult = { ok: true; items: RawItem[] } | { ok: false; code: string; 
 
 type CacheValue = { at: number; items: RawItem[] };
 const cache = new Map<string, CacheValue>();
+/** 층별개요 캐시 — 같은 필지를 ↻ 다시 눌러도 국토부를 또 부르지 않는다 */
+const flrCache = new Map<string, CacheValue>();
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const CACHE_MAX = 6000;
 
@@ -120,7 +130,7 @@ function friendly(code: string, message: string): string {
   return `건축물대장 조회에 실패했습니다 (${c || "UNKNOWN"}).`;
 }
 
-async function fetchPage(pnu: string, key: string, page: number): Promise<{ status: number; text: string }> {
+async function fetchPage(base: string, pnu: string, key: string, page: number): Promise<{ status: number; text: string }> {
   const p = pnuToLedgerParams(pnu);
   if (!p) throw new Error("BAD_PNU");
   const qs = new URLSearchParams({
@@ -134,7 +144,7 @@ async function fetchPage(pnu: string, key: string, page: number): Promise<{ stat
     pageNo: String(page),
     _type: "json",
   });
-  const url = `${BASE}?${qs.toString()}`;
+  const url = `${base}?${qs.toString()}`;
   let res: Response | null = null;
   // 429(초당·일일 한도)·5xx 는 잠깐 쉬었다 다시 — 바로 성공하는 경우가 많다.
   //   그래도 안 되면 마지막 응답을 그대로 돌려주고, 라우트가 '조회 실패'로 센다.
@@ -184,7 +194,7 @@ async function fetchParcel(pnu: string, key: string): Promise<ParcelResult> {
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ok: true, items: hit.items };
 
   try {
-    const first = await fetchPage(pnu, key, 1);
+    const first = await fetchPage(BASE, pnu, key, 1);
     if (first.status < 200 || first.status >= 300) {
       return { ok: false, code: String(first.status), message: `HTTP ${first.status}` };
     }
@@ -196,7 +206,7 @@ async function fetchParcel(pnu: string, key: string): Promise<ParcelResult> {
     if (total > items.length && items.length > 0) {
       const pages = Math.min(MAX_PAGES, Math.ceil(total / ROWS_PER_PAGE));
       for (let page = 2; page <= pages; page++) {
-        const next = await fetchPage(pnu, key, page);
+        const next = await fetchPage(BASE, pnu, key, page);
         if (next.status < 200 || next.status >= 300) break;
         items.push(...itemsOf(next.text));
       }
@@ -210,7 +220,71 @@ async function fetchParcel(pnu: string, key: string): Promise<ParcelResult> {
   }
 }
 
-function toBuilding(pnu: string, item: RawItem): LedgerBuilding {
+/**
+ * 층별개요 조회 — 복수 세대·가구이거나 공동·다가구 용도인 필지만 부른다.
+ *   실패해도 치명적이지 않다: 층 정보가 없으면 주거용 층수로 추정한다.
+ */
+async function fetchFloors(pnu: string, key: string): Promise<ParcelResult> {
+  const hit = flrCache.get(pnu);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ok: true, items: hit.items };
+
+  try {
+    const first = await fetchPage(BASE_FLR, pnu, key, 1);
+    if (first.status < 200 || first.status >= 300) {
+      return { ok: false, code: String(first.status), message: `HTTP ${first.status}` };
+    }
+    const err = parseErrorText(first.text);
+    if (err) return { ok: false, code: err.code, message: err.message };
+
+    const items = itemsOf(first.text);
+    const total = totalOf(first.text);
+    if (total > items.length && items.length > 0) {
+      const pages = Math.min(MAX_PAGES, Math.ceil(total / ROWS_PER_PAGE));
+      for (let page = 2; page <= pages; page++) {
+        const next = await fetchPage(BASE_FLR, pnu, key, page);
+        if (next.status < 200 || next.status >= 300) break;
+        items.push(...itemsOf(next.text));
+      }
+    }
+
+    if (flrCache.size >= CACHE_MAX) flrCache.clear();
+    flrCache.set(pnu, { at: Date.now(), items });
+    return { ok: true, items };
+  } catch (e) {
+    return { ok: false, code: "NETWORK", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** 이 필지에 층별개요를 물어볼 만한 동이 있는지 — 복수 세대·가구 또는 공동·다가구 용도 */
+function needsFloors(items: RawItem[]): boolean {
+  for (const item of items) {
+    if (/부속/.test(str(item, "mainAtchGbCdNm"))) continue;
+    const hhld = num(item, "hhldCnt");
+    const fmly = num(item, "fmlyCnt");
+    if (hhld + fmly >= 2) return true;
+    const purps = `${str(item, "mainPurpsCdNm")} ${str(item, "etcPurps")}`;
+    if (/공동주택|다가구|다세대|연립|기숙사/.test(purps)) return true;
+  }
+  return false;
+}
+
+/** 층별개요 한 행 → LedgerFloor */
+function toFloor(item: RawItem): LedgerFloor {
+  const use = str(item, "mainPurpsCdNm");
+  const etc = str(item, "etcPurps");
+  return {
+    pk: str(item, "mgmBldrgstPk"),
+    flrNo: num(item, "flrNo"),
+    gb: str(item, "flrGbCdNm"),
+    use,
+    etc,
+    area: num(item, "area"),
+    residential: isResidential(str(item, "mainPurpsCd"), use, etc),
+    households: householdsFromText(`${etc} ${use}`),
+  };
+}
+
+function toBuilding(pnu: string, item: RawItem, floors: LedgerFloor[]): LedgerBuilding {
   const strctCdNm = str(item, "strctCdNm");
   const etcStrct = str(item, "etcStrct");
   const mainPurpsCd = str(item, "mainPurpsCd");
@@ -240,6 +314,9 @@ function toBuilding(pnu: string, item: RawItem): LedgerBuilding {
     minAdjusted,
     attached,
     floorArea: num(item, "totArea"),
+    archArea: num(item, "archArea"),
+    groundFloors: num(item, "grndFlrCnt"),
+    floors,
     platArea: num(item, "platArea"),
   };
 }
@@ -284,6 +361,8 @@ export async function POST(request: Request) {
   const buildings: LedgerBuilding[] = [];
   let ledgerParcels = 0;
   let errors = 0;
+  let floorParcels = 0;
+  let floorErrors = 0;
   const failures: { code: string; message: string }[] = [];
 
   let cursor = 0;
@@ -297,7 +376,26 @@ export async function POST(request: Request) {
         continue;
       }
       if (res.items.length > 0) ledgerParcels++;
-      for (const item of res.items) buildings.push(toBuilding(pnu, item));
+
+      // 표제부에서 복수 세대·가구 또는 공동·다가구로 확인된 필지만 층별개요를 더 부른다
+      let floorItems: RawItem[] = [];
+      if (needsFloors(res.items)) {
+        const flr = await fetchFloors(pnu, key);
+        if (flr.ok) {
+          floorItems = flr.items;
+          floorParcels++;
+        } else {
+          // 층별개요 실패는 필지 실패로 세지 않는다 — 층수로 추정하고 계속한다
+          floorErrors++;
+        }
+      }
+
+      const floors = floorItems.map(toFloor);
+      for (const item of res.items) {
+        const pk = str(item, "mgmBldrgstPk");
+        const own = pk ? floors.filter((f) => f.pk === pk) : [];
+        buildings.push(toBuilding(pnu, item, own));
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pnus.length) }, worker));
@@ -314,6 +412,8 @@ export async function POST(request: Request) {
     parcels: pnus.length,
     ledgerParcels,
     errors,
+    floorParcels,
+    floorErrors,
     unknownPnus,
     parcelAreas,
   });

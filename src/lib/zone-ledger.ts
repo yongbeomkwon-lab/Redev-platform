@@ -13,6 +13,17 @@
 //       둘 다 0인 **주거용** 건축물은 1가구로 보정한다(단독주택 등 대장 미기재).
 //       상가·오피스의 호수(hoCnt)는 주거 호수가 아니라 제외한다.
 //   · 부속건축물(창고·화장실 등)은 동수에서 뺀다 — 주건축물만 센다.
+//   · **조례 기준 호수밀도**는 서울시 도시 및 주거환경정비 조례 제2조제5호를 따른다.
+//       호수밀도 = 정비구역 1ha당 건축물 동수이고, 동수는 다음처럼 센다.
+//         ① 공동주택·다가구주택 — 건축물대장 기준 **세대(가구)수가 가장 많은 1개 층**의
+//            1세대를 1동으로 보고, 나머지 층 세대수는 계상하지 않는다.
+//            층별개요(getBrFlrOulnInfo)의 층 용도 설명에 `다가구주택(2가구)` 처럼
+//            가구수가 적혀 있으면 그 최댓값을 쓰고, 없으면 주거용 지상층 수로 나눠
+//            `Math.ceil(총 세대·가구 / 주거용 지상층수)` 로 추정한다.
+//         ② 단독주택(1가구) — 1동.
+//         ③ 비주거용 건축물 — 건축면적(archArea) 90㎡당 1동, 소수점 이하 버림.
+//       세대수를 그대로 더하면(예: 4층 다세대 8세대 → 8) 과대계상되므로,
+//       화면에는 `추정 호수밀도`(세대·가구/면적)와 별도로 `조례 기준 호수밀도`를 보여 준다.
 //   · **추정 평균 대지지분** = 필지별 대지면적 합 ÷ 총 세대·가구수.
 //       대장 `platArea`(대지면적)는 한 필지에 동이 여럿이면 같은 값이 여러 번 오므로
 //       **필지(PNU) 단위로 한 번만** 더한다(동별 중복 합산 금지).
@@ -24,6 +35,26 @@
 
 /** 구조 분류 — concrete: 철콘군(30년), other: 그 밖(20년) */
 export type StructureGroup = "concrete" | "other";
+
+/** 대장 층별개요(getBrFlrOulnInfo) 한 층 */
+export type LedgerFloor = {
+  /** 관리건축물대장PK(동 식별) — 표제부 동과 짝지을 때 쓴다 */
+  pk: string;
+  /** 층 번호 — 지하도 양수로 오고 층 구분은 gb 로 나눈다 */
+  flrNo: number;
+  /** 층 구분 — 지상 / 지하 / 옥탑 */
+  gb: string;
+  /** 층 주용도명(다가구주택·공동주택·근린생활시설 등) */
+  use: string;
+  /** 그 밖의 용도 설명 — 다가구주택은 '(2가구)' 처럼 가구수가 적히기도 한다 */
+  etc: string;
+  /** 층 면적(㎡) */
+  area: number;
+  /** 주거용 층인지 */
+  residential: boolean;
+  /** 층 용도 설명에 적힌 세대·가구수 — 없으면 null */
+  households: number | null;
+};
 
 /** 대장 표제부 한 동에서 뽑은 최소 정보 */
 export type LedgerBuilding = {
@@ -51,6 +82,12 @@ export type LedgerBuilding = {
   attached: boolean;
   /** 연면적(㎡) */
   floorArea: number;
+  /** 건축면적(㎡) — 비주거용 건축물의 조례 동수(90㎡당 1동) 기준 */
+  archArea: number;
+  /** 지상 층수(표제부 grndFlrCnt) — 층별개요가 없을 때 추정에 쓴다 */
+  groundFloors: number;
+  /** 층별개요(지상·지하·옥탑 전부) — 복수 세대·가구 건물만 채운다 */
+  floors: LedgerFloor[];
   /** 대지면적(㎡) — 대장 platArea. 같은 필지의 동마다 같은 값이 오므로 PNU 로 중복 제거한다 */
   platArea: number;
 };
@@ -80,6 +117,22 @@ export type PreciseChunkStats = {
   unknownYear: number;
   /** 세대·가구 합산 호수 */
   units: number;
+  /** 조례 제2조제5호 환산 동수 합계 — 호수밀도 분자 */
+  ordinanceDong: number;
+  /** 그중 층별개요의 층별 세대·가구수 최댓값으로 센 동수 */
+  ordinanceFloor: number;
+  /** 그중 층수로 나눠 추정한 동수(층별 가구수 미기재·층별개요 없음) */
+  ordinanceEstimated: number;
+  /** 그중 1가구 단독주택으로 센 동수 */
+  ordinanceSingle: number;
+  /** 그중 비주거용 건축면적 90㎡당 1동으로 센 동수 */
+  ordinanceNonResidential: number;
+  /** 층별개요를 조회한 필지 수 */
+  floorParcels: number;
+  /** 층별개요 조회가 실패한 필지 수 */
+  floorErrors: number;
+  /** 복수 세대·가구인데 층별개요 행이 없어 층수로 추정한 동수 */
+  floorMissing: number;
   /** 1가구로 보정한 동수 */
   minUnitAdjusted: number;
   /** 1차 추정에서 연식 미상이던 동을 대장 사용승인일로 확인한 수 */
@@ -103,8 +156,10 @@ export type PreciseSummary = PreciseChunkStats & {
   effectiveBuildings: number;
   /** 서울시 조례 기준 노후도(%) = (철콘 30년↑ + 그 밖 20년↑) / 유효 동수 */
   ordinancePct: number;
-  /** 추정 호수밀도(호/ha) */
+  /** 추정 호수밀도(호/ha) — 세대·가구수를 그대로 더한 값(참고용) */
   density: number;
+  /** 조례 기준 호수밀도(동/ha) — 서울시 도시 및 주거환경정비 조례 제2조제5호 */
+  ordinanceDensity: number;
   /** 호수 1호당 대지면적(㎡) — 대지면적 0 이거나 호수 0 이면 null */
   landShareSqm: number | null;
   /** 추정 평균 대지지분(평) — 대지면적 ÷ 총 호수 ÷ 3.305785 */
@@ -129,6 +184,14 @@ export const EMPTY_CHUNK: PreciseChunkStats = {
   over20Other: 0,
   unknownYear: 0,
   units: 0,
+  ordinanceDong: 0,
+  ordinanceFloor: 0,
+  ordinanceEstimated: 0,
+  ordinanceSingle: 0,
+  ordinanceNonResidential: 0,
+  floorParcels: 0,
+  floorErrors: 0,
+  floorMissing: 0,
   minUnitAdjusted: 0,
   ageResolved: 0,
   landParcels: 0,
@@ -180,6 +243,72 @@ export function isResidential(mainPurpsCd: string, mainPurpsCdNm: string, etcPur
 }
 
 /**
+ * 층 용도 설명에서 세대·가구수 뽑기 — 다가구주택은 `etcPurps` 에
+ *   `다가구주택(2가구)` · `다가구주택(3세대)` 처럼 층별 가구수가 적혀 온다.
+ *   숫자가 없으면 null(층수로 추정해야 한다).
+ */
+export function householdsFromText(text: string): number | null {
+  const m = /(\d{1,3})\s*(?:가구|세대)/.exec(text ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** 조례 호수밀도에서 비주거용 건축물 1동으로 보는 바닥면적(㎡) */
+export const NON_RESIDENTIAL_SQM_PER_DONG = 90;
+
+/** 한 동의 조례 환산 동수를 어떤 근거로 셈했는지 */
+export type OrdinanceBasis =
+  /** 1가구 단독주택 — 1동 */
+  | "single"
+  /** 공동·다가구 — 층별개요에 적힌 층별 세대·가구수 최댓값 */
+  | "floorHouseholds"
+  /** 공동·다가구 — 주거용 지상층 수로 나눈 추정 */
+  | "residentialFloors"
+  /** 공동·다가구 — 층별개요가 없어 지상 층수로 나눈 추정 */
+  | "groundFloors"
+  /** 비주거용 — 건축면적 90㎡당 1동 */
+  | "nonResidential"
+  /** 층 정보가 전혀 없어 1동으로 둠 */
+  | "noData";
+
+/**
+ * 서울시 도시 및 주거환경정비 조례 제2조제5호 기준 한 동의 동수.
+ *   · 공동주택·다가구주택: 세대(가구)수가 **가장 많은 1개 층**을 1동으로 본다.
+ *     층별개요에 층별 가구수가 적힌 경우 그 최댓값이 정답에 가깝고,
+ *     없으면 주거용 지상층 수로 나눠 올림한 값을 추정치로 쓴다.
+ *   · 단독주택(1가구): 1동.
+ *   · 비주거용: 건축면적 90㎡당 1동(소수점 이하 버림, 90㎡ 미만은 0동).
+ */
+export function ordinanceDongOf(b: LedgerBuilding): { dong: number; basis: OrdinanceBasis } {
+  if (!b.residential) {
+    const dong =
+      b.archArea >= NON_RESIDENTIAL_SQM_PER_DONG
+        ? Math.floor(b.archArea / NON_RESIDENTIAL_SQM_PER_DONG)
+        : 0;
+    return { dong, basis: "nonResidential" };
+  }
+  // 1가구 단독주택 — 동 하나가 1동
+  if (b.units <= 1) return { dong: 1, basis: "single" };
+
+  // 주거용 **지상**층만 센다 — 근생·주차장·기계실, 지하·옥탑(계단실)은 제외
+  const floors = (b.floors ?? []).filter((f) => f.gb === "지상" && f.residential);
+  const direct = floors
+    .map((f) => f.households)
+    .filter((v): v is number => v != null && v > 0);
+  if (direct.length > 0) return { dong: Math.max(...direct), basis: "floorHouseholds" };
+
+  const levels = new Set(floors.map((f) => f.flrNo).filter((n) => n > 0));
+  if (levels.size > 0) {
+    return { dong: Math.max(1, Math.ceil(b.units / levels.size)), basis: "residentialFloors" };
+  }
+  if (b.groundFloors > 0) {
+    return { dong: Math.max(1, Math.ceil(b.units / b.groundFloors)), basis: "groundFloors" };
+  }
+  return { dong: 1, basis: "noData" };
+}
+
+/**
  * 한 청크(필지 묶음)의 대장 동들을 지표로 접는다.
  *   · 노후도 모수(effective)는 주건축물 중 사용승인일이 있는 동수다.
  *   · unknownPnus 는 1차 추정(연식 색인)에서 연식을 몰랐던 건물의 PNU —
@@ -192,6 +321,10 @@ export function summarizePreciseBuildings(input: {
   parcels: number;
   ledgerParcels: number;
   errors?: number;
+  /** 층별개요를 조회한 필지 수 */
+  floorParcels?: number;
+  /** 층별개요 조회가 실패한 필지 수 */
+  floorErrors?: number;
   unknownPnus?: Iterable<string>;
   parcelAreas?: Record<string, number> | null;
   nowYear?: number;
@@ -210,6 +343,8 @@ export function summarizePreciseBuildings(input: {
     ledgerParcels: input.ledgerParcels,
     missingParcels: Math.max(0, input.parcels - input.ledgerParcels),
     errors: input.errors ?? 0,
+    floorParcels: input.floorParcels ?? 0,
+    floorErrors: input.floorErrors ?? 0,
   };
 
   for (const b of input.buildings) {
@@ -222,6 +357,17 @@ export function summarizePreciseBuildings(input: {
     out.buildings++;
     out.units += b.units;
     if (b.minAdjusted) out.minUnitAdjusted++;
+
+    // 조례 제2조제5호 환산 동수 — 세대수를 그대로 더하지 않는다
+    const ordinance = ordinanceDongOf(b);
+    out.ordinanceDong += ordinance.dong;
+    if (ordinance.basis === "floorHouseholds") out.ordinanceFloor += ordinance.dong;
+    else if (ordinance.basis === "nonResidential") out.ordinanceNonResidential += ordinance.dong;
+    else if (ordinance.basis === "single") out.ordinanceSingle += ordinance.dong;
+    else {
+      out.ordinanceEstimated += ordinance.dong;
+      if (b.residential && b.units >= 2 && (b.floors ?? []).length === 0) out.floorMissing++;
+    }
 
     const name = b.structure || "구조 미상";
     structureMap.set(name, (structureMap.get(name) ?? 0) + 1);
@@ -286,6 +432,7 @@ export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear
   const ordinancePct = effective > 0 ? Math.round(((total.over30Concrete + total.over20Other) / effective) * 1000) / 10 : 0;
   const areaHa = toHa(areaSqm);
   const density = areaHa > 0 ? Math.round((total.units / areaHa) * 10) / 10 : 0;
+  const ordinanceDensity = areaHa > 0 ? Math.round((total.ordinanceDong / areaHa) * 10) / 10 : 0;
 
   // 추정 평균 대지지분 — 유효 대지면적 합 ÷ 총 호수(1평 = 3.305785㎡)
   const landShareSqm =
@@ -301,6 +448,7 @@ export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear
     effectiveBuildings: effective,
     ordinancePct,
     density,
+    ordinanceDensity,
     landShareSqm,
     landSharePyeong,
   };

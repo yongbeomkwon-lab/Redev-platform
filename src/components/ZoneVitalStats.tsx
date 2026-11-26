@@ -10,8 +10,13 @@
 //   · 경계가 없는 구역(미고시 후보지)은 부모가 이 컴포넌트를 그리지 않는다.
 //
 //   「🔬 정밀 분석」은 국토교통부 건축물대장 표제부(getBrTitleInfo)를 구역 안 필지마다
-//   조회해 **주구조·사용승인일·세대/가구수·대지면적**으로 서울시 조례 기준 노후도와 추정 호수밀도,
-//   추정 평균 대지지분을 낸다.
+//   조회해 **주구조·사용승인일·세대/가구수·대지면적**으로 서울시 조례 기준 노후도와
+//   **조례 기준 호수밀도**, 추정 평균 대지지분을 낸다.
+//   · 호수밀도는 서울시 도시 및 주거환경정비 조례 제2조제5호를 따른다 — 공동·다가구주택은
+//     '세대(가구)수가 가장 많은 1개 층'을 1동으로 보고, 비주거용은 건축면적 90㎡당 1동이다.
+//     그래서 표제부 세대수를 그대로 더한 값보다 작게 나온다(과대계상 해소).
+//   · 층별 세대수는 표제부에서 복수 세대·가구이거나 공동·다가구로 확인된 필지에만
+//     층별개요(getBrFlrOulnInfo)를 더 물어 확인한다.
 //   필지가 많은 구역도 함수 시간(60초)을 넘지 않도록 50필지씩 나눠 보내고 진행률을 보여 준다.
 //   결과는 구역별로 localStorage 에 남겨 다시 열 때 즉시 보여 주고, ↻ 로 새로 조회한다.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +118,7 @@ function Req({ ok, text, note }: { ok: boolean; text: string; note?: string }) {
 const CHUNK = 50;
 /** 동시에 보내는 청크 수 — 2로 두면 1,400필지 구역도 60초 안에 끝난다 */
 const PARALLEL = 2;
-const CACHE_PREFIX = "redev-precise:v2:";
+const CACHE_PREFIX = "redev-precise:v3:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PreciseState =
@@ -471,8 +476,8 @@ export default function ZoneVitalStats({
         {precise.status === "idle" && (
           <p className="mt-1 text-[10px] leading-snug text-sky-800/80">
             국토교통부 건축물대장 표제부로 <b className="font-semibold">주구조별 노후도(서울시 조례 기준)</b>와{" "}
-            <b className="font-semibold">추정 호수밀도</b>·<b className="font-semibold">추정 평균 대지지분</b>을 계산합니다.
-            구역 필지 수만큼 조회해 200필지면 30초 안팎 걸립니다.
+            <b className="font-semibold">조례 기준 호수밀도</b>·<b className="font-semibold">추정 평균 대지지분</b>을 계산합니다.
+            복수 세대·가구 필지는 층별개요까지 확인해 200필지면 30초 안팎 걸립니다.
           </p>
         )}
 
@@ -512,10 +517,10 @@ export default function ZoneVitalStats({
                 wrap
               />
               <Cell
-                label="추정 호수밀도"
-                value={preciseResult.density.toFixed(1)}
-                unit="호/ha"
-                sub={`세대·가구 ${n(preciseResult.units)}호 / ${preciseResult.areaHa.toFixed(2)}ha`}
+                label="조례 기준 호수밀도"
+                value={preciseResult.ordinanceDensity.toFixed(1)}
+                unit="동/ha"
+                sub={`조례 환산 ${n(preciseResult.ordinanceDong)}동 (총 ${n(preciseResult.units)}세대·가구) / ${preciseResult.areaHa.toFixed(2)}ha`}
                 tone="sky"
                 testId="zone-precise-density"
                 wrap
@@ -564,19 +569,28 @@ export default function ZoneVitalStats({
             <div className="mt-1 flex flex-wrap gap-1">
               <Req ok={preciseResult.areaSqm >= 10000} text="면적 1만㎡↑" note="필수" />
               <Req ok={preciseResult.ordinancePct >= 60} text="노후도 60%↑" note="필수" />
-              <Req ok={preciseResult.density >= 60} text="호수밀도 60호/ha↑" note="선택" />
+              <Req ok={preciseResult.ordinanceDensity >= 60} text="호수밀도 60동/ha↑" note="선택" />
             </div>
 
             <p className="mt-1 break-keep text-[10px] leading-snug text-slate-500">
-              조회 필지 {n(preciseResult.parcels)} · 매칭 동 {n(preciseResult.buildings)} · 대장 없음{" "}
-              {n(preciseResult.missingParcels)}필지
+              조회 필지 {n(preciseResult.parcels)} · 매칭 동 {n(preciseResult.buildings)} · 층별개요{" "}
+              {n(preciseResult.floorParcels)}필지 · 대장 없음 {n(preciseResult.missingParcels)}필지
               {preciseResult.errors > 0 && ` · 조회 실패 ${n(preciseResult.errors)}필지`}
+              {preciseResult.floorErrors > 0 && ` · 층별개요 실패 ${n(preciseResult.floorErrors)}필지`}
               {preciseResult.structures.length > 0 && (
                 <>
                   <br />
                   주구조: {preciseResult.structures.map((s) => `${s.name} ${n(s.count)}`).join(" · ")}
                 </>
               )}
+            </p>
+
+            <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400" data-testid="zone-precise-ordinance-note">
+              조례 기준 호수밀도 = 서울시 도시 및 주거환경정비 조례 제2조제5호 기준 — 공동·다가구는 세대(가구)수가 가장
+              많은 1개 층만 1동(층별 {n(preciseResult.ordinanceFloor)}동·가구수 미기재 추정{" "}
+              {n(preciseResult.ordinanceEstimated)}동), 단독 1가구는 1동({n(preciseResult.ordinanceSingle)}동), 비주거는
+              건축면적 90㎡당 1동({n(preciseResult.ordinanceNonResidential)}동). 세대수를 그대로 더한 밀도는{" "}
+              {preciseResult.density.toFixed(1)}호/ha입니다.
             </p>
 
             <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400">
