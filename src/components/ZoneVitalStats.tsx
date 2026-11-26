@@ -525,16 +525,27 @@ export default function ZoneVitalStats({
   const autoMode = stageHint ? shouldAutoAnalyze(stageHint.stage, stageHint.geom) : false;
   // 자동 조회를 이미 걸었는지 — 구역이 바뀌면 되돌린다(사용자가 '중단'한 뒤에는 버튼으로 남긴다)
   const [autoTried, setAutoTried] = useState(false);
+  // 예약된 자동 조회 — 구역이 바뀌거나 화면을 떠날 때만 취소한다.
+  //   (렌더마다 effect 를 정리하면 예약이 매번 지워져 자동 조회가 시작되지 않는다 — 2026-11-27 확인)
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     setAutoTried(false);
+    return () => {
+      if (autoTimerRef.current) {
+        clearTimeout(autoTimerRef.current);
+        autoTimerRef.current = null;
+      }
+    };
   }, [requestKey]);
   useEffect(() => {
     if (!autoMode || autoTried) return;
     if (status !== "ok" || !stats || stats.buildings === 0) return;
     if (precise.status !== "idle") return;
     setAutoTried(true);
-    const timer = setTimeout(() => void runPrecise(), 250);
-    return () => clearTimeout(timer);
+    autoTimerRef.current = setTimeout(() => {
+      autoTimerRef.current = null;
+      void runPrecise();
+    }, 250);
   }, [autoMode, autoTried, status, stats, precise.status, runPrecise]);
 
   const hasBuildings = status === "ok" && stats != null && stats.buildings > 0;
