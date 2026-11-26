@@ -68,6 +68,10 @@ export default function ZoneOfficialPanel({
   const pyeong = Math.round(zone.area / PYEONG);
   const aliases = (zone.alias ?? []).filter((a) => a !== zone.name);
   const boundaryMissing = !zone.polygon || zone.geom === "미고시" || zone.geom === "고시미반영";
+  // 이미 정비구역 지정·고시가 끝난 구역에 "정비구역 지정 전이라 확정 전"을 붙이면 앞 줄(단계)과 모순된다
+  //   — 고시도면 경계라도 단계가 지정(안) 공람·후보지선정이면 종전 문구를 그대로 쓴다.
+  const districtDesignated =
+    /정비구역\s*지정/.test(zone.stage ?? "") && !/\(안\)|공람|열람|추진중/.test(zone.stage ?? "");
   const sources = [...(zone.sources ?? []), ...(zone.nameSources ?? [])].filter(
     (s, i, arr) => arr.findIndex((x) => x.url === s.url && x.label === s.label) === i
   );
@@ -210,7 +214,8 @@ export default function ZoneOfficialPanel({
               <>
                 구청·서울시 고시 지형도면에서 옮긴 경계
                 <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
+                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
+                  {districtDesignated ? " · 고시로 확정된 구역계" : " · 정비구역 지정 전이라 확정 전"}
                 </span>
               </>
             ) : zone.geom === "추진위안내도" ? (

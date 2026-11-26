@@ -586,10 +586,10 @@ export default function ZoneVitalStats({
             </p>
 
             <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400" data-testid="zone-precise-ordinance-note">
-              조례 기준 호수밀도 = 서울시 도시 및 주거환경정비 조례 제2조제5호 기준 — 공동·다가구는 세대(가구)수가 가장
-              많은 1개 층만 1동(층별 {n(preciseResult.ordinanceFloor)}동·가구수 미기재 추정{" "}
-              {n(preciseResult.ordinanceEstimated)}동), 단독 1가구는 1동({n(preciseResult.ordinanceSingle)}동), 비주거는
-              건축면적 90㎡당 1동({n(preciseResult.ordinanceNonResidential)}동). 세대수를 그대로 더한 밀도는{" "}
+              서울시 도시 및 주거환경정비 조례 제2조제5호 — 공동·다가구는 세대(가구)수가 가장 많은 1개 층만 1동
+              (층별 {n(preciseResult.ordinanceFloor)}동, 가구수 미기재 {n(preciseResult.ordinanceEstimated)}동은
+              주거용 지상층 수로 추정), 단독 1가구 1동({n(preciseResult.ordinanceSingle)}동), 비주거는 건축면적
+              90㎡당 1동({n(preciseResult.ordinanceNonResidential)}동). 세대수 단순합산은{" "}
               {preciseResult.density.toFixed(1)}호/ha입니다.
             </p>
 
