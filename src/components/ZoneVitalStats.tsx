@@ -437,7 +437,8 @@ export default function ZoneVitalStats({
         {precise.status === "idle" && (
           <p className="mt-1 text-[10px] leading-snug text-sky-800/80">
             국토교통부 건축물대장 표제부로 <b className="font-semibold">주구조별 노후도(서울시 조례 기준)</b>와{" "}
-            <b className="font-semibold">추정 호수밀도</b>를 계산합니다. 구역 필지 수만큼 조회해 10초 안팎 걸립니다.
+            <b className="font-semibold">추정 호수밀도</b>를 계산합니다. 구역 필지 수만큼 조회해 200필지면 30초 안팎
+            걸립니다.
           </p>
         )}
 
@@ -497,9 +498,11 @@ export default function ZoneVitalStats({
                 value={n(preciseResult.ageResolved)}
                 unit="동"
                 sub={
-                  stats && stats.unknownYear > 0
-                    ? `1차 추정 연식 미상 ${n(stats.unknownYear)}동 중 확인`
-                    : "1차 추정 연식 미상 없음"
+                  !stats || stats.unknownYear === 0
+                    ? "1차 추정 연식 미상 없음"
+                    : preciseResult.ageResolved > 0
+                      ? `1차 추정 미상 ${n(stats.unknownYear)}동 중 ${n(preciseResult.ageResolved)}동 확인`
+                      : `1차 추정 미상 ${n(stats.unknownYear)}동 — 대장에도 사용승인일 없음`
                 }
                 tone="emerald"
                 testId="zone-precise-age"
@@ -525,14 +528,12 @@ export default function ZoneVitalStats({
             </p>
 
             <p className="mt-1 text-[9.5px] leading-snug text-slate-400">
-              건축물대장 표제부 기준(부속건축물 {n(preciseResult.attached)}동 제외). 호수는 공동주택 세대수·가구수 중
-              큰 값이고, 둘 다 0인 주거용 건물은 1가구로 보정했습니다({n(preciseResult.minUnitAdjusted)}동). 상가·오피스
-              호수는 제외. 무허가·미등록 건축물은 대장이 없어 미조회로 남습니다.
+              건축물대장 표제부 기준{preciseResult.attached > 0 ? `(부속건축물 ${n(preciseResult.attached)}동 제외)` : ""}
+              {preciseResult.attached > 0 ? ". " : ""}호수는 공동주택 세대수·가구수 중 큰 값이고, 둘 다 0인 주거용
+              건물은 1가구로 보정했습니다({n(preciseResult.minUnitAdjusted)}동). 상가·오피스 호수는 제외. 무허가·미등록
+              건축물은 대장이 없어 미조회로 남습니다.
               {precise.status === "ok" &&
-                ` 저장된 결과 ${new Date(precise.at).toLocaleDateString("ko-KR", {
-                  month: "2-digit",
-                  day: "2-digit",
-                })}.`}
+                ` 저장된 결과 ${new Date(precise.at).getMonth() + 1}월 ${new Date(precise.at).getDate()}일.`}
             </p>
           </div>
         )}
