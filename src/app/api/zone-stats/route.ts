@@ -218,9 +218,18 @@ export async function POST(request: Request) {
       if (typeof pnu === "string" && pnu) return pnu;
       return r[0]?.slice(0, 4).join(",") ?? "";
     });
-    parcels = uniqueParcels.map(({ rings }) => {
+    parcels = uniqueParcels.map(({ f, rings }) => {
       const [lat, lng] = parcelCenter(rings[0]);
-      return { areaSqm: parcelAreaSqm(rings[0]), lat, lng };
+      const props = f.properties ?? {};
+      const jibun = typeof props.jibun === "string" ? props.jibun.trim() : "";
+      // 연속지적도의 지번에는 대지가 아닌 필지에 지목 접미사가 붙는다("390-17도"·"227-11잿").
+      //   사업 대상 대지 판단은 지번이 순수 번지(123 / 123-4)인 필지만 남긴다.
+      return {
+        areaSqm: parcelAreaSqm(rings[0]),
+        lat,
+        lng,
+        isDaeji: jibun ? /^\d+(-\d+)?$/.test(jibun) : true,
+      };
     });
   }
 
