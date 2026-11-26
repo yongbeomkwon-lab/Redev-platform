@@ -41,6 +41,7 @@ function Cell({
   sub,
   tone = "slate",
   testId,
+  wrap = false,
 }: {
   label: string;
   value: string;
@@ -48,6 +49,8 @@ function Cell({
   sub?: string;
   tone?: "slate" | "rose" | "amber" | "sky" | "emerald";
   testId?: string;
+  /** 보조설명을 한 줄로 자르지 않고 두 줄까지 보여 준다(정밀 분석 칸) */
+  wrap?: boolean;
 }) {
   const valueTone =
     tone === "rose"
@@ -66,7 +69,9 @@ function Cell({
         <span className="text-sm font-bold tabular-nums leading-tight">{value}</span>
         {unit && <span className="text-[10px] font-semibold">{unit}</span>}
       </div>
-      {sub && <div className="mt-0.5 truncate text-[10px] text-slate-500">{sub}</div>}
+      {sub && (
+        <div className={`mt-0.5 text-[10px] text-slate-500 ${wrap ? "leading-snug" : "truncate"}`}>{sub}</div>
+      )}
     </div>
   );
 }
@@ -475,6 +480,7 @@ export default function ZoneVitalStats({
                 )}동`}
                 tone="rose"
                 testId="zone-precise-ordinance"
+                wrap
               />
               <Cell
                 label="추정 호수밀도"
@@ -483,6 +489,7 @@ export default function ZoneVitalStats({
                 sub={`세대·가구 ${n(preciseResult.units)}호 / ${preciseResult.areaHa.toFixed(2)}ha`}
                 tone="sky"
                 testId="zone-precise-density"
+                wrap
               />
               <Cell
                 label="구조 분포"
@@ -492,6 +499,7 @@ export default function ZoneVitalStats({
                   preciseResult.unknownStructure > 0 ? ` · 구조 미상 ${n(preciseResult.unknownStructure)}동` : ""
                 }`}
                 testId="zone-precise-structure"
+                wrap
               />
               <Cell
                 label="연식 보정"
@@ -506,6 +514,7 @@ export default function ZoneVitalStats({
                 }
                 tone="emerald"
                 testId="zone-precise-age"
+                wrap
               />
             </div>
 
