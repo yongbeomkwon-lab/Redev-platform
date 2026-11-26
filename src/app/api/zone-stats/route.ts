@@ -208,6 +208,7 @@ export async function POST(request: Request) {
       year,
       areaSqm: Number.isFinite(areaNum) && areaNum > 0 ? areaNum : null,
       rings,
+      pnu: typeof props.pnu === "string" ? props.pnu : null,
     };
   });
 
@@ -218,9 +219,15 @@ export async function POST(request: Request) {
       if (typeof pnu === "string" && pnu) return pnu;
       return r[0]?.slice(0, 4).join(",") ?? "";
     });
-    parcels = uniqueParcels.map(({ rings }) => {
+    parcels = uniqueParcels.map(({ f, rings }) => {
       const [lat, lng] = parcelCenter(rings[0]);
-      return { areaSqm: parcelAreaSqm(rings[0]), lat, lng };
+      const pnu = f.properties?.pnu;
+      return {
+        areaSqm: parcelAreaSqm(rings[0]),
+        lat,
+        lng,
+        pnu: typeof pnu === "string" ? pnu : null,
+      };
     });
   }
 

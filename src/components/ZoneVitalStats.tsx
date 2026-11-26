@@ -1,6 +1,6 @@
 "use client";
 // ─────────────────────────────────────────────────────────────────────────────
-// ZoneVitalStats — 구역 상세 패널의 「구역현황 (추정)」
+// ZoneVitalStats — 구역 상세 패널의 「구역현황 (추정)」 + 「정밀 분석」
 //
 //   구역 폴리곤을 /api/zone-stats 로 보내 그 안의 건축물·필지로
 //   노후도(30·20년)·건축물 동수·동수밀도·과소필지율을 받아 카드로 보여준다.
@@ -8,9 +8,20 @@
 //   · 숫자는 1차 추정치다(건축물대장 사용승인일 + 연속지적도). 구조·층별 세대수는 반영하지
 //     않으므로 재개발닷컴의 구역현황과 다를 수 있다 — 카드 아래 문구로 항상 밝힌다.
 //   · 경계가 없는 구역(미고시 후보지)은 부모가 이 컴포넌트를 그리지 않는다.
+//
+//   「🔬 정밀 분석」은 국토교통부 건축물대장 표제부(getBrTitleInfo)를 구역 안 필지마다
+//   조회해 **주구조·사용승인일·세대/가구수**로 서울시 조례 기준 노후도와 추정 호수밀도를 낸다.
+//   필지가 많은 구역도 함수 시간(60초)을 넘지 않도록 50필지씩 나눠 보내고 진행률을 보여 준다.
+//   결과는 구역별로 localStorage 에 남겨 다시 열 때 즉시 보여 주고, ↻ 로 새로 조회한다.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ZoneShapeInput, ZoneStatsPayload, ZoneStatsResponse } from "@/lib/zone-stats";
+import {
+  sumPrecise,
+  type PreciseChunkResponse,
+  type PreciseChunkStats,
+  type PreciseSummary,
+} from "@/lib/zone-ledger";
 
 function n(v: number): string {
   return v.toLocaleString("ko-KR");
@@ -35,7 +46,7 @@ function Cell({
   value: string;
   unit?: string;
   sub?: string;
-  tone?: "slate" | "rose" | "amber" | "sky";
+  tone?: "slate" | "rose" | "amber" | "sky" | "emerald";
   testId?: string;
 }) {
   const valueTone =
@@ -45,7 +56,9 @@ function Cell({
         ? "text-amber-700"
         : tone === "sky"
           ? "text-sky-700"
-          : "text-slate-900";
+          : tone === "emerald"
+            ? "text-emerald-700"
+            : "text-slate-900";
   return (
     <div className="min-w-0 rounded-lg bg-slate-50 px-2 py-1.5">
       <div className="truncate text-[10px] font-medium text-slate-500">{label}</div>
@@ -72,6 +85,34 @@ function Skeleton() {
   );
 }
 
+/** 신통기획 요건 참고 뱃지 — 필수(면적·노후도)와 선택(호수밀도)을 구분한다 */
+function Req({ ok, text, note }: { ok: boolean; text: string; note?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+        ok ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-slate-100 text-slate-500"
+      }`}
+    >
+      <span aria-hidden>{ok ? "✓" : "–"}</span>
+      {text}
+      {note && <span className="font-normal opacity-70">{note}</span>}
+    </span>
+  );
+}
+
+/** 한 번에 보내는 필지 수 — 서버 상한(60)보다 작게 둬 함수 시간을 안전하게 지킨다 */
+const CHUNK = 50;
+/** 동시에 보내는 청크 수 — 2로 두면 1,400필지 구역도 60초 안에 끝난다 */
+const PARALLEL = 2;
+const CACHE_PREFIX = "redev-precise:v1:";
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+type PreciseState =
+  | { status: "idle" }
+  | { status: "running"; done: number; total: number }
+  | { status: "ok"; result: PreciseSummary; at: number }
+  | { status: "error"; message: string };
+
 export default function ZoneVitalStats({
   shape,
   areaSqm,
@@ -86,11 +127,21 @@ export default function ZoneVitalStats({
   const [stats, setStats] = useState<ZoneStatsPayload | null>(null);
   const [meta, setMeta] = useState<{ truncated: boolean } | null>(null);
   const [error, setError] = useState<string>("");
+  const [precise, setPrecise] = useState<PreciseState>({ status: "idle" });
+  const abortRef = useRef<AbortController | null>(null);
 
   // 구역이 바뀌면 다시 계산한다 — 링 전체를 의존성으로 쓰면 매 렌더마다 바뀌므로 요약 키를 쓴다
   const requestKey = useMemo(() => {
     const first = shape.polygon?.[0];
-    return [shape.polygon?.length ?? 0, first?.[0] ?? 0, first?.[1] ?? 0, areaSqm ?? 0].join(":");
+    const last = shape.polygon?.[shape.polygon.length - 1];
+    return [
+      shape.polygon?.length ?? 0,
+      first?.[0] ?? 0,
+      first?.[1] ?? 0,
+      last?.[0] ?? 0,
+      last?.[1] ?? 0,
+      areaSqm ?? 0,
+    ].join(":");
   }, [shape, areaSqm]);
 
   useEffect(() => {
@@ -132,7 +183,135 @@ export default function ZoneVitalStats({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestKey]);
 
+  // 구역이 바뀌면 정밀 분석 상태를 되돌리고, 저장해 둔 결과가 있으면 바로 보여 준다
+  useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPrecise({ status: "idle" });
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(CACHE_PREFIX + requestKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { at?: number; result?: PreciseSummary };
+      if (!parsed?.result || typeof parsed.at !== "number") return;
+      if (Date.now() - parsed.at > CACHE_TTL_MS) {
+        window.localStorage.removeItem(CACHE_PREFIX + requestKey);
+        return;
+      }
+      setPrecise({ status: "ok", result: parsed.result, at: parsed.at });
+    } catch {
+      /* localStorage 차단·깨진 값 — 그냥 처음부터 */
+    }
+  }, [requestKey]);
+
+  const cancelPrecise = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPrecise({ status: "idle" });
+  }, []);
+
+  /** 구역 안 필지 PNU 목록 — 카드가 이미 받은 stats 를 쓰고, 없으면 다시 한 번 받는다 */
+  const loadPnus = useCallback(async (): Promise<{ pnus: string[]; unknown: string[]; area: number }> => {
+    if (stats?.parcels?.pnus?.length) {
+      return { pnus: stats.parcels.pnus, unknown: stats.unknownPnu ?? [], area: stats.areaSqm };
+    }
+    const res = await fetch("/api/zone-stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shape, areaSqm: areaSqm ?? null }),
+    });
+    const data = (await res.json()) as ZoneStatsResponse;
+    if (!data.ok) throw new Error(data.detail || data.error);
+    return {
+      pnus: data.stats.parcels?.pnus ?? [],
+      unknown: data.stats.unknownPnu ?? [],
+      area: data.stats.areaSqm,
+    };
+  }, [stats, shape, areaSqm]);
+
+  const runPrecise = useCallback(async () => {
+    if (abortRef.current) return; // 이미 돌고 있다
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setPrecise({ status: "running", done: 0, total: 0 });
+
+    try {
+      const { pnus, unknown, area } = await loadPnus();
+      if (pnus.length === 0) {
+        setPrecise({ status: "error", message: "구역 안 필지(PNU)를 받지 못했습니다 — 경계를 다시 확인해 주세요." });
+        abortRef.current = null;
+        return;
+      }
+      const chunks: string[][] = [];
+      for (let i = 0; i < pnus.length; i += CHUNK) chunks.push(pnus.slice(i, i + CHUNK));
+
+      let done = 0;
+      const total = pnus.length;
+      setPrecise({ status: "running", done: 0, total });
+
+      const results: PreciseChunkStats[] = new Array(chunks.length);
+      let cursor = 0;
+      let failed: string | null = null;
+
+      async function worker() {
+        while (cursor < chunks.length && !failed) {
+          const index = cursor++;
+          const res = await fetch("/api/zone-stats/precise", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pnus: chunks[index], unknownPnus: unknown.slice(0, 2000) }),
+            signal: controller.signal,
+          });
+          const data = (await res.json()) as PreciseChunkResponse;
+          if (!data.ok) throw new Error(data.detail || data.error);
+          results[index] = data.chunk;
+          done += chunks[index].length;
+          setPrecise({ status: "running", done: Math.min(done, total), total });
+        }
+      }
+
+      try {
+        await Promise.all(Array.from({ length: Math.min(PARALLEL, chunks.length) }, worker));
+      } catch (e) {
+        if ((e as Error)?.name === "AbortError") {
+          abortRef.current = null;
+          return;
+        }
+        failed = (e as Error)?.message ?? String(e);
+      }
+      if (failed) {
+        abortRef.current = null;
+        setPrecise({ status: "error", message: failed });
+        return;
+      }
+      if (controller.signal.aborted) {
+        abortRef.current = null;
+        return;
+      }
+
+      const result = sumPrecise(results, area);
+      const at = Date.now();
+      try {
+        window.localStorage.setItem(CACHE_PREFIX + requestKey, JSON.stringify({ at, result }));
+      } catch {
+        /* 저장 실패는 무시 — 결과는 지금 화면에 있다 */
+      }
+      abortRef.current = null;
+      setPrecise({ status: "ok", result, at });
+    } catch (e) {
+      abortRef.current = null;
+      if ((e as Error)?.name === "AbortError") return;
+      setPrecise({ status: "error", message: (e as Error)?.message ?? String(e) });
+    }
+  }, [loadPnus, requestKey]);
+
   const hasBuildings = status === "ok" && stats != null && stats.buildings > 0;
+  const preciseResult = precise.status === "ok" ? precise.result : null;
+  const preciseTotal = precise.status === "running" ? precise.total : 0;
+  const precisePct =
+    precise.status === "running" && precise.total > 0
+      ? Math.min(99, Math.round((precise.done / precise.total) * 100))
+      : 0;
 
   return (
     <section
@@ -227,6 +406,137 @@ export default function ZoneVitalStats({
           )}
         </div>
       )}
+
+      {/* ── 정밀 분석(건축물대장 구조·호수) ─────────────────────────────────── */}
+      <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50/50 px-2 py-1.5" data-testid="zone-precise">
+        <div className="flex items-center justify-between gap-1">
+          <p className="min-w-0 truncate text-[11px] font-bold text-sky-900">
+            🔬 정밀 분석{" "}
+            <span className="font-medium text-sky-700">건축물대장 구조·호수밀도</span>
+          </p>
+          {precise.status === "running" ? (
+            <button
+              type="button"
+              onClick={cancelPrecise}
+              className="shrink-0 rounded-full border border-sky-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
+            >
+              중단
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void runPrecise()}
+              data-testid="zone-precise-run"
+              className="shrink-0 rounded-full bg-sky-700 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+            >
+              {precise.status === "ok" ? "↻ 다시" : precise.status === "error" ? "다시 시도" : "분석 실행"}
+            </button>
+          )}
+        </div>
+
+        {precise.status === "idle" && (
+          <p className="mt-1 text-[10px] leading-snug text-sky-800/80">
+            국토교통부 건축물대장 표제부로 <b className="font-semibold">주구조별 노후도(서울시 조례 기준)</b>와{" "}
+            <b className="font-semibold">추정 호수밀도</b>를 계산합니다. 구역 필지 수만큼 조회해 10초 안팎 걸립니다.
+          </p>
+        )}
+
+        {precise.status === "running" && (
+          <div className="mt-1" data-testid="zone-precise-progress">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-sky-100">
+              <div
+                className="h-full rounded-full bg-sky-600 transition-[width] duration-300"
+                style={{ width: `${precisePct}%` }}
+              />
+            </div>
+            <p className="mt-1 text-[10px] font-medium text-sky-900">
+              분석 중 {precisePct}% ({n(precise.done)}/{n(preciseTotal)}필지)…
+            </p>
+          </div>
+        )}
+
+        {precise.status === "error" && (
+          <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+            <p className="text-[10px] font-semibold text-amber-900">정밀 분석을 마치지 못했습니다</p>
+            <p className="mt-0.5 text-[10px] leading-snug text-amber-800">{precise.message}</p>
+          </div>
+        )}
+
+        {preciseResult && (
+          <div className="mt-1.5" data-testid="zone-precise-result">
+            <div className="grid grid-cols-2 gap-1.5">
+              <Cell
+                label="조례 기준 노후도"
+                value={preciseResult.ordinancePct.toFixed(1)}
+                unit="%"
+                sub={`철콘30↑ ${n(preciseResult.over30Concrete)} + 기타20↑ ${n(preciseResult.over20Other)} / 유효 ${n(
+                  preciseResult.effectiveBuildings
+                )}동`}
+                tone="rose"
+                testId="zone-precise-ordinance"
+              />
+              <Cell
+                label="추정 호수밀도"
+                value={preciseResult.density.toFixed(1)}
+                unit="호/ha"
+                sub={`세대·가구 ${n(preciseResult.units)}호 / ${preciseResult.areaHa.toFixed(2)}ha`}
+                tone="sky"
+                testId="zone-precise-density"
+              />
+              <Cell
+                label="구조 분포"
+                value={`철콘 ${n(preciseResult.concrete)}`}
+                unit="동"
+                sub={`비철콘 ${n(preciseResult.other)}동${
+                  preciseResult.unknownStructure > 0 ? ` · 구조 미상 ${n(preciseResult.unknownStructure)}동` : ""
+                }`}
+                testId="zone-precise-structure"
+              />
+              <Cell
+                label="연식 보정"
+                value={n(preciseResult.ageResolved)}
+                unit="동"
+                sub={
+                  stats && stats.unknownYear > 0
+                    ? `1차 추정 연식 미상 ${n(stats.unknownYear)}동 중 확인`
+                    : "1차 추정 연식 미상 없음"
+                }
+                tone="emerald"
+                testId="zone-precise-age"
+              />
+            </div>
+
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Req ok={preciseResult.areaSqm >= 10000} text="면적 1만㎡↑" note="필수" />
+              <Req ok={preciseResult.ordinancePct >= 60} text="노후도 60%↑" note="필수" />
+              <Req ok={preciseResult.density >= 60} text="호수밀도 60호/ha↑" note="선택" />
+            </div>
+
+            <p className="mt-1 text-[10px] leading-snug text-slate-500">
+              조회 필지 {n(preciseResult.parcels)} · 매칭 동 {n(preciseResult.buildings)} · 대장 없음{" "}
+              {n(preciseResult.missingParcels)}필지
+              {preciseResult.errors > 0 && ` · 조회 실패 ${n(preciseResult.errors)}필지`}
+              {preciseResult.structures.length > 0 && (
+                <>
+                  <br />
+                  주구조: {preciseResult.structures.map((s) => `${s.name} ${n(s.count)}`).join(" · ")}
+                </>
+              )}
+            </p>
+
+            <p className="mt-1 text-[9.5px] leading-snug text-slate-400">
+              건축물대장 표제부 기준(부속건축물 {n(preciseResult.attached)}동 제외). 호수는 공동주택 세대수·가구수 중
+              큰 값이고, 둘 다 0인 주거용 건물은 1가구로 보정했습니다({n(preciseResult.minUnitAdjusted)}동). 상가·오피스
+              호수는 제외. 무허가·미등록 건축물은 대장이 없어 미조회로 남습니다.
+              {precise.status === "ok" &&
+                ` 저장된 결과 ${new Date(precise.at).toLocaleDateString("ko-KR", {
+                  month: "2-digit",
+                  day: "2-digit",
+                })}.`}
+            </p>
+          </div>
+        )}
+      </div>
 
       {status === "ok" && meta?.truncated && (
         <p className="mt-2 text-[10px] leading-snug text-amber-700">

@@ -29,6 +29,8 @@ export type ZoneStatBuilding = {
   areaSqm: number | null;
   /** 외곽 링들 — [경도, 위도] 평면 배열(lng, lat, lng, lat, …) */
   rings: number[][];
+  /** 19자리 PNU — 정밀 분석(건축물대장)에서 연식 미상 건물을 대조하는 데 쓴다 */
+  pnu?: string | null;
 };
 
 /** 필지 하나(연속지적도) — 중심점이 구역 안이면 구역 필지로 센다 */
@@ -37,6 +39,8 @@ export type ZoneStatParcel = {
   /** 필지 중심 [위도, 경도] */
   lat: number;
   lng: number;
+  /** 19자리 PNU — 정밀 분석이 이 필지의 건축물대장을 조회한다 */
+  pnu?: string | null;
 };
 
 export type ZoneStatsPayload = {
@@ -56,8 +60,10 @@ export type ZoneStatsPayload = {
   floorArea: { total: number; over30: number; over30Pct: number | null };
   /** 단순 동수밀도 — 동수 ÷ 구역면적(ha) */
   density: number;
-  /** 필지 수·과소필지(90㎡ 미만) — 연속지적도를 못 받았으면 null */
-  parcels: { count: number; under90: number; under90Pct: number } | null;
+  /** 필지 수·과소필지(90㎡ 미만)·구역 안 필지의 PNU 목록 — 연속지적도를 못 받았으면 null */
+  parcels: { count: number; under90: number; under90Pct: number; pnus?: string[] } | null;
+  /** 연식을 몰라 노후도에서 빠진 건물의 PNU — 정밀 분석의 '연식 보정' 대조용 */
+  unknownPnu?: string[];
 };
 
 export type ZoneStatsResponse =
@@ -164,6 +170,7 @@ export function computeZoneStats(input: {
   let unknown = 0;
   let floorTotal = 0;
   let floor30 = 0;
+  const unknownPnu: string[] = [];
 
   for (const b of buildings) {
     const center = b.rings.length ? flatRingCenter(b.rings[0]) : null;
@@ -172,6 +179,7 @@ export function computeZoneStats(input: {
     count++;
     if (b.year == null || !Number.isFinite(b.year)) {
       unknown++;
+      if (typeof b.pnu === "string" && /^\d{19}$/.test(b.pnu)) unknownPnu.push(b.pnu);
     } else {
       if (b.year <= cutoff30) c30++;
       if (b.year <= cutoff20) c20++;
@@ -188,12 +196,14 @@ export function computeZoneStats(input: {
     //   **모든 필지를 센다**. 도로 필지는 보통 커서 과소필지율을 낮추는 쪽으로 작용한다(화면에 밝힌다).
     let pc = 0;
     let small = 0;
+    const pnus: string[] = [];
     for (const p of parcels) {
       if (!pointInZone(shape as ZoneShape, p.lat, p.lng)) continue;
       pc++;
       if (p.areaSqm > 0 && p.areaSqm < 90) small++;
+      if (typeof p.pnu === "string" && /^\d{19}$/.test(p.pnu)) pnus.push(p.pnu);
     }
-    if (pc > 0) parcelStats = { count: pc, under90: small, under90Pct: pct(small, pc) };
+    if (pc > 0) parcelStats = { count: pc, under90: small, under90Pct: pct(small, pc), pnus };
   }
 
   return {
@@ -211,5 +221,6 @@ export function computeZoneStats(input: {
     },
     density: areaHa > 0 ? Math.round((count / areaHa) * 10) / 10 : 0,
     parcels: parcelStats,
+    unknownPnu,
   };
 }
