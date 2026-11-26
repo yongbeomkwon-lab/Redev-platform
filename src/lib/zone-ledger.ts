@@ -28,6 +28,15 @@
 //       대장 `platArea`(대지면적)는 한 필지에 동이 여럿이면 같은 값이 여러 번 오므로
 //       **필지(PNU) 단위로 한 번만** 더한다(동별 중복 합산 금지).
 //       `platArea` 가 0·빈 값인 필지는 연속지적도 필지면적이 있으면 그것으로 보완한다.
+//   · **추정 조합원(토지등소유자) 수** — 정비사업 조합원은 토지등소유자다.
+//       ① 공동주택(아파트·연립·다세대) — 구분소유이므로 표제부 세대수(hhldCnt)를 그대로
+//          합산한다(0이면 1명으로 보정).
+//       ② 단독·다가구주택 — 다가구 세입자 가구수(fmlyCnt)는 조합원이 아니므로
+//          **필지(PNU) 1곳당 소유자 1명**으로 센다(부속동 제외, 주건축물 기준).
+//       ③ 비주거(근생·업무·종교 등) — 오피스텔·상가 같은 집합건물(호수 hoCnt > 0)은
+//          호마다 구분소유자가 있으므로 호수를 합산하고, 그 밖은 필지당 1명으로 센다.
+//          대장이 없는 나대지·도로 필지는 조합원으로 잡히지 않는다.
+//       공유지분·1+1 소유, 나대지·대장 미조회 필지 때문에 실제 조합원 수와 다를 수 있다.
 //
 //   이 파일은 **순수 계산·타입**만 둔다(node 모듈 없음). 브라우저에서도 안전하다.
 //   대장 호출은 `src/app/api/zone-stats/precise/route.ts` 한 곳에서만 한다.
@@ -90,6 +99,14 @@ export type LedgerBuilding = {
   floors: LedgerFloor[];
   /** 대지면적(㎡) — 대장 platArea. 같은 필지의 동마다 같은 값이 오므로 PNU 로 중복 제거한다 */
   platArea: number;
+  /** 표제부 세대수(hhldCnt) — 공동주택 구분소유자(조합원) 수의 기본값 */
+  hhldCnt: number;
+  /** 표제부 가구수(fmlyCnt) — 단독·다가구 세입자 가구. 조합원 수에는 쓰지 않는다 */
+  fmlyCnt: number;
+  /** 표제부 호수(hoCnt) — 오피스텔·상가 등 집합건물의 구분소유자 수 */
+  hoCnt: number;
+  /** 주용도 코드(01 단독 / 02 공동 …) — 공동주택 판별에 쓴다 */
+  mainPurpsCd: string;
 };
 
 export type PreciseChunkStats = {
@@ -143,6 +160,18 @@ export type PreciseChunkStats = {
   landArea: number;
   /** 대장 platArea 가 0·빈 값이라 연속지적도 필지면적으로 보완한 필지 수 */
   landFallbackParcels: number;
+  /** 추정 조합원(토지등소유자) 수 */
+  owners: number;
+  /** 그중 공동주택 세대수 합(hhldCnt) */
+  ownerHouseholds: number;
+  /** 그중 단독·다가구 필지 수(필지당 1명) */
+  ownerDetached: number;
+  /** 그중 비주거 소유자 수(집합건물 호수 + 필지당 1명) */
+  ownerNonResidential: number;
+  /** 그중 비주거 집합건물(호수>0)로 센 호수 */
+  ownerShopUnits: number;
+  /** 공동주택인데 hhldCnt 0이라 1명으로 보정한 동수 */
+  ownerHhldAdjusted: number;
   /** 업스트림 조회에 실패한 필지 수 */
   errors: number;
   /** 구조 분포(많은 순, 최대 6개) */
@@ -164,6 +193,10 @@ export type PreciseSummary = PreciseChunkStats & {
   landShareSqm: number | null;
   /** 추정 평균 대지지분(평) — 대지면적 ÷ 총 호수 ÷ 3.305785 */
   landSharePyeong: number | null;
+  /** 추정 조합원 1인당 대지지분(㎡) — 대지면적 ÷ 추정 조합원 수 */
+  landShareOwnerSqm: number | null;
+  /** 추정 조합원 1인당 대지지분(평) */
+  landShareOwnerPyeong: number | null;
 };
 
 /** POST /api/zone-stats/precise 응답 */
@@ -197,6 +230,12 @@ export const EMPTY_CHUNK: PreciseChunkStats = {
   landParcels: 0,
   landArea: 0,
   landFallbackParcels: 0,
+  owners: 0,
+  ownerHouseholds: 0,
+  ownerDetached: 0,
+  ownerNonResidential: 0,
+  ownerShopUnits: 0,
+  ownerHhldAdjusted: 0,
   errors: 0,
   structures: [],
 };
@@ -309,6 +348,46 @@ export function ordinanceDongOf(b: LedgerBuilding): { dong: number; basis: Ordin
 }
 
 /**
+ * 공동주택(아파트·연립·다세대)인지 — 구분소유라 세대수 = 조합원 수다.
+ *   · 표제부 세대수(hhldCnt)가 2 이상이면 그 자체가 구분소유 근거다.
+ *   · 주용도 코드 02(공동주택) 또는 용도명에 아파트·연립·다세대·공동주택이 있으면 공동주택.
+ *   · 단독·다가구·다중주택은 여기에 걸리지 않는다(가구수 fmlyCnt 는 세입자 가구).
+ */
+export function isMultiHousehold(b: LedgerBuilding): boolean {
+  if (b.hhldCnt >= 2) return true;
+  const cd = (b.mainPurpsCd ?? "").trim();
+  if (/^02/.test(cd)) return true;
+  return /아파트|연립|다세대|공동주택/.test(`${b.mainPurps ?? ""} ${b.floors?.[0]?.use ?? ""}`);
+}
+
+/** 한 동이 조합원(토지등소유자) 몇 명인지 셈한 근거 */
+export type OwnerBasis =
+  /** 공동주택 — 구분소유 세대수(hhldCnt) */
+  | "households"
+  /** 비주거 집합건물 — 호수(hoCnt)만큼 구분소유자 */
+  | "hoCount"
+  /** 그 밖 — 필지(PNU) 1곳당 소유자 1명 */
+  | "parcel";
+
+/**
+ * 한 동의 추정 조합원(토지등소유자) 수.
+ *   · 공동주택 → 표제부 세대수(hhldCnt), 0 이면 1명 보정.
+ *   · 비주거 집합건물(오피스텔·상가, hoCnt > 0) → 호수.
+ *   · 단독·다가구·일반 비주거 → 1명. 필지 단위 중복 제거는 호출부(`summarizePreciseBuildings`)가 한다.
+ *   · 다가구 세입자 가구수(fmlyCnt)는 끝까지 조합원으로 세지 않는다.
+ */
+export function ownerCountOf(b: LedgerBuilding): { owners: number; basis: OwnerBasis } {
+  if (b.residential) {
+    if (isMultiHousehold(b)) {
+      return { owners: b.hhldCnt > 0 ? b.hhldCnt : 1, basis: "households" };
+    }
+    return { owners: 1, basis: "parcel" };
+  }
+  if (b.hoCnt > 0) return { owners: b.hoCnt, basis: "hoCount" };
+  return { owners: 1, basis: "parcel" };
+}
+
+/**
  * 한 청크(필지 묶음)의 대장 동들을 지표로 접는다.
  *   · 노후도 모수(effective)는 주건축물 중 사용승인일이 있는 동수다.
  *   · unknownPnus 는 1차 추정(연식 색인)에서 연식을 몰랐던 건물의 PNU —
@@ -335,6 +414,9 @@ export function summarizePreciseBuildings(input: {
   const unknownSet = new Set(input.unknownPnus ?? []);
   /** 필지별 대지면적 — 한 필지의 동이 여럿이면 같은 platArea 가 반복되므로 큰 값 하나만 쓴다 */
   const platByPnu = new Map<string, number>();
+  /** 조합원 1명으로 세는 필지 — 같은 필지의 주건축물이 여럿이어도 소유자는 한 명으로 본다 */
+  const detachedPnus = new Set<string>();
+  const nonResidentialPnus = new Set<string>();
   const structureMap = new Map<string, number>();
   const out: PreciseChunkStats = {
     ...EMPTY_CHUNK,
@@ -357,6 +439,28 @@ export function summarizePreciseBuildings(input: {
     out.buildings++;
     out.units += b.units;
     if (b.minAdjusted) out.minUnitAdjusted++;
+
+    // 추정 조합원(토지등소유자) — 공동주택은 세대수, 그 밖은 필지당 1명(집합건물은 호수)
+    const owner = ownerCountOf(b);
+    if (owner.basis === "households") {
+      out.owners += owner.owners;
+      out.ownerHouseholds += owner.owners;
+      if (b.hhldCnt <= 0) out.ownerHhldAdjusted++;
+    } else if (owner.basis === "hoCount") {
+      out.owners += owner.owners;
+      out.ownerNonResidential += owner.owners;
+      out.ownerShopUnits += owner.owners;
+    } else if (b.residential) {
+      if (!detachedPnus.has(b.pnu)) {
+        detachedPnus.add(b.pnu);
+        out.owners++;
+        out.ownerDetached++;
+      }
+    } else if (!nonResidentialPnus.has(b.pnu)) {
+      nonResidentialPnus.add(b.pnu);
+      out.owners++;
+      out.ownerNonResidential++;
+    }
 
     // 조례 제2조제5호 환산 동수 — 세대수를 그대로 더하지 않는다
     const ordinance = ordinanceDongOf(b);
@@ -440,6 +544,12 @@ export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear
   const landSharePyeong =
     landShareSqm != null ? Math.round((landShareSqm / PYEONG_SQM) * 10) / 10 : null;
 
+  // 추정 조합원 1인당 대지지분 — 대지면적 합 ÷ 추정 조합원 수(세입자 가구 제외)
+  const landShareOwnerSqm =
+    total.owners > 0 && total.landArea > 0 ? Math.round((total.landArea / total.owners) * 10) / 10 : null;
+  const landShareOwnerPyeong =
+    landShareOwnerSqm != null ? Math.round((landShareOwnerSqm / PYEONG_SQM) * 10) / 10 : null;
+
   return {
     ...total,
     areaSqm: Math.round(areaSqm),
@@ -451,5 +561,7 @@ export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear
     ordinanceDensity,
     landShareSqm,
     landSharePyeong,
+    landShareOwnerSqm,
+    landShareOwnerPyeong,
   };
 }

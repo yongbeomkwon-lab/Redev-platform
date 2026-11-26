@@ -318,6 +318,10 @@ function toBuilding(pnu: string, item: RawItem, floors: LedgerFloor[]): LedgerBu
     groundFloors: num(item, "grndFlrCnt"),
     floors,
     platArea: num(item, "platArea"),
+    hhldCnt: hhld,
+    fmlyCnt: fmly,
+    hoCnt: num(item, "hoCnt"),
+    mainPurpsCd,
   };
 }
 

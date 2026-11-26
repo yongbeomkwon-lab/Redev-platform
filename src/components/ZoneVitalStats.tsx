@@ -11,7 +11,10 @@
 //
 //   「🔬 정밀 분석」은 국토교통부 건축물대장 표제부(getBrTitleInfo)를 구역 안 필지마다
 //   조회해 **주구조·사용승인일·세대/가구수·대지면적**으로 서울시 조례 기준 노후도와
-//   **조례 기준 호수밀도**, 추정 평균 대지지분을 낸다.
+//   **조례 기준 호수밀도**, **추정 조합원(토지등소유자) 수**, 추정 대지지분을 낸다.
+//   · 추정 조합원 = 공동주택 세대수 + 단독·다가구 필지당 1명 + 비주거 필지당 1명(집합건물은 호수).
+//     세입자 가구수(fmlyCnt)는 조합원이 아니어서 세지 않는다.
+//   · 노후도는 0~100% 바 위에 모아타운 50%·재개발 60% 눈금을 그려 요건 충족을 한눈에 보여 준다.
 //   · 호수밀도는 서울시 도시 및 주거환경정비 조례 제2조제5호를 따른다 — 공동·다가구주택은
 //     '세대(가구)수가 가장 많은 1개 층'을 1동으로 보고, 비주거용은 건축면적 90㎡당 1동이다.
 //     그래서 표제부 세대수를 그대로 더한 값보다 작게 나온다(과대계상 해소).
@@ -118,7 +121,7 @@ function Req({ ok, text, note }: { ok: boolean; text: string; note?: string }) {
 const CHUNK = 50;
 /** 동시에 보내는 청크 수 — 2로 두면 1,400필지 구역도 60초 안에 끝난다 */
 const PARALLEL = 2;
-const CACHE_PREFIX = "redev-precise:v3:";
+const CACHE_PREFIX = "redev-precise:v4:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PreciseState =
@@ -476,7 +479,8 @@ export default function ZoneVitalStats({
         {precise.status === "idle" && (
           <p className="mt-1 text-[10px] leading-snug text-sky-800/80">
             국토교통부 건축물대장 표제부로 <b className="font-semibold">주구조별 노후도(서울시 조례 기준)</b>와{" "}
-            <b className="font-semibold">조례 기준 호수밀도</b>·<b className="font-semibold">추정 평균 대지지분</b>을 계산합니다.
+            <b className="font-semibold">조례 기준 호수밀도</b>·<b className="font-semibold">추정 조합원(토지등소유자) 수</b>·
+            <b className="font-semibold">추정 대지지분</b>을 계산합니다.
             복수 세대·가구 필지는 층별개요까지 확인해 200필지면 30초 안팎 걸립니다.
           </p>
         )}
@@ -551,19 +555,118 @@ export default function ZoneVitalStats({
                 wrap
               />
               <Cell
-                label="추정 평균 대지지분"
+                label="추정 조합원(토지등소유자)"
+                value={`약 ${n(preciseResult.owners)}`}
+                unit="명"
+                sub={`공동주택 ${n(preciseResult.ownerHouseholds)}세대 + 단독·다가구 ${n(
+                  preciseResult.ownerDetached
+                )} + 비주거 ${n(preciseResult.ownerNonResidential)}`}
+                tone="emerald"
+                testId="zone-precise-owners"
+                wrap
+                wide
+              />
+              <Cell
+                label="추정 1인당 대지지분 (조합원)"
+                value={
+                  preciseResult.landShareOwnerPyeong != null
+                    ? preciseResult.landShareOwnerPyeong.toFixed(1)
+                    : "—"
+                }
+                unit={preciseResult.landShareOwnerPyeong != null ? "평" : undefined}
+                sub={
+                  preciseResult.landShareOwnerSqm != null
+                    ? `${preciseResult.landShareOwnerSqm.toFixed(1)}㎡ · 대지 ÷ 조합원 ${n(
+                        preciseResult.owners
+                      )}명`
+                    : "대지면적·조합원 수가 없어 산출 불가"
+                }
+                tone="amber"
+                testId="zone-precise-owner-landshare"
+                wrap
+              />
+              <Cell
+                label="추정 평균 대지지분 (세대·가구)"
                 value={preciseResult.landSharePyeong != null ? preciseResult.landSharePyeong.toFixed(1) : "—"}
                 unit={preciseResult.landSharePyeong != null ? "평" : undefined}
                 sub={
                   preciseResult.landShareSqm != null
-                    ? `${preciseResult.landShareSqm.toFixed(1)}㎡ · 대장 대지면적 ÷ 총 호수`
+                    ? `${preciseResult.landShareSqm.toFixed(1)}㎡ · 대지 ÷ 총 호수`
                     : "대장 대지면적·호수가 없어 산출 불가"
                 }
-                tone="amber"
                 testId="zone-precise-landshare"
                 wrap
-                wide
               />
+            </div>
+
+            {/* 노후도 요건 바 — 모아타운 50% · 재개발 60% 눈금 */}
+            <div
+              className="mt-2 rounded-lg bg-white/70 px-2 pb-1 pt-1.5 ring-1 ring-rose-100"
+              data-testid="zone-precise-agebar"
+            >
+              <div className="flex items-baseline justify-between gap-1">
+                <span className="text-[10px] font-semibold text-slate-600">노후도 요건 진행</span>
+                <span className="text-[11px] font-bold tabular-nums text-rose-700">
+                  {preciseResult.ordinancePct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="relative mb-3 mt-2 h-2 rounded-full bg-slate-200">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full bg-rose-500"
+                  style={{ width: `${Math.max(0, Math.min(100, preciseResult.ordinancePct))}%` }}
+                />
+                {[
+                  { p: 50, label: "모아타운", cls: "bg-amber-500" },
+                  { p: 60, label: "재개발", cls: "bg-rose-800" },
+                ].map((t) => (
+                  <span
+                    key={t.p}
+                    className={`absolute -top-1 h-4 w-[2px] -translate-x-1/2 rounded ${t.cls}`}
+                    style={{ left: `${t.p}%` }}
+                    aria-hidden
+                  />
+                ))}
+              </div>
+              <p className="break-keep text-[9.5px] leading-snug text-slate-500">
+                눈금 <b className="font-semibold text-amber-700">모아타운 50%</b> ·{" "}
+                <b className="font-semibold text-rose-800">재개발 60%</b> — 현재{" "}
+                {preciseResult.ordinancePct >= 50 ? "모아타운 요건 충족" : "모아타운 요건 미달"} ·{" "}
+                {preciseResult.ordinancePct >= 60 ? "재개발 요건 충족" : "재개발 요건 미달"}
+                {preciseResult.ordinancePct < 60 &&
+                  ` (${(60 - preciseResult.ordinancePct).toFixed(1)}%p 부족)`}
+              </p>
+            </div>
+
+            {/* 유형별 현황 — 조합원 산정에 쓴 유형 비율 */}
+            <div className="mt-1.5" data-testid="zone-precise-types">
+              <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                <span
+                  className="h-full bg-sky-500"
+                  style={{
+                    width: `${(preciseResult.ownerHouseholds / Math.max(1, preciseResult.owners)) * 100}%`,
+                  }}
+                  aria-hidden
+                />
+                <span
+                  className="h-full bg-amber-500"
+                  style={{
+                    width: `${(preciseResult.ownerDetached / Math.max(1, preciseResult.owners)) * 100}%`,
+                  }}
+                  aria-hidden
+                />
+                <span
+                  className="h-full bg-violet-400"
+                  style={{
+                    width: `${(preciseResult.ownerNonResidential / Math.max(1, preciseResult.owners)) * 100}%`,
+                  }}
+                  aria-hidden
+                />
+              </div>
+              <p className="mt-1 break-keep text-[10px] leading-snug text-slate-600">
+                <span className="font-semibold text-sky-700">공동주택 {n(preciseResult.ownerHouseholds)}세대</span> ·{" "}
+                <span className="font-semibold text-amber-700">단독/다가구 {n(preciseResult.ownerDetached)}동</span> ·{" "}
+                <span className="font-semibold text-violet-700">근린/기타 {n(preciseResult.ownerNonResidential)}</span>
+              </p>
             </div>
 
             <div className="mt-1 flex flex-wrap gap-1">
@@ -583,6 +686,15 @@ export default function ZoneVitalStats({
                   주구조: {preciseResult.structures.map((s) => `${s.name} ${n(s.count)}`).join(" · ")}
                 </>
               )}
+            </p>
+
+            <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400" data-testid="zone-precise-owner-note">
+              추정 조합원 = 공동주택 <b className="font-semibold text-slate-500">세대수(hhldCnt)</b> + 단독·다가구{" "}
+              <b className="font-semibold text-slate-500">필지당 1명</b> + 비주거{" "}
+              <b className="font-semibold text-slate-500">필지당 1명</b>(오피스텔·상가 집합건물은 호수{" "}
+              {n(preciseResult.ownerShopUnits)}호). 다가구 세입자 가구수는 조합원이 아니어서 뺐습니다
+              {preciseResult.ownerHhldAdjusted > 0 && `(세대수 0 → 1명 보정 ${n(preciseResult.ownerHhldAdjusted)}동)`}. 나대지·대장
+              미조회 필지, 공유지분·1+1 소유는 실제 조합원 수와 다를 수 있습니다.
             </p>
 
             <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400" data-testid="zone-precise-ordinance-note">
