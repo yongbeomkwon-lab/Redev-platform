@@ -2976,11 +2976,15 @@ export default function KakaoZoneMap({
     adminDragRef.current = null;
     adminCursorRef.current = null;
     const adm = adminRef.current;
-    // 그리는 중 꼭짓점을 끌지 않고 톡 누른 경우 → 점을 중복 추가하지 않고 그대로 둔다
-    //   (movedPx < 6 일 때 onAddPoint 를 부르면 기존 점과 같은 자리에 새 점이 겹쳐 찍혀 번호가 꼬인다)
+    // 그리는 중 꼭짓점을 끌지 않고 톡 누른 경우:
+    //   · 1번 점(index === 0)이고 3점 이상이면 도형을 닫아 완료한다
+    //   · 그 외 점은 중복 추가하지 않고 그대로 둔다
     const movedPx =
       d.startX != null && d.startY != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
     if (movedPx < 6 && adm?.adding) {
+      if (d.index === 0 && adm.draft && adm.draft.length >= 3) {
+        adm.onFinishByFirstPoint();
+      }
       return;
     }
     const last = d.latest ?? clientToLatLng(e.clientX, e.clientY);
