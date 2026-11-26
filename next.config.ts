@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   //   이 라우트에 한해 명시적으로 묶어 준다(2026-11-20).
   outputFileTracingIncludes: {
     "/api/building-age": ["./public/data/age-index/**"],
+    // 구역현황(/api/zone-stats)도 같은 색인으로 건물 사용승인 연도를 덮어쓴다(2026-11-26).
+    "/api/zone-stats": ["./public/data/age-index/**"],
   },
   // 구역 경계 데이터는 배포 직후 항상 최신이어야 한다.
   //   · 프론트엔드도 `?v=<빌드ID>` + cache:'no-store' 로 요청하지만,

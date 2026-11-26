@@ -25,6 +25,7 @@ import { DEV_GRADE_COLOR, loadDevPressure, type DevHotspot, type RecentZone } fr
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT } from "@/components/map/colors";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
+import ZoneVitalStats from "@/components/ZoneVitalStats";
 import ZoneTransactions from "@/components/ZoneTransactions";
 import LandPermitNotice from "@/components/LandPermitNotice";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
@@ -2683,6 +2684,13 @@ export default function ZoneExplorer() {
                   dense
                   edited={typeof selectedCustom.consentRate === "number"}
                 />
+                {/* 직접 그린 구역도 같은 계산 — 현장에서 그린 경계로 요건(노후도 30년↑)을 바로 본다 */}
+                {selectedCustom.ring && selectedCustom.ring.length >= 3 && (
+                  <ZoneVitalStats
+                    shape={{ polygon: selectedCustom.ring }}
+                    areaSqm={selectedCustom.areaSqm}
+                  />
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
@@ -2780,6 +2788,14 @@ export default function ZoneExplorer() {
                   </div>
                 )}
                 <p className="text-[11px] leading-relaxed text-slate-500">{selected.summary}</p>
+
+                {/* 구역현황(추정) — 대표 구역도 고시 데이터 바로 아래에 노후도·동수밀도를 붙인다 */}
+                {selected.polygon && selected.polygon.length >= 3 && (
+                  <ZoneVitalStats
+                    shape={{ polygon: selected.polygon, parts: selected.parts, holes: selected.holes }}
+                    areaSqm={selected.official?.area ?? null}
+                  />
+                )}
 
                 {/* 검증 매물 — 실거래가 위에 '지금 나온 물건'을 먼저 */}
                 <ZoneListingCards listings={selectedListings} zoneId={selected.id} zoneName={selected.name} />

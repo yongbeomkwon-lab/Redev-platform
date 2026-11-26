@@ -25,6 +25,7 @@ import type { AuctionItem, AuctionsMeta } from "@/lib/auctions";
 import ZoneAuctions from "./ZoneAuctions";
 import StageTimeline from "./StageTimeline";
 import ZoneConsent from "./ZoneConsent";
+import ZoneVitalStats from "./ZoneVitalStats";
 
 const PYEONG = 3.305785;
 
@@ -298,6 +299,16 @@ export default function ZoneOfficialPanel({
           </a>
         )}
       </div>
+
+      {/* 구역현황(추정) — 고시 데이터(면적·단계) 바로 아래에 노후도·동수밀도를 붙여
+          '이 구역이 얼마나 오래됐고 얼마나 빽빽한지'를 같은 자리에서 읽게 한다.
+          경계 폴리곤이 없는 후보지(미고시)는 계산할 도형이 없어 그리지 않는다. */}
+      {zone.polygon && zone.polygon.length >= 3 && (
+        <ZoneVitalStats
+          shape={{ polygon: zone.polygon, parts: zone.parts, holes: zone.holes }}
+          areaSqm={zone.area}
+        />
+      )}
 
       {/* 검증 매물 — 실거래가 위에 붙여 '지금 나온 물건'을 먼저 보여준다 */}
       <ZoneListingCards listings={listings} zoneId={zone.id} zoneName={zone.name} />
