@@ -70,7 +70,7 @@ function Cell({
         {unit && <span className="text-[10px] font-semibold">{unit}</span>}
       </div>
       {sub && (
-        <div className={`mt-0.5 text-[10px] text-slate-500 ${wrap ? "leading-snug" : "truncate"}`}>{sub}</div>
+        <div className={`mt-0.5 text-[10px] text-slate-500 ${wrap ? "break-keep leading-snug" : "truncate"}`}>{sub}</div>
       )}
     </div>
   );
@@ -524,7 +524,7 @@ export default function ZoneVitalStats({
               <Req ok={preciseResult.density >= 60} text="호수밀도 60호/ha↑" note="선택" />
             </div>
 
-            <p className="mt-1 text-[10px] leading-snug text-slate-500">
+            <p className="mt-1 break-keep text-[10px] leading-snug text-slate-500">
               조회 필지 {n(preciseResult.parcels)} · 매칭 동 {n(preciseResult.buildings)} · 대장 없음{" "}
               {n(preciseResult.missingParcels)}필지
               {preciseResult.errors > 0 && ` · 조회 실패 ${n(preciseResult.errors)}필지`}
@@ -536,7 +536,7 @@ export default function ZoneVitalStats({
               )}
             </p>
 
-            <p className="mt-1 text-[9.5px] leading-snug text-slate-400">
+            <p className="mt-1 break-keep text-[9.5px] leading-snug text-slate-400">
               건축물대장 표제부 기준{preciseResult.attached > 0 ? `(부속건축물 ${n(preciseResult.attached)}동 제외). ` : ". "}
               호수는 공동주택 세대수·가구수 중 큰 값이고, 둘 다 0인 주거용 건물은 1가구로 보정했습니다(
               {n(preciseResult.minUnitAdjusted)}동). 상가·오피스 호수는 제외. 무허가·미등록 건축물은 대장이 없어
