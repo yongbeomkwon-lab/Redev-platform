@@ -4545,10 +4545,10 @@ export default function KakaoZoneMap({
                     ? undefined // 그리기 중에는 안내 툴팁이 커서를 가리지 않게 띄우지 않는다
                     : `꼭짓점 ${i + 1} — 끌어서 옮기기 · 우클릭으로 삭제`
                 }
-                onPointerDown={(e) => onVertexDown(e, i)}
-                onPointerMove={onVertexMove}
-                onPointerUp={onVertexUp}
-                onPointerCancel={onVertexUp}
+                onPointerDown={adminDrawingNew ? undefined : (e) => onVertexDown(e, i)}
+                onPointerMove={adminDrawingNew ? undefined : onVertexMove}
+                onPointerUp={adminDrawingNew ? undefined : onVertexUp}
+                onPointerCancel={adminDrawingNew ? undefined : onVertexUp}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -4563,10 +4563,14 @@ export default function KakaoZoneMap({
                   width: 44,
                   height: 44,
                   transform: "translate(-50%,-50%)",
-                  touchAction: "none",
-                  cursor: "grab",
+                  touchAction: adminDrawingNew ? "auto" : "none",
+                  cursor: adminDrawingNew ? "crosshair" : "grab",
                 }}
-                className={adminVertexClass}
+                className={
+                  adminDrawingNew
+                    ? "pointer-events-none flex items-center justify-center rounded-full outline-none"
+                    : adminVertexClass
+                }
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-600 text-[10px] font-bold leading-none text-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]">
                   {i + 1}
