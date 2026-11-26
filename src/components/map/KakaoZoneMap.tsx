@@ -2976,14 +2976,11 @@ export default function KakaoZoneMap({
     adminDragRef.current = null;
     adminCursorRef.current = null;
     const adm = adminRef.current;
-    // 그리기 중 꼭짓점을 **끌지 않고 톡** 누른 경우 → 그 자리에 새 점을 찍는 것으로 본다.
-    //   (예전에는 핸들 44px 안의 탭이 ‘그 점을 그 자리로 옮기기’가 되어, 짧은 ㄱ자 구간을 찍으려던
-    //   클릭이 앞 점을 끌어당겨 윗변이 대각선으로 꼬였습니다 — 2026-11-25 제보)
+    // 그리는 중 꼭짓점을 끌지 않고 톡 누른 경우 → 점을 중복 추가하지 않고 그대로 둔다
+    //   (movedPx < 6 일 때 onAddPoint 를 부르면 기존 점과 같은 자리에 새 점이 겹쳐 찍혀 번호가 꼬인다)
     const movedPx =
       d.startX != null && d.startY != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
-    if (movedPx < 6 && adm?.adding && adm.draft) {
-      const at = clientToLatLng(e.clientX, e.clientY);
-      if (at) adm.onAddPoint(at[0], at[1]);
+    if (movedPx < 6 && adm?.adding) {
       return;
     }
     const last = d.latest ?? clientToLatLng(e.clientX, e.clientY);
@@ -4545,10 +4542,10 @@ export default function KakaoZoneMap({
                     ? undefined // 그리기 중에는 안내 툴팁이 커서를 가리지 않게 띄우지 않는다
                     : `꼭짓점 ${i + 1} — 끌어서 옮기기 · 우클릭으로 삭제`
                 }
-                onPointerDown={adminDrawingNew ? undefined : (e) => onVertexDown(e, i)}
-                onPointerMove={adminDrawingNew ? undefined : onVertexMove}
-                onPointerUp={adminDrawingNew ? undefined : onVertexUp}
-                onPointerCancel={adminDrawingNew ? undefined : onVertexUp}
+                onPointerDown={(e) => onVertexDown(e, i)}
+                onPointerMove={onVertexMove}
+                onPointerUp={onVertexUp}
+                onPointerCancel={onVertexUp}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -4560,17 +4557,13 @@ export default function KakaoZoneMap({
                   position: "absolute",
                   left: 0,
                   top: 0,
-                  width: 44,
-                  height: 44,
+                  width: adminDrawingNew ? 22 : 44,
+                  height: adminDrawingNew ? 22 : 44,
                   transform: "translate(-50%,-50%)",
-                  touchAction: adminDrawingNew ? "auto" : "none",
-                  cursor: adminDrawingNew ? "crosshair" : "grab",
+                  touchAction: "none",
+                  cursor: "grab",
                 }}
-                className={
-                  adminDrawingNew
-                    ? "pointer-events-none flex items-center justify-center rounded-full outline-none"
-                    : adminVertexClass
-                }
+                className={adminVertexClass}
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-600 text-[10px] font-bold leading-none text-white shadow-[0_1px_4px_rgba(0,0,0,0.45)]">
                   {i + 1}
