@@ -528,10 +528,10 @@ export default function ZoneVitalStats({
             </p>
 
             <p className="mt-1 text-[9.5px] leading-snug text-slate-400">
-              건축물대장 표제부 기준{preciseResult.attached > 0 ? `(부속건축물 ${n(preciseResult.attached)}동 제외)` : ""}
-              {preciseResult.attached > 0 ? ". " : ""}호수는 공동주택 세대수·가구수 중 큰 값이고, 둘 다 0인 주거용
-              건물은 1가구로 보정했습니다({n(preciseResult.minUnitAdjusted)}동). 상가·오피스 호수는 제외. 무허가·미등록
-              건축물은 대장이 없어 미조회로 남습니다.
+              건축물대장 표제부 기준{preciseResult.attached > 0 ? `(부속건축물 ${n(preciseResult.attached)}동 제외). ` : ". "}
+              호수는 공동주택 세대수·가구수 중 큰 값이고, 둘 다 0인 주거용 건물은 1가구로 보정했습니다(
+              {n(preciseResult.minUnitAdjusted)}동). 상가·오피스 호수는 제외. 무허가·미등록 건축물은 대장이 없어
+              미조회로 남습니다.
               {precise.status === "ok" &&
                 ` 저장된 결과 ${new Date(precise.at).getMonth() + 1}월 ${new Date(precise.at).getDate()}일.`}
             </p>
