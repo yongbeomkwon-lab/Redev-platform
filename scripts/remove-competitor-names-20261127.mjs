@@ -31,8 +31,16 @@ const isCompUrl = (url) => {
   }
   return /(^|\.)(jaegebal\.com|galta\.kr|jbdoctor\.com|joa-realty\.co\.kr|jaeview\.com)$/.test(host);
 };
-const OFFICIAL_LABEL_RE = /고시|공고|보도자료|서울시보/;
-const PREFIX_RE = /^(재개발닷컴|갈타맵|재개발뷰|정비닥터|조아부동산(?:중개)?)\s*(?:—|–|-|:)\s*/;
+const BRAND_PREFIX_RE = /^(재개발닷컴|갈타맵|재개발뷰|정비닥터|조아부동산(?:중개)?)\s*(?:—|–|-|:|·)?\s*/;
+/** 이름을 뺀 나머지가 "고시·공고·보도자료 문서"인지 — 아니면 경쟁사가 만든 구역 페이지다 */
+const looksOfficial = (t) => {
+  if (!t || /^\(가/.test(t)) return false;
+  if (/^(서울시|서울특별시|서울|고시|공고)\s*(특별시)?\s*(고시|공고|보도자료)/.test(t)) return true;
+  if (/^[가-힣]{2,6}(구|군|시)\s*(고시|공고|보도자료)/.test(t)) return true;
+  const i1 = t.indexOf("고시");
+  const i2 = t.indexOf("공고");
+  return (i1 > -1 && i1 < 20) || (i2 > -1 && i2 < 20);
+};
 
 // 문장 단위로 먼저 바꾸고, 남은 이름은 마지막에 일반 표현으로 바꾼다.
 const TEXT_RULES = [
@@ -110,12 +118,13 @@ for (const z of zones) {
         kept.push(s);
         continue;
       }
-      // 1) 경쟁사가 만든 자료 — 지운다. 단, 고시·공고 문서를 가리키는 항목은 이름만 남긴다.
-      const prefix = label.match(PREFIX_RE);
+      // 1) 이름이 앞에 붙은 항목 — 공식 고시·공고를 가리키면 문서명만 남기고,
+      //    그 사이트가 만든 구역 페이지면 항목을 지운다.
+      const prefix = label.match(BRAND_PREFIX_RE);
       if (prefix) {
-        const rest = label.replace(PREFIX_RE, "");
-        if (OFFICIAL_LABEL_RE.test(rest)) {
-          log.push(`[출처·링크만 제거] ${z.id}.${key}: ${label} (${url})`);
+        const rest = label.replace(BRAND_PREFIX_RE, "").trim();
+        if (looksOfficial(rest)) {
+          log.push(`[출처·링크만 제거] ${z.id}.${key}: ${label} (${url})\n  + ${rest} (링크 없음)`);
           kept.push({ ...s, label: rest, url: "" });
         } else {
           log.push(`[출처 삭제] ${z.id}.${key}: ${label} (${url})`);
