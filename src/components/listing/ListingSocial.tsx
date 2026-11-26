@@ -137,7 +137,10 @@ export default function ListingSocial({
         })}
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setMsg("");
+            setOpen((v) => !v);
+          }}
           aria-expanded={open}
           aria-controls={`listing-social-panel-${listingId}`}
           data-testid="listing-social-toggle"
