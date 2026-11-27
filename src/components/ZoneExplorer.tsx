@@ -2681,7 +2681,7 @@ export default function ZoneExplorer() {
                       : "리디브 대시보드"}
             </b>
             {!selected && !selectedSeoul && !zoneDrawDone && (
-              <span className="text-[11px] text-slate-500">경매 · 최근 변동</span>
+              <span className="text-[11px] text-slate-500">최근 변동</span>
             )}
             {!selected && !selectedSeoul && zoneDrawDone && (
               <span className="text-[10px] text-violet-700">지도에서 그린 경계 · 임시 분석</span>
