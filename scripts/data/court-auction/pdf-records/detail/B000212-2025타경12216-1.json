@@ -185,7 +185,16 @@
   ],
   "collectedAt": "2026-11-27T22:50:09+09:00",
   "appraised": 220000000,
-  "minimum": 72090000
+  "minimum": 72090000,
+  "specification": {
+   "writtenDate": "20261013",
+   "earliestRight": "2019.12.12. 근저당권",
+   "nonExtinguishedRights": "",
+   "hasSuperficies": false,
+   "extra": "제시외 건물 포함\n집합건축물대장상 도시형생활주택(단지형다세대주택)\n집합건축물대장상 주택과-47772(2018.11.07.)호에 의거 위반건축물 표기[위반면적:11.4㎡ 구조:조립식패널조 용도:주거]",
+   "collectedAt": "2026-11-27T22:55:41+09:00",
+   "source": "매각물건명세서(대법원 문서뷰어 파일저장 PDF)"
+  }
  },
  "meta": {
   "pages": 3,
