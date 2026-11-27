@@ -25,6 +25,15 @@ python3 scripts/fetch-auction-details.py --rebuild
 - 사건마다 화면을 6~8번 갱신해야 해서 사람이 하면 사건당 1분, 자동화해도 페이지 상태를 읽는 비용이 크다.
 - 진행 상황: `queue.json`(451사건 큐) · `progress.json`(끝난 사건) — `scripts/auction-queue.py next` 로 다음 사건 확인.
 
+## 매각물건명세서(권리분석 핵심) — 기일 1주 전부터 열린다
+물건을 조회하면 `매각물건명세서` 버튼이 **매각기일 1주 전부터** 활성화된다. 활성이면 반드시 함께 받는다.
+1. 버튼 클릭 → 문서뷰어(ecfs.scourt.go.kr) 새 창
+2. 뷰어 오른쪽 아래 **파일저장** → `downloads/<사건번호>_<작성일>_매각물건명세서(...).pdf`
+3. `python3 scripts/auction-pdf-ingest.py --spec-scan` → `specification`(작성일 writtenDate · 최선순위 earliestRight ·
+   매각으로 소멸되지 않는 권리 nonExtinguishedRights · 지상권 hasSuperficies · 비고 extra) 이 물건 레코드에 붙는다.
+   · 서식이 항목 제목 블록이라 **y좌표로 구역을 나눠** 읽는다(제목 사이에 글이 없으면 그 항목은 '없음').
+4. `--rebuild` → 화면 '권리 안전도'가 risk(인수 권리 있음)/safe(인수 권리 없음)로 갈린다.
+
 ## 레코드 위치
 - `pdf-records/detail/<법원코드>-<사건번호>-<물건번호>.json`
 - `pdf-records/survey/<법원코드>-<사건번호>.json`
