@@ -171,11 +171,11 @@ export default function AuctionPanel({
 
   // 사건(법원+사건번호)별 묶음 — 목록의 기본 단위는 여전히 사건이다(일괄매각 24필지 = 1사건)
   const groups = useMemo(() => {
-    const q = query.trim();
+    const q = query.trim().toLowerCase();
     const filtered = q
       ? items.filter((it) => {
           const hay = `${it.address} ${it.jibun} ${it.building} ${shortCaseNo(it)} ${it.caseNo} ${it.usage}`;
-          return hay.includes(q);
+          return hay.toLowerCase().includes(q);
         })
       : items;
     const m = new Map<string, AuctionItem[]>();

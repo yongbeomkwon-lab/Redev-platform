@@ -771,14 +771,16 @@ export default function ZoneExplorer() {
   //     지번 이름만으로는 찾기 어려운 새 레이어도 이름으로 바로 찾을 수 있게(이름·별칭에 이어 낮은 순위)
   //   · 기본(준공 숨김)에서는 준공 구역이 결과에 안 뜨고, 그 구역만 맞았을 때
   //     '준공 완료라 숨겨져 있다'는 안내를 대신 보여준다(데이터가 없는 줄 오해하지 않게)
+  //   · 영문 대소문자를 가리지 않는다 — 'ddp'로도 'DDP 1·2·3구역', 'lh'로도 'LH'가 걸린다
   const search = useMemo(() => {
     const term = query.trim();
     const empty = { results: [] as SeoulZone[], hidden: [] as SeoulZone[] };
     if (!term) return empty;
-    const flat = term.replace(/\s+/g, "");
-    const hit = (s?: string) => !!s && s.replace(/\s+/g, "").includes(flat);
-    const exact = (s?: string) => !!s && s.replace(/\s+/g, "") === flat;
-    const starts = (s?: string) => !!s && s.replace(/\s+/g, "").startsWith(flat);
+    const flat = term.replace(/\s+/g, "").toLowerCase();
+    const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const hit = (s?: string) => !!s && norm(s).includes(flat);
+    const exact = (s?: string) => !!s && norm(s) === flat;
+    const starts = (s?: string) => !!s && norm(s).startsWith(flat);
     // 정확 일치를 먼저 본다 — '용두동 39'로 찾을 때 '용두동 39-24 역세시프'(다른 구역)보다
     // '용두동 39'(가칭 용두7구역)가 먼저 나와야 한다(2026-11-18 제보).
     const rank = (z: SeoulZone) =>
@@ -798,7 +800,10 @@ export default function ZoneExplorer() {
                     ? 6
                     : 7;
     const matches = (list: SeoulZone[]) =>
-      list.filter((z) => hit(z.name) || hit(z.kind) || hit(z.type) || z.gu.includes(term) || (z.alias ?? []).some(hit));
+      list.filter(
+        (z) =>
+          hit(z.name) || hit(z.kind) || hit(z.type) || hit(z.gu) || (z.alias ?? []).some(hit)
+      );
     const sortFn = (a: SeoulZone, b: SeoulZone) =>
       rank(a) - rank(b) ||
       Number(b.featured) - Number(a.featured) ||

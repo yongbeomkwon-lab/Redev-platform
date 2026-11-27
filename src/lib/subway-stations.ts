@@ -60,9 +60,9 @@ export function loadSubwayStations(): Promise<SubwayStation[]> {
   return cache;
 }
 
-/** 검색어 다듬기 — 띄어쓰기 제거 + 끝의 '역' 제거('사당역' → '사당') */
+/** 검색어 다듬기 — 띄어쓰기 제거 + 끝의 '역' 제거('사당역' → '사당') + 영문 소문자 통일 */
 function norm(term: string): string {
-  return term.replace(/\s+/g, "").replace(/역$/, "");
+  return term.replace(/\s+/g, "").replace(/역$/, "").toLowerCase();
 }
 
 /**
@@ -74,10 +74,10 @@ export function searchStations(stations: SubwayStation[], query: string, limit =
   const raw = query.trim();
   if (!raw) return [];
   const flat = norm(raw);
-  const plain = raw.replace(/\s+/g, "");
+  const plain = raw.replace(/\s+/g, "").toLowerCase();
   if (!flat && !plain) return [];
   const rank = (s: SubwayStation) => {
-    const n = s.name.replace(/\s+/g, "");
+    const n = s.name.replace(/\s+/g, "").toLowerCase();
     if (n === plain || n === flat) return 0;
     if (flat && n.startsWith(flat)) return 1;
     if (flat && n.includes(flat)) return 2;
