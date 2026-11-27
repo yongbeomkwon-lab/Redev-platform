@@ -98,6 +98,19 @@ def external_ledger_reason(text: str) -> str | None:
     return None
 
 
+def wait_pnu(page, needle: str, timeout=20000) -> str:
+    """필지 PNU 가 화면에 나타날 때까지 — /api/parcel 응답이 늦으면 앞 필지 PNU 가 잠깐 남아 있다"""
+    block = page.get_by_test_id("register-address-picked")
+    deadline = time.time() + timeout / 1000
+    text = ""
+    while time.time() < deadline:
+        text = block.inner_text()
+        if needle in text:
+            return text
+        page.wait_for_timeout(300)
+    return text
+
+
 def run() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--no-sandbox"])
@@ -140,7 +153,7 @@ def run() -> int:
             )
         addr_value = page.get_by_test_id("register-address").input_value()
         check("소재지(지번) 자동 입력", bool(addr_value.strip()), addr_value)
-        pinned = page.get_by_test_id("register-address-picked").inner_text()
+        pinned = wait_pnu(page, "116801010010737")
         check("PNU(지번 → 19자리) 계산", "116801010010737" in pinned, pinned.replace("\n", " | ")[-120:])
         page.screenshot(path=SHOT_ADDR, full_page=True)
         check("스크린샷 redev-register-address.png", os.path.exists(SHOT_ADDR), SHOT_ADDR)
@@ -156,7 +169,7 @@ def run() -> int:
         check("구역 자동 선택 근거 문구", "경계 안" in auto2 or "지번 이름" in auto2, auto2.replace("\n", " | ")[:160])
         zone_sel = page.get_by_test_id("register-zone-selected").inner_text()
         check("자동 선택된 구역 표시", "신림1" in zone_sel, zone_sel.replace("\n", " | ")[:120])
-        pinned2 = page.get_by_test_id("register-address-picked").inner_text()
+        pinned2 = wait_pnu(page, "1162010200103620032")
         check("신림동 362-32 PNU", "1162010200103620032" in pinned2, pinned2.replace("\n", " | ")[-120:])
         ledger2 = ensure_ledger(page)
         after_floors = page.get_by_test_id("register-total-floors").input_value()
