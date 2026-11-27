@@ -109,16 +109,64 @@ function Cell({
   );
 }
 
-function Skeleton() {
+/**
+ * 진행 막대 — 확정 진행률(0~100)을 채우고, 진행률을 아직 모르거나 0%일 때는
+ * 옆으로 흐르는 빛을 겹쳐 「멈춘 화면」이 아니라 「돌고 있는 화면」으로 보이게 한다.
+ *   · 회색 스켈레톤 빈 박스 4개를 없애고 이 막대 한 줄로 로딩을 보여 준다(2026-11-27).
+ *   · Tailwind 유틸리티만으로는 멈춘 0%에서 움직임을 낼 수 없어 keyframes 를 이 파일에서 정의한다
+ *     (globals.css 는 다른 작업과 겹치지 않게 건드리지 않는다).
+ */
+const PROGRESS_CSS = `
+@keyframes redev-progress-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(360%); }
+}
+.redev-progress-sweep { animation: redev-progress-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .redev-progress-sweep { animation-duration: 2.6s; }
+}
+`;
+
+function ProgressBar({
+  pct,
+  tone = "sky",
+  testId,
+}: {
+  /** 확정 진행률 0~100 — null 이면 아직 모른다(첫 청크 응답 전) */
+  pct: number | null;
+  tone?: "sky" | "slate";
+  testId?: string;
+}) {
+  const known = pct != null;
+  // 0% 여도 2% 만큼은 채워 두고 흐르는 빛을 겹친다 — 첫 응답 전에도 막대가 살아 있게
+  const value = known ? Math.max(2, Math.min(100, Math.round(pct))) : 0;
+  const track = tone === "sky" ? "bg-sky-100" : "bg-slate-200";
+  const fill = tone === "sky" ? "bg-sky-600" : "bg-slate-500";
+  const sweep =
+    tone === "sky"
+      ? "bg-gradient-to-r from-sky-500/0 via-sky-400 to-sky-500/0"
+      : "bg-gradient-to-r from-slate-500/0 via-slate-400 to-slate-500/0";
   return (
-    <div className="grid grid-cols-2 gap-1.5" aria-hidden>
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="rounded-lg bg-slate-50 px-2 py-1.5">
-          <div className="h-2 w-14 animate-pulse rounded bg-slate-200" />
-          <div className="mt-1.5 h-3.5 w-16 animate-pulse rounded bg-slate-200" />
-          <div className="mt-1 h-2 w-20 animate-pulse rounded bg-slate-100" />
-        </div>
-      ))}
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={known ? value : undefined}
+      data-testid={testId}
+      className={`relative h-1.5 w-full overflow-hidden rounded-full ${track}`}
+    >
+      {known && (
+        <div
+          className={`h-full rounded-full ${fill} transition-[width] duration-500 ease-out`}
+          style={{ width: `${value}%` }}
+        />
+      )}
+      {(!known || value <= 2) && (
+        <span
+          aria-hidden
+          className={`redev-progress-sweep absolute inset-y-0 left-0 w-1/3 rounded-full ${sweep}`}
+        />
+      )}
     </div>
   );
 }
@@ -710,9 +758,6 @@ export default function ZoneVitalStats({
     precise.status === "running" && precise.total > 0
       ? Math.min(99, Math.round((precise.done / precise.total) * 100))
       : 0;
-  /** 필지가 많은 구역 — 자동 조회를 해도 1차 수치를 먼저 보여 주고 백그라운드로 채운다 */
-  const largeZone = preciseTotal > 450;
-
   return (
     <section
       data-testid="zone-vital-stats"
@@ -727,10 +772,12 @@ export default function ZoneVitalStats({
         </span>
       </div>
 
+      <style>{PROGRESS_CSS}</style>
+
       {status === "loading" && (
-        <div>
-          <Skeleton />
-          <p className="mt-2 text-[10px] text-slate-400">구역 안 건축물·필지를 계산하는 중…</p>
+        <div data-testid="zone-vital-loading">
+          <ProgressBar pct={null} tone="slate" testId="zone-vital-loading-bar" />
+          <p className="mt-1.5 text-[10px] text-slate-500">구역 안 건축물·필지를 계산하는 중…</p>
         </div>
       )}
 
@@ -880,34 +927,31 @@ export default function ZoneVitalStats({
         )}
 
         {precise.status === "running" && (
-          <div className="mt-1" data-testid="zone-precise-progress">
-            <div className="h-1 w-full overflow-hidden rounded-full bg-sky-100">
-              <div
-                className="h-full rounded-full bg-sky-600 transition-[width] duration-300"
-                style={{ width: `${precisePct}%` }}
-              />
-            </div>
-            <p className="mt-1 text-[10px] font-medium text-sky-900">
-              분석 중 {precisePct}% ({n(precise.done)}/{n(preciseTotal)}필지)…
+          <div className="mt-2" data-testid="zone-precise-progress">
+            <ProgressBar
+              pct={preciseTotal > 0 ? precisePct : null}
+              testId="zone-precise-progress-bar"
+            />
+            <p
+              className="mt-1 break-keep text-[10px] leading-snug font-semibold text-sky-900"
+              data-testid="zone-precise-progress-text"
+            >
+              건축물대장 정밀 계산 중
+              {preciseTotal > 0 ? (
+                <span className="font-medium tabular-nums">
+                  {" · "}
+                  {n(precise.done)}/{n(preciseTotal)}필지 ({precisePct}%)
+                </span>
+              ) : (
+                <span className="font-medium"> · 필지 목록 불러오는 중…</span>
+              )}
             </p>
-            {largeZone && (
-              <p className="mt-0.5 break-keep text-[9.5px] leading-snug text-sky-800/80">
-                필지 {n(preciseTotal)}곳 — 위 1차 수치는 이미 나왔고, 이 분석은 뒤에서 진행됩니다. 화면은 그대로
-                쓰셔도 됩니다.
-              </p>
-            )}
-            {!preciseResult && (
-              <div className="mt-1.5 animate-pulse" aria-hidden>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="rounded-lg bg-white/70 px-2 py-1.5 ring-1 ring-sky-100">
-                      <div className="h-2 w-12 rounded bg-sky-100" />
-                      <div className="mt-1.5 h-3 w-16 rounded bg-sky-100" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <p
+              className="mt-0.5 break-keep text-[9.5px] leading-snug text-sky-800/80"
+              data-testid="zone-precise-progress-note"
+            >
+              1차 추정 수치는 위에서 바로 보실 수 있고, 정밀 분석은 백그라운드에서 진행 중입니다.
+            </p>
           </div>
         )}
 
