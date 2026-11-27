@@ -202,21 +202,27 @@ function fetchPage(p: NonNullable<ReturnType<typeof pnuToParams>>, key: string, 
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** 호명 정리 — '402호' · ' 제402호 ' → '402' */
+/** 호명 정리 — '402호' · ' 제402호 ' → '402', '1층201호' → '201'(층은 flrNoNm 에 따로 있다) */
 function hoOf(item: RawItem): string {
-  return strOf(item, "hoNm").replace(/\s+/g, "").replace(/^제/, "").replace(/호$/, "");
+  const raw = strOf(item, "hoNm").replace(/\s+/g, "").replace(/^제/, "").replace(/호$/, "");
+  // 일부 건물은 호명 앞에 층을 붙여 적는다('1층201') — 층은 따로 쓰므로 띄운다
+  const m = /^(?:지상|지하)?\d+층(.+)$/.exec(raw);
+  return m && m[1] ? m[1] : raw;
 }
 
 /** 층 — '4층'/'지하1층'과 숫자. 지하는 음수로 둔다(정렬용) */
 type FloorInfo = { floor: string; floorNo: number };
 function floorOf(item: RawItem): FloorInfo {
-  const nm = strOf(item, "flrNoNm").replace(/\s+/g, "");
-  const raw = numOf(item, "flrNo");
+  const raw = strOf(item, "flrNoNm").replace(/\s+/g, "");
+  // '지하1'·'4' 처럼 층 글자 없이 오는 해가 있어 '층'을 붙여 표기를 맞춘다. '지1층'은 '지하1층'으로
+  const withUnit = /^지(\d+)층$/.test(raw) ? `지하${raw.slice(1)}` : raw;
+  const nm = /^지하\d+$/.test(withUnit) || /^\d+$/.test(withUnit) ? `${withUnit}층` : withUnit;
+  const no = numOf(item, "flrNo");
   // 국토부는 지하를 '지하1층'과 '지1층' 두 가지로 적는다 — 둘 다 음수로 통일한다
   const underground = /^지하/.test(nm) || /^지\d/.test(nm);
-  let no = raw;
-  if (underground && no > 0) no = -no;
-  return { floor: nm || (no > 0 ? `${no}층` : no < 0 ? `지하${-no}층` : ""), floorNo: no };
+  let n = no;
+  if (underground && n > 0) n = -n;
+  return { floor: nm || (n > 0 ? `${n}층` : n < 0 ? `지하${-n}층` : ""), floorNo: n };
 }
 
 /** 숫자·문자 섞인 이름의 자연 정렬 — '2동' < '11동', '402' < '1001' */
