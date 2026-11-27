@@ -30,7 +30,7 @@ OUTDIR = os.environ.get("OUTDIR", "/workspace/downloads")
 MOBILE = "--mobile" in sys.argv
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 ZONE = ARGS[0] if ARGS else "seocho-bangbae-467-19"
-STATE = f"/tmp/zone-type-ratio-state-{ZONE}.json"
+STATE = os.path.join(OUTDIR, f".zone-type-ratio-state-{ZONE}.json")
 TAG = f"{ZONE}-{'mobile' if MOBILE else 'desktop'}"
 WAIT_MS = int(os.environ.get("WAIT_MS", "600000"))
 
@@ -123,17 +123,17 @@ def main() -> int:
             print("  FAIL 구역현황 패널이 뜨지 않았습니다")
             return 1
 
-        if not MOBILE:
-            # 확정 전 구역은 분석 실행 버튼을 눌러야 돈다(자동 구역은 버튼이 없거나 ↻ 다시)
-            try:
-                page.wait_for_timeout(2500)
-                btn = page.query_selector("[data-testid=zone-precise-run]")
-                label = btn.inner_text().strip() if btn else ""
-                if btn and "분석 실행" in label:
-                    print("  → 「분석 실행」 클릭")
-                    btn.click()
-            except Exception as e:
-                print("  (분석 실행 클릭 생략:", str(e)[:80], ")")
+        # 확정 전 구역은 분석 실행 버튼을 눌러야 돈다(자동 구역은 버튼이 없거나 ↻ 다시).
+        #   모바일은 데스크톱 실행이 저장해 둔 결과(localStorage)를 물려받아 바로 뜨는지 본다.
+        try:
+            page.wait_for_timeout(2500)
+            btn = page.query_selector("[data-testid=zone-precise-run]")
+            label = btn.inner_text().strip() if btn else ""
+            if btn and "분석 실행" in label:
+                print("  → 「분석 실행」 클릭")
+                btn.click()
+        except Exception as e:
+            print("  (분석 실행 클릭 생략:", str(e)[:80], ")")
 
         t0 = time.time()
         try:
@@ -162,7 +162,7 @@ def main() -> int:
             check("vs" in ui["compare"] and "빌라" in ui["compare"], "「… vs 빌라 …」 대비 한 줄 표시")
             check(not ui["overflowX"], "가로 넘침 없음")
             total_dong = sum(ui[k]["dong"] or 0 for k in KEYS if ui[k])
-            print(f"  화면 동수 합 {total_dong} / 주건축물 {re.search(r'주건축물 ([\\d,]+)동', ui['text']).group(1) if re.search(r'주건축물 ([\\d,]+)동', ui['text']) else '?'}")
+            print(f"  화면 동수 합 {total_dong} / 주건축물 {re.search(r'주건축물 ([\d,]+)동', ui['text']).group(1) if re.search(r'주건축물 ([\d,]+)동', ui['text']) else '?'}")
             # 비율 합이 100 근처인지(반올림 오차 포함)
             pct_sum = sum(ui[k]["pct"] or 0 for k in KEYS if ui[k])
             check(abs(pct_sum - 100) <= 1.5, f"비율 합 {pct_sum:.1f}% (100±1.5)")
@@ -182,6 +182,9 @@ def main() -> int:
                     check(abs((ui[k]["pct"] or 0) - expect_pct) <= 0.15, f"{k} 비율 화면={ui[k]['pct']} 계산={expect_pct}")
         else:
             print("  (캐시된 결과로 렌더 — API 합계 대조는 데스크톱 실행에서 한다)")
+        # 아파트 버킷은 API 에 0동일 때 카드가 없어야 한다
+        if api_total > 0 and ui:
+            check((ui["apartment"] is not None) == (sums["apartment"]["dong"] > 0), "아파트 카드 유무 = API 0동 여부")
 
         # 스크린샷 — 카드·패널 두 장
         root = page.query_selector("[data-testid=zone-precise-type-ratio]")
@@ -195,6 +198,7 @@ def main() -> int:
 
         if not MOBILE:
             ctx.storage_state(path=STATE)
+            print("  저장된 상태:", STATE)
 
         print("\n  errors:", errs[:10] if errs else "none")
         check(len(errs) == 0, "콘솔 오류 0건")
