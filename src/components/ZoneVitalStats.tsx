@@ -235,12 +235,46 @@ export function shouldAutoAnalyze(
   return AUTO_STAGE.test(stage);
 }
 
-/** 도형 지문 — 같은 구역을 서울시 목록에서 찾을 때 쓴다(정점 수 + 첫·끝 점) */
+/**
+ * 도형 지문 — 같은 구역을 서울시 목록에서 찾을 때 쓴다.
+ *   · 정점 수는 닫는 점(첫 점 반복)을 빼고 센다 — zones.geojson 링은 닫혀 있고(정점 245),
+ *     대표 구역 도형은 닫지 않아(정점 244) 그대로 비교하면 같은 구역을 못 찾는다(2026-11-27 확인).
+ *   · 시작 정점이 달라도 찾도록 첫 점 대신 **경계 상자**(위도·경도 최소·최대)를 쓴다.
+ */
 function shapeKey(polygon: [number, number][] | null | undefined): string | null {
   if (!polygon || polygon.length < 3) return null;
   const first = polygon[0];
   const last = polygon[polygon.length - 1];
-  return [polygon.length, first[0].toFixed(6), first[1].toFixed(6), last[0].toFixed(6), last[1].toFixed(6)].join("|");
+  const closed = last[0] === first[0] && last[1] === first[1];
+  const count = closed ? polygon.length - 1 : polygon.length;
+  let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+  for (const [lat, lng] of polygon) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  }
+  return [
+    count,
+    minLat.toFixed(5),
+    minLng.toFixed(5),
+    maxLat.toFixed(5),
+    maxLng.toFixed(5),
+  ].join("|");
+}
+
+/** 목록 → 도형 지문 색인 — 구역을 오갈 때마다 2천여 구역을 다시 계산하지 않게 한 번만 만든다 */
+const shapeIndexCache = new WeakMap<SeoulZone[], Map<string, SeoulZone>>();
+function shapeIndexOf(zones: SeoulZone[]): Map<string, SeoulZone> {
+  const cached = shapeIndexCache.get(zones);
+  if (cached) return cached;
+  const index = new Map<string, SeoulZone>();
+  for (const zone of zones) {
+    const key = shapeKey(zone.polygon);
+    if (key && !index.has(key)) index.set(key, zone);
+  }
+  shapeIndexCache.set(zones, index);
+  return index;
 }
 
 /** 지도가 이미 받아 둔 서울시 정비구역 목록에서 같은 도형의 구역을 찾는다 */
@@ -250,10 +284,7 @@ function findZoneByShape(
 ): SeoulZone | null {
   const key = shapeKey(polygon);
   if (!key) return null;
-  for (const zone of zones) {
-    if (shapeKey(zone.polygon) === key) return zone;
-  }
-  return null;
+  return shapeIndexOf(zones).get(key) ?? null;
 }
 
 /** 한 번에 보내는 필지 수 — 서버 상한(60)보다 작게 둬 함수 시간을 안전하게 지킨다 */
