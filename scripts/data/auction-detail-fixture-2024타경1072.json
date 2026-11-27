@@ -1,0 +1,74 @@
+{
+  "_note": "2026-11-27 한국 네트워크 브라우저로 대법원 경매사건검색에서 **정상 조회한** 사건(서울중앙지방법원 2024타경1072)의 응답 구조를 그대로 옮긴 파싱 검사용 fixture. HTTP 수집이 차단된 환경에서도 scripts/fetch-auction-details.py --self-test 로 코드표 이름·기일·목록 정규화를 검증한다. 값은 화면에서 읽은 공식 값이다.",
+  "status": 200,
+  "message": "조회가 완료되었습니다.",
+  "data": {
+    "ipcheck": true,
+    "dma_csBasInf": {
+      "userCsNo": "2024타경1072",
+      "csNo": "20240130001072",
+      "csNm": "부동산임의경매",
+      "cortOfcCd": "B000210",
+      "cortOfcNm": "서울중앙지방법원",
+      "cortAuctnJdbnNm": "경매12계",
+      "jdbnTelno": "02-3485-3244",
+      "execrCsTelno": "02-533-6852",
+      "csRcptYmd": "20240227",
+      "csCmdcYmd": "20240318",
+      "clmAmt": 120131932,
+      "csProgStatCd": "0002100001",
+      "ultmtDvsCd": "000"
+    },
+    "dlt_dspslGdsDspslObjctLst": [
+      {
+        "dspslGdsSeq": 1,
+        "auctnGdsStatCd": "03",
+        "auctnGdsUsgCd": "15",
+        "aeeEvlAmt": 275000000,
+        "prchDposRate": 10,
+        "dspslDxdyYmd": "20261126",
+        "dspslGdsRmk": "일괄매각",
+        "dspslGdsSpcfcEcdocId": "772A49B6AC1906DA251699C32C2CF7E0",
+        "dspslObjLst": [
+          { "dspslObjctSeq": 1, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 지하1층16호 (신당동,광희시장)", "bldNm": "광희시장", "bldDtlDts": "지하1층16호" },
+          { "dspslObjctSeq": 2, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 2층59호 (신당동,광희시장)", "bldNm": "광희시장", "bldDtlDts": "2층59호" },
+          { "dspslObjctSeq": 3, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 4층4층호 (신당동,광희시장)", "bldNm": "광희시장", "bldDtlDts": "4층4층호" },
+          { "dspslObjctSeq": 4, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 5층5층호 (신당동,광희시장)", "bldNm": "광희시장", "bldDtlDts": "5층5층호" },
+          { "dspslObjctSeq": 5, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 6층6층호 (신당동,광희시장)", "bldNm": "광희시장", "bldDtlDts": "6층6층호" },
+          { "dspslObjctSeq": 6, "auctnLstDvsCd": "01", "userSt": "서울특별시 중구 신당동 777 ", "bldNm": "", "bldDtlDts": "" }
+        ]
+      }
+    ],
+    "dlt_rletCsGdsDtsDxdyInf": [
+      {
+        "dspslGdsSeq": 1,
+        "auctnDxdyKndCd": "01",
+        "auctnDxdyRsltCd": "002",
+        "dxdyYmd": "20261126",
+        "dxdyHm": "1000",
+        "dxdyPlcNm": "제4별관 제211호 법정(2층)",
+        "bidBgngYmd": "",
+        "bidEndYmd": ""
+      }
+    ],
+    "dlt_rletCsDspslObjctLst": [
+      { "dspslObjctSeq": 1, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 지하1층16호 (신당동,광희시장)", "ultmtNm": "미종국" },
+      { "dspslObjctSeq": 2, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 2층59호 (신당동,광희시장)", "ultmtNm": "미종국" },
+      { "dspslObjctSeq": 3, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 4층4층호 (신당동,광희시장)", "ultmtNm": "미종국" },
+      { "dspslObjctSeq": 4, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 5층5층호 (신당동,광희시장)", "ultmtNm": "미종국" },
+      { "dspslObjctSeq": 5, "auctnLstDvsCd": "03", "userSt": "서울특별시 중구 마장로1길 21, 6층6층호 (신당동,광희시장)", "ultmtNm": "미종국" },
+      { "dspslObjctSeq": 6, "auctnLstDvsCd": "01", "userSt": "서울특별시 중구 신당동 777 ", "ultmtNm": "미종국" }
+    ],
+    "dlt_dstrtDemnLstprdDts": [
+      { "dspslObjctSeq": 1, "dstrtDemnLstprdYmd": "20240722" },
+      { "dspslObjctSeq": 2, "dstrtDemnLstprdYmd": "20240722" },
+      { "dspslObjctSeq": 3, "dstrtDemnLstprdYmd": "20240722" },
+      { "dspslObjctSeq": 4, "dstrtDemnLstprdYmd": "20240722" },
+      { "dspslObjctSeq": 5, "dstrtDemnLstprdYmd": "20240722" },
+      { "dspslObjctSeq": 6, "dstrtDemnLstprdYmd": "20240722" }
+    ],
+    "dlt_rletCsIntrpsLst": [],
+    "dlt_csApalRaplDts": [],
+    "dlt_rletReltCsLst": []
+  }
+}

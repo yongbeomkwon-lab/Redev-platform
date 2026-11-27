@@ -2,13 +2,15 @@
 
 대법원 **법원경매정보**(courtauction.go.kr)에서 서울 5개 법원의 공고중 부동산 물건을 받아,
 지번 좌표로 정비구역 경계(`public/data/zones.geojson`)와 매칭해
-`public/data/auctions.json` 을 만든다. 화면은 구역 상세 패널의 **⚖️ 구역 내 진행 경매 N건** 이다.
+`public/data/auctions.json` 을 만든다. 화면은 **왼쪽 경매 전용 패널 하나**에서 목록·상세를 본다
+(2026-11-27 개편 — 오른쪽 구역 패널과의 중복 제거).
 
 ```
 python3 scripts/fetch-court-auctions.py      # ① 대법원 수집(이어받기·차단 감지)
 python3 scripts/geocode-auctions.py          # ② 지번 → 좌표(카카오, 캐시 사용)
 python3 scripts/build-auction-zones.py       # ③ 구역 경계 매칭 → public/data/auctions.json
 python3 scripts/verify-auction-zones.py --fix # ④ 구역 경계를 고친 뒤 매핑 재검사(필수)
+python3 scripts/fetch-auction-details.py     # ⑤ 사건 상세(기일내역·상태·청구금액) → public/data/auction-details.json
 ```
 
 ## ① 대법원 수집 — 지켜야 하는 것
@@ -67,13 +69,40 @@ bbox 선별 → 광선교차(Point-in-Polygon). 한 물건이 여러 구역에 �
 
 ## 원문 링크에 대해
 
-**화면에는 대법원 외부 링크를 두지 않는다**(2026-11-22 사용자 요구). 핀을 누르면 오른쪽 패널이 아니라
-**왼쪽 대시보드 창**에 수집된 상세(사건번호·법원/경매계·용도·주소·감정가/최저가/비율·유찰·매각기일·
-매각장소·매각결정기일·면적/지목·비고)가 뜨다.
-
 사건상세 화면(PGJ15BM01)은 사건번호를 URL 파라미터로 받지 않는다(화면 간 데이터를 메모리로 넘긴다).
 직접 링크하면 빈 화면 + `부모 객체를 찾을 수 없습니다` 오류창이 뜨는 것을 2026-11-22 브라우저로
-확인해, 그 대신 데이터를 화면에 충분히 싣는 쪽으로 바꿨다.
+확인했다.
+
+그래서 2026-11-22에는 외부 링크를 아예 두지 않았다. **2026-11-27 사용자 요구**(“대법원 사이트
+안 가고 다 보고 싶다”)로 상세 패널에 **사건번호 복사**와 **대법원 사건검색 열기**를 두었다 —
+사건검색(PGJ159M00)에서 사건번호를 붙여 넣으면 기일내역·당사자·물건상태까지 한 화면에 나온다.
+사건상세로 바로 가는 링크는 여전히 두지 않는다(열리지 않는다).
+
+화면에 보이는 값은 **보유한 것만** 쓴다. 기일내역·물건상태·청구금액·배당요구종기·목록내역은
+사건 조회에서 받아 `auction-details.json` 에 넣고(아래 ⑤), 면적·감정평가요항표·사건 사진은
+사건상세에서만 나오므로 수집 전이면 “대법원 원문에서 확인”으로 안내한다. 추정값을 만들지 않는다.
+
+## ⑤ 사건 상세 — 사건 하나당 한 번
+
+`fetch-auction-details.py` 는 **경매사건검색**(`POST /pgj/pgj15A/selectAuctnCsSrchRslt.on`,
+`{cortOfcCd, csNo}`)을 쓴다. 사건상세(PGJ15BM01)는 물건 하나당 한 번(588회)이지만, 사건검색은
+사건 하나당 한 번으로 그 사건의 **물건·목적물·기일내역·물건상태·청구금액·배당요구종기·목록내역**을
+한꺼번에 준다. 응답의 코드값(기일결과 `002`=유찰 등)은 사이트의 공식 코드표
+(`/pgj/scframe/lib/sccd/list.on`)에서 확인한 이름으로 바꾼다 — 추정하지 않는다.
+
+```
+python3 scripts/fetch-auction-details.py --limit 20     # 먼저 20사건만
+python3 scripts/fetch-auction-details.py --status
+python3 scripts/fetch-auction-details.py --rebuild     # raw → auction-details.json
+python3 scripts/fetch-auction-details.py --self-test   # 파싱만 검사(HTTP 없음)
+```
+
+* 결과는 `{meta, byCase: {"법원코드|사건번호": …}, byId: {물건 id: …}}`.
+  byCase 는 그 사건의 물건·목적물 여러 줄이 함께 쓰고, byId 는 면적·사진 같은 물건별 값이다.
+* **2026-11-27 이 작업 서버의 IP는 차단 상태였다** — 사건 조회가 `data.ipcheck=false`
+  ("비정상적인 접속")로 거절됐다. 그래서 이 경로의 HTTP 수집은 여기서 실제로 돌리지 못했고,
+  파싱·정규화는 한국 네트워크 브라우저로 정상 조회한 사건(서울중앙 2024타경1072)의 응답으로
+  `--self-test` 까지 맞췄다. 차단이 풀린 국내 네트워크에서 `--limit` 을 올려 가며 돌린다.
 
 ## 저작권·이용
 

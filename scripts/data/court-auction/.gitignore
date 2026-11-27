@@ -6,6 +6,7 @@
 #   · geocode.json    주소→좌표 캐시 — 다음 갱신에서 같은 지번을 다시 부르지 않게 **남긴다**.
 #   · cookies.txt     사이트 세션 쿠키 — 절대 저장하지 않는다.
 raw/
+case-raw/
 latest.json
 cookies.txt
 blocks.json

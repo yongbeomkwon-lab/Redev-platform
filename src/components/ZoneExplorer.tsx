@@ -60,9 +60,8 @@ import { reverseGeocode } from "@/lib/kakao-address";
 import { ListingCompare } from "@/components/ListingCompare";
 import { UnlockModal } from "@/components/ListingUnlockModal";
 import { ZoneListingCards } from "@/components/ZoneListingCards";
-import ZoneAuctions from "@/components/ZoneAuctions";
 import ZoneTalk from "@/components/community/ZoneTalk";
-import AuctionDetailCard from "@/components/AuctionDetailCard";
+import AuctionPanel from "@/components/AuctionPanel";
 import { formatWon, formatSaleDate, loadAuctions, countAuctionSales, type AuctionItem, type AuctionsData } from "@/lib/auctions";
 import { buildAuctionPins, type AuctionMapPin } from "@/lib/auction-pins";
 import {
@@ -296,18 +295,17 @@ export default function ZoneExplorer() {
   /** 지도에 위치를 보여 줄 경매 물건(「📍 지도 위치」를 누른 것) */
   const [auctionFocus, setAuctionFocus] = useState<AuctionItem | null>(null);
   /**
-   * ⚖️ 왼쪽 대시보드 창에 띄운 경매 물건 — 지도 핀을 누르면 그 핀의 물건 묶음이 들어온다.
-   *   · 예전의 지도 말풍선 카드(AuctionPinCard)를 대신한다. 닫으면 null.
-   *   · items 는 같은 좌표에 묶인 물건 전부(카드 안에서 전환), activeId 는 지금 펼친 물건.
+   * ⚖️ 경매 전용 패널 — **목록·상세를 이 패널 하나에서만** 본다(2026-11-27 개편).
+   *   · 예전에는 오른쪽 패널 목록과 왼쪽 카드 상세가 같은 물건을 두 번 보여 줬다.
+   *   · `items` 는 패널이 보여 줄 목록 — 지도 핀에서 들어오면 그 핀에 묶인 물건,
+   *     오른쪽 패널의 「⚖️ 경매 N건」에서 들어오면 구역 전체다.
+   *   · `activeId` 가 null 이면 목록, 값이 있으면 그 물건 상세를 펼친다.
    */
-  const [auctionDetail, setAuctionDetail] = useState<{
-    pinId: string;
+  const [auctionPanel, setAuctionPanel] = useState<{
     zoneId: string;
     items: AuctionItem[];
-    activeId: string;
+    activeId: string | null;
   } | null>(null);
-  /** 오른쪽 패널의 경매 목록에서 강조·스크롤할 물건 — 「구역 경매 목록에서 보기」가 정한다 */
-  const [auctionListFocus, setAuctionListFocus] = useState<{ id: string; token: number } | null>(null);
   /**
    * ⚖️ 지도 경매 핀 표시 — **첫 접속에는 꺼진 상태**로 시작한다(2026-11-27 사용자 요청).
    *   예전(2026-11-22)에는 서울 전체에서도 기본 ON 이었으나, ⚖️ 핀이 실거래 가격표와 겹쳐
@@ -576,11 +574,10 @@ export default function ZoneExplorer() {
   useEffect(() => {
     setTxPins([]);
     setAuctionFocus(null);
-    setAuctionListFocus(null);
     // 경매 핀 토글은 **사용자가 켜 둔 상태를 그대로 둔다** — 한 번 켜고 여러 구역을 보는 흐름이 자연스럽고,
     //   여기서 꺼 버리면 경매 목록·핀에서 들어올 때 켠 상태(pickZone opts.auction)까지 되돌려진다.
-    // 왼쪽 창의 경매 상세는 **그 구역의 물건일 때만** 남긴다(핀을 눌러 들어온 경우)
-    setAuctionDetail((d) => (d && d.zoneId === selectedId ? d : null));
+    // 경매 패널은 **그 구역의 물건일 때만** 남긴다(핀을 눌러 들어온 경우·목록으로 연 경우 모두)
+    setAuctionPanel((p) => (p && p.zoneId === selectedId ? p : null));
   }, [selectedId]);
 
   // 고른 구역이 준공·입주 완료 구역이면 ‘준공 포함’을 자동으로 켠다.
@@ -611,36 +608,36 @@ export default function ZoneExplorer() {
     [auctions]
   );
   const mapAuctionPins = selectedId ? zoneAuctionPins : allAuctionPins;
+  /** 경매 패널에서 보고 있는 물건의 지도 핀 — 그 핀만 강조한다(목록 화면에서는 없음) */
+  const activeAuctionPinId = useMemo(() => {
+    const id = auctionPanel?.activeId;
+    if (!id) return null;
+    return mapAuctionPins.find((p) => p.items.some((x) => x.id === id))?.id ?? null;
+  }, [auctionPanel?.activeId, mapAuctionPins]);
 
   /**
-   * ⚖️ 지도 경매 핀 클릭 — 그 핀의 물건들을 왼쪽 창에 띄우고, 그 구역을 오른쪽 패널에 연다.
-   *   · 말풍선 카드 대신 왼쪽 카드가 열린다(사용자 요구).
-   *   · 이미 그 구역이 열려 있으면 지도 화면은 그대로 두고 카드만 갱신한다.
+   * ⚖️ 지도 경매 핀 클릭 — 그 핀의 물건을 **경매 전용 패널**에 펼쳐 보여 주고, 그 구역을 오른쪽 패널에 연다.
+   *   · 목록은 핀에 묶인 물건(같은 사건·같은 좌표)으로 시작하고, 패널 안에서 구역 전체로 넓힐 수 있다.
    */
   function openAuctionPin(pin: AuctionMapPin) {
     const zoneId = pin.lead.zoneId;
-    setAuctionDetail({ pinId: pin.id, zoneId, items: pin.items, activeId: pin.lead.id });
+    setAuctionPanel({ zoneId, items: pin.items, activeId: pin.lead.id });
     setAuctionFocus(null);
-    setAuctionListFocus(null);
     if (zoneId && zoneId !== selectedId) pickZone(zoneId, { auction: true });
     else if (zoneId) setPanelOpen(true);
-    // 좁은 화면에서는 왼쪽 카드가 화면을 덮으므로 오른쪽 패널을 접는다
+    // 좁은 화면에서는 경매 패널이 바닥 시트로 올라오므로 오른쪽 패널을 접는다
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
 
-  /** 경매 목록·카드에서 「상세」 — 그 물건이 속한 **지도 핀**을 찾아 왼쪽 창에 연다
-   *   · 일괄매각은 목적물이 여러 필지에 흩어져 있어도 지도 핀이 1개다 — 목록에서 한 필지를 눌러도
-   *     그 사건의 목적물 전체를 카드에 띄우고(눌러서 전환) 지도 핀도 함께 강조한다. */
-  function openAuctionItem(item: AuctionItem) {
-    const pin = mapAuctionPins.find((p) => p.items.some((x) => x.id === item.id));
-    const items = pin ? pin.items : [item];
-    const pinId = pin ? pin.id : `${item.lat.toFixed(5)},${item.lng.toFixed(5)}`;
-    setAuctionDetail({
-      pinId,
-      zoneId: selectedId ?? item.zoneId,
-      items,
-      activeId: item.id,
-    });
+  /**
+   * 오른쪽 패널 「⚖️ 경매 N건」 — 그 구역의 경매 목록을 연다(상세가 아니라 목록부터).
+   *   · 핀에서 들어온 목록을 구역 전체로 넓힐 때도 같은 함수를 쓴다.
+   */
+  function openAuctionZone(zoneId: string) {
+    const items = auctions?.byZone[zoneId] ?? [];
+    if (items.length === 0) return;
+    setAuctionPanel({ zoneId, items, activeId: null });
+    if (zoneId !== selectedId) pickZone(zoneId, { auction: true });
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
   // ── 매물 조건 필터 ────────────────────────────────────────────────────────
@@ -1912,7 +1909,7 @@ export default function ZoneExplorer() {
           auctionPinsOn={auctionPinsOn}
           onToggleAuctionPins={() => setAuctionPinsOn((v) => !v)}
           onSelectAuctionPin={openAuctionPin}
-          activeAuctionPinId={auctionDetail?.pinId ?? null}
+          activeAuctionPinId={activeAuctionPinId}
           onSelectTxPin={(pin) =>
             setBuildingTarget({
               gu: selected?.district ?? selectedSeoul?.gu ?? "",
@@ -2275,25 +2272,28 @@ export default function ZoneExplorer() {
           )}
         </div>
 
-        {/* ── ⚖️ 경매 물건 상세 — 지도 핀을 누르면 이 자리에 열린다(말풍선 대신) ── */}
-        {auctionDetail && (
-          <AuctionDetailCard
-            items={auctionDetail.items}
-            activeId={auctionDetail.activeId}
-            onSelect={(id) =>
-              setAuctionDetail((d) => (d ? { ...d, activeId: id } : d))
+        {/* ── ⚖️ 경매 전용 패널 — 목록·상세를 **이 한 곳에서만** 본다(2026-11-27 개편) ──
+            · 지도 핀을 누르면 그 핀의 물건 상세, 오른쪽 패널 「⚖️ 경매 N건」을 누르면 구역 전체 목록.
+            · 좁은 화면에서는 이 패널이 지도 아래에서 올라오는 시트가 된다. */}
+        {auctionPanel && (
+          <AuctionPanel
+            items={auctionPanel.items}
+            zoneId={auctionPanel.zoneId}
+            zoneName={
+              zones.find((z) => z.id === auctionPanel.zoneId)?.name ??
+              seoulZones.find((z) => z.id === auctionPanel.zoneId)?.name ??
+              auctionPanel.items[0]?.zoneName
             }
-            onClose={() => setAuctionDetail(null)}
+            zoneTotal={countAuctionSales(auctions?.byZone[auctionPanel.zoneId] ?? [])}
+            activeId={auctionPanel.activeId}
+            onSelect={(id) => setAuctionPanel((p) => (p ? { ...p, activeId: id } : p))}
+            onClose={() => setAuctionPanel(null)}
             onLocate={(it) => {
               setAuctionFocus(it);
               if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
             }}
-            onOpenList={(it) => {
-              setPanelOpen(true);
-              setAuctionListFocus({ id: it.id, token: Date.now() });
-            }}
-            zoneName={auctionDetail.items[0]?.zoneName}
-            collectedAt={auctions?.meta?.collectedAt ?? null}
+            onShowZoneAll={() => openAuctionZone(auctionPanel.zoneId)}
+            meta={auctions?.meta ?? null}
           />
         )}
 
@@ -2801,20 +2801,17 @@ export default function ZoneExplorer() {
             {!selected && !selectedSeoul && zoneDrawDone && (
               <span className="text-[10px] text-violet-700">지도에서 그린 경계 · 임시 분석</span>
             )}
-            {/* ⚖️ 경매 배지 — 구역 상세의 경매 섹션은 아래쪽이라 놓치기 쉽다.
-                헤더(스크롤과 무관하게 늘 보이는 줄)에서 바로 그 섹션으로 부드럽게 내려간다. */}
-            {selectedAuctions.length > 0 && (
+            {/* ⚖️ 경매 요약 버튼 — **오른쪽 패널에는 이 한 줄만** 둔다.
+                누르면 왼쪽 경매 전용 패널이 "구역 전체 목록"으로 열린다(같은 물건을 두 패널에 늘어놓지 않는다). */}
+            {selectedId && selectedAuctions.length > 0 && (
               <button
                 type="button"
                 data-testid="panel-auction-badge"
-                onClick={() => {
-                  const el = document.getElementById("zone-auctions");
-                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                title={`이 구역 경매 ${countAuctionSales(selectedAuctions)}건 — 누르면 경매 목록으로 내려갑니다`}
+                onClick={() => openAuctionZone(selectedId)}
+                title={`이 구역 경매 ${countAuctionSales(selectedAuctions)}건 — 왼쪽 경매 패널에서 목록·상세를 한 번에 봅니다`}
                 className="shrink-0 whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-2 py-[3px] text-[11px] font-bold text-amber-900 hover:border-amber-500 hover:bg-amber-100"
               >
-                ⚖️ 경매 {countAuctionSales(selectedAuctions)}건
+                ⚖️ 경매 {countAuctionSales(selectedAuctions)}건 · 보기
               </button>
             )}
             <button
@@ -3041,20 +3038,8 @@ export default function ZoneExplorer() {
                 {/* 검증 매물 — 실거래가 위에 '지금 나온 물건'을 먼저 */}
                 <ZoneListingCards listings={selectedListings} zoneId={selected.id} zoneName={selected.name} />
 
-                {/* 구역 내 법원경매 물건 — 매물 카드 바로 아래에 붙여 ‘지금 법원에 걸린 물건’을 함께 본다 */}
-                <ZoneAuctions
-                  items={selectedAuctions}
-                  meta={auctions?.meta ?? null}
-                  onLocate={(it) => {
-                    setAuctionFocus(it);
-                    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
-                  }}
-                  onSelectItem={openAuctionItem}
-                  highlightId={
-                    auctionDetail && auctionDetail.zoneId === selectedId ? auctionDetail.activeId : null
-                  }
-                  scrollToken={auctionListFocus?.token ?? null}
-                />
+                {/* 구역 내 법원경매 물건 — **여기에 목록을 그리지 않는다**(2026-11-27 개편).
+                    목록·상세는 왼쪽 경매 전용 패널 하나에서만 본다. 진입은 헤더의 「⚖️ 경매 N건 · 보기」. */}
 
                 {/* 국토부 실거래가 — 샘플 거래와 별개로 실제 신고 거래를 함께 보여준다 */}
                 <ZoneTransactions
@@ -3162,17 +3147,6 @@ export default function ZoneExplorer() {
               <ZoneOfficialPanel
                 zone={selectedSeoul}
                 listings={selectedListings}
-                auctions={selectedAuctions}
-                auctionsMeta={auctions?.meta ?? null}
-                onLocateAuction={(it) => {
-                  setAuctionFocus(it);
-                  if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
-                }}
-                onSelectAuction={openAuctionItem}
-                auctionHighlightId={
-                  auctionDetail && auctionDetail.zoneId === selectedId ? auctionDetail.activeId : null
-                }
-                auctionScrollToken={auctionListFocus?.token ?? null}
                 onTxPins={setTxPins}
                 onOpenBuilding={setBuildingTarget}
                 meta={

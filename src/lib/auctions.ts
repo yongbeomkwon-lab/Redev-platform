@@ -12,6 +12,13 @@
 //     (구역 상세는 byZone[zoneId] 만 보면 된다).
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 매각 구분 — 법원 **경매**와 공공기관 **공매**(온비드)를 한 패널의 탭으로 나눈 값.
+ *   · 1단계(지금)는 `court` 뿐이다. 2단계에서 온비드 부동산 물건을 붙일 때
+ *     `onbid` 항목을 같은 목록 컴포넌트에 맞춰 주는 어댑터만 추가하면 된다(패널 구조는 그대로).
+ */
+export type SaleChannel = "court" | "onbid";
+
 export type AuctionItem = {
   id: string;
   court: string;
@@ -134,6 +141,70 @@ export function countAuctionCases(items: AuctionItem[]): number {
   const keys = new Set<string>();
   for (const it of items) keys.add(`${it.courtCode}|${it.caseNo}`);
   return keys.size;
+}
+
+/**
+ * 매수신청보증금(입찰보증금) — **최저매각가격의 10%**.
+ *   · 민사집행법상 부동산 매수신청보증금은 최저매각가격의 10%가 원칙이고(법원이 따로 정한 경우 예외),
+ *     대법원 사건상세의 `prchDposRate` 도 보통 10 이다. 상세 데이터에 법원 고시 요율이 있으면
+ *     그 값을(`AuctionDetail.depositRate`) 쓰고, 없으면 10%로 계산해 **계산값임을 화면에 밝힌다**.
+ *   · 원 단위 그대로 돌려준다(표시는 formatWon 이 만원 단위로 줄인다).
+ */
+export function minimumDeposit(
+  minimum: number | null | undefined,
+  ratePct: number | null | undefined = 10
+): number | null {
+  if (!minimum || minimum <= 0) return null;
+  const rate = typeof ratePct === "number" && ratePct > 0 ? ratePct : 10;
+  return Math.round((minimum * rate) / 100);
+}
+
+/** 사건번호 짧은 표기 — `서울중앙지방법원 2023타경104875` → `2023타경104875` */
+export function shortCaseNo(it: Pick<AuctionItem, "caseYear" | "casePart" | "caseSerial" | "caseNoPrint" | "court" | "caseNo">): string {
+  if (it.caseYear && it.casePart && it.caseSerial) {
+    return `${it.caseYear}${it.casePart}${it.caseSerial}`;
+  }
+  const stripped = (it.caseNoPrint || "").replace(it.court, "").trim();
+  return stripped || it.caseNo;
+}
+
+/**
+ * 비고(법원 원문)에서 **입찰 판단을 가르는 특수권리·조건**만 뽑는다.
+ *   · 원문 문자열을 그대로 보여 주는 것이 원칙이고, 이 함수는 그 위에 눈에 띄는 딱지만 붙인다.
+ *   · 없는 것을 만들어 내지 않는다 — 키워드가 원문에 있을 때만 돌려준다.
+ */
+export type AuctionNoteFlag = { key: string; label: string; tone: "rose" | "amber" | "slate" };
+
+const NOTE_FLAGS: { key: string; label: string; tone: AuctionNoteFlag["tone"]; test: RegExp }[] = [
+  { key: "bulk", label: "일괄매각", tone: "amber", test: /일괄\s*매각|일괄매수/ },
+  { key: "share", label: "지분매각", tone: "rose", test: /지분\s*매각|지분에\s*관한/ },
+  { key: "resale", label: "재매각", tone: "amber", test: /재매각/ },
+  { key: "lease", label: "선순위 임차인", tone: "rose", test: /선순위\s*(임차|전세|보증금)|임차인\s*있음|대항력/ },
+  { key: "lien", label: "유치권", tone: "rose", test: /유치권/ },
+  { key: "legal", label: "법정지상권", tone: "rose", test: /법정지상권/ },
+  { key: "appeal", label: "항고·소송", tone: "amber", test: /항고|소송|이의/ },
+  { key: "farmland", label: "농지취득자격", tone: "slate", test: /농지취득|농지\s*매매/ },
+  { key: "ground", label: "토지별도등기", tone: "amber", test: /토지별도등기|별도등기/ },
+  { key: "demolish", label: "제시외 건물", tone: "amber", test: /제시외/ },
+  { key: "permit", label: "관청 허가", tone: "slate", test: /허가\s*필요|인가\s*필요/ },
+];
+
+export function auctionNoteFlags(note: string | null | undefined): AuctionNoteFlag[] {
+  const text = note || "";
+  if (!text.trim()) return [];
+  return NOTE_FLAGS.filter((f) => f.test.test(text)).map(({ key, label, tone }) => ({ key, label, tone }));
+}
+
+/**
+ * 매각기일 기준 진행 상태 — 데이터에 진행상태 코드가 없을 때 **날짜로만** 말할 수 있는 것.
+ *   · `공고중`·`진행중` 같은 법원 상태 코드를 추정하지 않는다. 지난 기일이면 `기일 경과`.
+ *   · 오늘과 같은 날이면 `오늘 매각기일`.
+ */
+export function auctionDateStatus(saleDate: string): "오늘 매각기일" | "매각기일 전" | "기일 경과" | "" {
+  const d = daysUntilSale(saleDate);
+  if (d == null) return "";
+  if (d === 0) return "오늘 매각기일";
+  return d > 0 ? "매각기일 전" : "기일 경과";
 }
 
 /** YYYYMMDD → 11.24(월) */
