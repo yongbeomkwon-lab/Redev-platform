@@ -377,6 +377,10 @@ def probe(spec: str) -> None:
         log_block(court, case_no, res)
         print("⛔ 차단:", res.get("message"))
         return
+    if not (res.get("data") or {}).get("dma_csBasInf"):
+        msg = res.get("message") or (res.get("errors") or {}).get("errorMessage") or res.get("_raw")
+        print("⚠ 사건기본정보가 없는 응답입니다 —", str(msg)[:200])
+        return
     rec = parse_case(res, court, case_no)
     print(json.dumps(rec, ensure_ascii=False, indent=1)[:4000])
 
