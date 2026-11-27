@@ -78,7 +78,7 @@
     "closing": ""
    }
   ],
-  "collectedAt": "2026-11-27T22:47:26+09:00",
+  "collectedAt": "2026-11-27T22:50:09+09:00",
   "depositRate": 10,
   "itemStatus": {
    "1": "매각공고"
@@ -97,8 +97,8 @@
   "area": {
    "exclusiveSqm": 25.5,
    "exclusivePy": 7.7,
-   "landSqm": null,
-   "landPy": null
+   "landSqm": 16.042,
+   "landPy": 4.9
   },
   "appraisalSummary": [
    {
@@ -183,7 +183,7 @@
     "caption": "현장사진 4"
    }
   ],
-  "collectedAt": "2026-11-27T22:47:26+09:00",
+  "collectedAt": "2026-11-27T22:50:09+09:00",
   "appraised": 220000000,
   "minimum": 72090000
  },

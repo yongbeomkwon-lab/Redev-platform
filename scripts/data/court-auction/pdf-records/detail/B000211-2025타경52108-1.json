@@ -68,7 +68,7 @@
     "closing": ""
    }
   ],
-  "collectedAt": "2026-11-27T22:41:07+09:00",
+  "collectedAt": "2026-11-27T22:50:09+09:00",
   "depositRate": 10,
   "itemStatus": {
    "1": "매각공고"
@@ -92,8 +92,8 @@
   "area": {
    "exclusiveSqm": 79.27,
    "exclusivePy": 24.0,
-   "landSqm": null,
-   "landPy": null
+   "landSqm": 26.148,
+   "landPy": 7.9
   },
   "appraisalSummary": [],
   "photos": [
@@ -112,13 +112,9 @@
    {
     "url": "/data/auction-photos/B000211-2025타경52108-04.jpg",
     "caption": "현장사진 4"
-   },
-   {
-    "url": "/data/auction-photos/B000211-2025타경52108-05.jpg",
-    "caption": "현장사진 5"
    }
   ],
-  "collectedAt": "2026-11-27T22:41:07+09:00",
+  "collectedAt": "2026-11-27T22:50:09+09:00",
   "appraised": 425000000,
   "minimum": 217600000
  },

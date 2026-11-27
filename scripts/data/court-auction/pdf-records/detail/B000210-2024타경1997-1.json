@@ -135,7 +135,7 @@
    ]
   },
   "lists": [],
-  "collectedAt": "2026-11-27T22:37:58+09:00",
+  "collectedAt": "2026-11-27T22:50:08+09:00",
   "depositRate": 10,
   "itemStatus": {
    "1": "매각공고"
@@ -239,13 +239,9 @@
    {
     "url": "/data/auction-photos/B000210-2024타경1997-04.jpg",
     "caption": "현장사진 4"
-   },
-   {
-    "url": "/data/auction-photos/B000210-2024타경1997-05.jpg",
-    "caption": "현장사진 5"
    }
   ],
-  "collectedAt": "2026-11-27T22:37:58+09:00",
+  "collectedAt": "2026-11-27T22:50:08+09:00",
   "appraised": 217000000,
   "minimum": 11929000
  },

@@ -355,11 +355,11 @@ def parse_areas(lists: list[dict]) -> tuple[list[dict], dict]:
                 v = first_sqm(detail, "전유부분")
             exclusive = v
         if land is None:
-            v = first_sqm(detail, "대지권의 비율") or first_sqm(detail, "대지권 비율")
+            # 「대지권의 비율: 1. 149 분의 20.492」 → 지분(분자)이 곧 대지권 면적(㎡)이다
+            m = re.search(r"분의\s*(\d[\d,]*(?:\.\d+)?)", detail)
+            v = float(m.group(1).replace(",", "").rstrip(".")) if m else None
             if v is None:
-                m = re.search(r"대지권[^\n]{0,20}?(\d[\d,]*(?:\.\d+)?)\s*㎡", detail)
-                if m and "목적인 토지" not in m.group(0):
-                    v = float(m.group(1).replace(",", ""))
+                v = first_sqm(detail, "대지권 비율")
             land = v
     return areas, {
         "exclusiveSqm": exclusive, "exclusivePy": to_py(exclusive),
@@ -760,6 +760,7 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--survey-stdin", action="store_true")
     ap.add_argument("--status", action="store_true")
+    ap.add_argument("--rescan", action="store_true", help="이미 처리한 PDF 도 다시 읽는다")
     ap.add_argument("--self-test", default="", help="PDF 경로(들)로 파싱만 검사")
     args = ap.parse_args()
     if args.status:
@@ -778,6 +779,10 @@ def main() -> None:
                 print(json.dumps(rec, ensure_ascii=False, indent=1)[:4000])
         return
     if args.scan:
+        if args.rescan:
+            st = load_state()
+            st["seen"] = []
+            save_state(st)
         scan(args.limit, args.dry_run, args.since)
         return
     ap.print_help()
