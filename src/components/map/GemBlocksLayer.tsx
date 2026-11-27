@@ -354,7 +354,7 @@ export default function GemBlocksLayer({
       {data && (
         <div
           data-testid="gem-legend"
-          className="pointer-events-auto absolute left-1/2 top-2 -translate-x-1/2 rounded-lg border border-amber-200 bg-white/95 px-2.5 py-1 text-[10px] leading-[1.5] text-slate-600 shadow-md"
+          className="pointer-events-auto absolute left-1/2 top-2 hidden -translate-x-1/2 rounded-lg border border-amber-200 bg-white/95 px-2.5 py-1 text-[10px] leading-[1.5] text-slate-600 shadow-md md:flex"
         >
           <span className="flex items-center gap-1.5 font-bold text-amber-800">
             <span aria-hidden>💎</span> 원석 블록 {data.summary.total}곳
