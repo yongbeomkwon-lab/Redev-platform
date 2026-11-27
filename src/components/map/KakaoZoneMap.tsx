@@ -1294,6 +1294,8 @@ export default function KakaoZoneMap({
       // 2단계(레벨 6~7)·1단계에서는 0 — 이름표를 하나도 앉히지 않는다(showTags 주석 참고)
       const tagMax = showTags ? (cw < 560 ? TAG_MAX_MOBILE : TAG_MAX_DESKTOP) : 0;
       for (const c of cands) {
+        // 상한 검사를 **먼지**한다 — 0(2단계·1단계)이면 여기서 바로 멈춰 이름표를 하나도 앉히지 않는다
+        if (chosen.length >= tagMax) break;
         // 카드는 그림자와 위로 걸친 캡슐까지 있어 칩보다 여유를 더 둔다 — 바짝 붙으면
         // 두 카드가 한 덩어리로 보인다(겹침 패딩을 카드 크기에 맞춘다).
         const pad = c.card ? 5 : 3;
@@ -1315,7 +1317,6 @@ export default function KakaoZoneMap({
         if (clash) continue;
         placedTag.push({ x0, y0, x1, y1 });
         chosen.push(c);
-        if (chosen.length >= tagMax) break;
       }
 
       // DOM 반영 — 이번에 안 보이는 요소는 숨겨 풀에 돌리고, 새 id 만 만들어 붙인다
