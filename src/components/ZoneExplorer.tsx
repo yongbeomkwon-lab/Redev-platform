@@ -109,6 +109,7 @@ const ZONE_TYPES: (MapZoneType | "전체")[] = [
   "소규모",
   "역세권",
   "장기전세",
+  "지주택",
 ];
 const STAGES: (ZoneStage | "전체")[] = ["전체", "추진위원회", "사업계획승인", "관리처분", "이주·철거", "착공", "준공"];
 
@@ -129,6 +130,7 @@ const LEGEND_GROUPS: { label: string; color: string; types: MapZoneType[] }[] = 
   { label: "가로주택·소규모", color: TYPE_COLORS["가로주택"], types: ["가로주택", "소규모"] },
   { label: "역세권", color: TYPE_COLORS["역세권"], types: ["역세권"] },
   { label: "장기전세", color: TYPE_COLORS["장기전세"], types: ["장기전세"] },
+  { label: "지주택", color: TYPE_COLORS["지주택"], types: ["지주택"] },
 ];
 
 /** 주소 자동완성 줄에 붙는 구역명 — 어느 구역을 찾았는지와 그 근거를 함께 들고 다닌다 */
@@ -2594,7 +2596,8 @@ export default function ZoneExplorer() {
               <b style={{ color: TYPE_COLORS["재건축"] }}>재건축</b> = 서울시 사업유형 재건축(단독·공동) ·
               아파트 단지 재건축은 재개발과 사업 절차·권리가 달라 따로 표시합니다 ·{" "}
               <b style={{ color: TYPE_COLORS["역세권"] }}>역세권</b> = 역세권활성화·청년안심주택 ·{" "}
-              <b style={{ color: TYPE_COLORS["장기전세"] }}>장기전세</b> = 장기전세주택·미리내집 (서울시 사업유형)
+              <b style={{ color: TYPE_COLORS["장기전세"] }}>장기전세</b> = 장기전세주택·미리내집 (서울시 사업유형) ·{" "}
+              <b style={{ color: TYPE_COLORS["지주택"] }}>지주택</b> = 지역주택조합이 지구단위계획구역으로 추진하는 공동주택
             </p>
             <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["민간도심복합(성장거점형)"] }}>민간도심복합</b> = 민간이 하는

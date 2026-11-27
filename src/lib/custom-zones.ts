@@ -31,6 +31,7 @@ export const CUSTOM_ZONE_TYPES = [
   "가로주택",
   "역세권",
   "장기전세",
+  "지주택",
   "기타",
 ] as const;
 export type CustomZoneType = MapZoneType | "기타";

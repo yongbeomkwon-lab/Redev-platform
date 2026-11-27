@@ -160,6 +160,8 @@ export function pickFamily(type: MapZoneType | string, kind: string | undefined,
   if (type === "재건축") return "rebuild";
   if (type === "신통기획" || type === "공공재개발") return "redev";
   if (type === "도공복" || (type ?? "").startsWith("민간도심복합")) return "doum";
+  // 지주택 = 지역주택조합이 지구단위계획구역으로 추진하는 공동주택 — 조합설립·사업계획승인 절차는 재개발과 같다
+  if (type === "지주택") return "redev";
   if (type === "역세권" || type === "장기전세") {
     // 역세권·장기전세라도 '도시정비형 재개발'은 정비사업 절차(추진위·조합)를 따른다.
     //   소분류가 일반(장기전세주택·역세권활성화)이어도 단계가 정비구역·추진위·조합설립이면
