@@ -974,6 +974,19 @@ export default function KakaoZoneMap({
     const placeLabel = () => {
       const node = labelLayerRef.current;
       if (!node) return;
+      /**
+       * 1단계 광역(레벨 8 이상 = 자치구 `구 + 개수` 카드 화면)에서는 **선택 구역 이름표도 숨긴다**.
+       *   · 일반 이름표(tagLayer)는 이 배율에서 이미 걷어 내는데, 선택 구역 전용 이름표만
+       *     줌 레벨을 보지 않고 늘 떠 있어 다크 차콜 카드 위에 `대림동 680 일대` 같은
+       *     두 줄 이름표가 혼자 둥둥 남았다(2026-11-27 사용자 스크린샷).
+       *   · 저장된 화면(redev_last_view_v1)이 1단계 배율 + 선택 구역으로 되살아나는 경우에도
+       *     같은 자리에서 막힌다 — 위치·선택은 그대로 두고 보이기만 끈다.
+       *   · 다시 확대해 2단계 이하(레벨 7 이하)로 들어오면 아래 계산대로 곧바로 다시 보인다.
+       */
+      if (mapLevel >= DISTRICT_LEVEL_MIN) {
+        node.style.visibility = "hidden";
+        return;
+      }
       const { lat, lng } = labelAtRef.current;
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         node.style.visibility = "hidden";
