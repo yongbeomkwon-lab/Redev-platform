@@ -2,8 +2,9 @@
 // 💎 원석 찾기 레이어 — 아직 정비구역으로 지정되지 않은 노후 저층 블록 후보를 지도에 얹는다.
 //
 //   · 데이터: public/data/gem-blocks.json (scripts/build-gem-blocks.mjs)
-//   · 폴리곤은 카카오 Polygon(호박색 점선 + 반투명), 배지는 DOM 알약(`💎 노후 72%`)이다.
-//     배지는 화면 좌표를 매 이동·확대마다 다시 잡는다(구역 폴리곤처럼 캔버스를 직접 그리지 않는다).
+//   · 폴리곤은 **우리 SVG 레이어**(z-97)에 그린다. 카카오 Polygon 은 지도 캔버스 아래에 깔려
+//     앱이 직접 그리는 구역 캔버스(.kakao-zone-canvas)에 가려진다 — 개발압력 레이어와 같은 이유로
+//     화면 좌표로 직접 그린다.
 //   · 경계는 **추정**이다 — 카드·범례에 그렇게 적는다. 고시 구역계가 아니다.
 //   · 멀리 보면 등급 높은 블록만 남긴다 — 280곳이 한 화면을 덮지 않게.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import type { KakaoMap, KakaoSDK } from "./kakao-loader";
 import { GEM_GRADE_COLOR, gemSummary, loadGemBlocks, type GemBlock, type GemData } from "@/lib/gem-blocks";
 
 type Mark = { block: GemBlock; x: number; y: number };
+type Shape = { block: GemBlock; points: string; x: number; y: number };
 
 /** 한 화면에 그릴 배지 상한 */
 const MAX_MARKS = 55;
@@ -55,17 +57,16 @@ export default function GemBlocksLayer({
   const [data, setData] = useState<GemData | null>(null);
   const [failed, setFailed] = useState(false);
   const [marks, setMarks] = useState<Mark[]>([]);
+  const [shapes, setShapes] = useState<Shape[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
   const [cardH, setCardH] = useState(320);
   const [level, setLevel] = useState<number>(map.getLevel());
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const polysRef = useRef<Map<string, { setOptions(o: Record<string, unknown>): void; setMap(m: KakaoMap | null): void }>>(new Map());
   const centersRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const blockByIdRef = useRef<Map<string, GemBlock>>(new Map());
-  const selIdRef = useRef<string | null>(null);
-  selIdRef.current = selId;
 
   useEffect(() => {
     let alive = true;
@@ -81,65 +82,14 @@ export default function GemBlocksLayer({
     };
   }, []);
 
-  // ── 폴리곤 그리기 ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!data) return;
-    const polys = polysRef.current;
-    for (const b of data.blocks) {
-      const path = b.polygon.map(([lat, lng]) => new sdk.maps.LatLng(lat, lng));
-      if (path.length < 3) continue;
-      const color = GEM_GRADE_COLOR[b.grade];
-      const poly = new sdk.maps.Polygon({
-        path,
-        strokeWeight: 2,
-        strokeColor: color,
-        strokeOpacity: 0.95,
-        strokeStyle: "dash",
-        fillColor: color,
-        fillOpacity: b.grade === "S" ? 0.16 : 0.11,
-        zIndex: 62,
-      });
-      poly.setMap(map);
-      sdk.maps.event.addListener(poly, "click", () => {
-        setSelId(b.id);
-      });
-      sdk.maps.event.addListener(poly, "mouseover", () => {
-        poly.setOptions({ fillOpacity: 0.26, strokeWeight: 3 });
-      });
-      sdk.maps.event.addListener(poly, "mouseout", () => {
-        if (selIdRef.current === b.id) return;
-        poly.setOptions({ fillOpacity: b.grade === "S" ? 0.16 : 0.11, strokeWeight: 2 });
-      });
-      polys.set(b.id, poly);
-    }
-    return () => {
-      for (const p of polys.values()) p.setMap(null);
-      polys.clear();
-    };
-  }, [data, map, sdk]);
-
-  // ── 선택 강조 ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!data) return;
-    for (const b of data.blocks) {
-      const poly = polysRef.current.get(b.id);
-      if (!poly) continue;
-      const color = GEM_GRADE_COLOR[b.grade];
-      if (b.id === selId) {
-        poly.setOptions({ fillOpacity: 0.34, strokeWeight: 3, strokeColor: color, zIndex: 63 });
-      } else {
-        poly.setOptions({ fillOpacity: b.grade === "S" ? 0.16 : 0.11, strokeWeight: 2, zIndex: 62 });
-      }
-    }
-  }, [selId, data]);
-
-  // ── 배지 자리 ─────────────────────────────────────────────────────────────
+  // ── 화면 좌표 잡기(폴리곤 + 배지) ─────────────────────────────────────────
   const place = useCallback(() => {
     if (!data) return;
     const el = wrapRef.current;
     if (!el) return;
     const w = el.clientWidth;
     const h = el.clientHeight;
+    if (w !== size.w || h !== size.h) setSize({ w, h });
     const proj = map.getProjection();
     const b = map.getBounds();
     const sw = b.getSouthWest();
@@ -147,30 +97,43 @@ export default function GemBlocksLayer({
     const lv = map.getLevel();
     setLevel(lv);
     const grades = gradesForLevel(lv);
-    const out: Mark[] = [];
+    const outMarks: Mark[] = [];
+    const outShapes: Shape[] = [];
     const centers = new Map<string, { x: number; y: number }>();
     for (const block of data.blocks) {
-      if (block.id === selId) continue; // 선택된 블록은 카드가 대신한다
-      if (!grades.has(block.grade)) continue;
-      if (block.lat < sw.getLat() - 0.003 || block.lat > ne.getLat() + 0.003) continue;
-      if (block.lng < sw.getLng() - 0.003 || block.lng > ne.getLng() + 0.003) continue;
+      const want = grades.has(block.grade) || block.id === selId;
+      if (!want) continue;
+      // 선택된 블록의 카드 자리는 화면 밖으로 나가도 계속 알아 둔다(조금만 움직여도 카드가 사라지지 않게)
       const p = proj.containerPointFromCoords(new sdk.maps.LatLng(block.lat, block.lng));
       const x = Math.round(p.x);
       const y = Math.round(p.y);
       centers.set(block.id, { x, y });
+      if (block.lat < sw.getLat() - 0.004 || block.lat > ne.getLat() + 0.004) continue;
+      if (block.lng < sw.getLng() - 0.004 || block.lng > ne.getLng() + 0.004) continue;
+      if (block.polygon.length >= 3) {
+        const pts = block.polygon
+          .map(([lat, lng]) => {
+            const q = proj.containerPointFromCoords(new sdk.maps.LatLng(lat, lng));
+            return `${Math.round(q.x)},${Math.round(q.y)}`;
+          })
+          .join(" ");
+        outShapes.push({ block, points: pts, x, y });
+      }
+      if (block.id === selId) continue; // 선택된 블록은 카드가 대신한다
       if (x < -40 || y < -40 || x > w + 40 || y > h + 40) continue;
-      out.push({ block, x, y });
+      outMarks.push({ block, x, y });
     }
     centersRef.current = centers;
-    out.sort((a, b2) => b2.block.score - a.block.score);
+    outMarks.sort((a, b2) => b2.block.score - a.block.score);
     const kept: Mark[] = [];
-    for (const m of out) {
+    for (const m of outMarks) {
       if (kept.length >= MAX_MARKS) break;
       if (kept.some((k) => Math.hypot(k.x - m.x, k.y - m.y) < MIN_GAP_PX)) continue;
       kept.push(m);
     }
     setMarks(kept);
-  }, [data, map, sdk, selId]);
+    setShapes(outShapes);
+  }, [data, map, sdk, selId, size.w, size.h]);
 
   useEffect(() => {
     if (!data) return;
@@ -214,19 +177,43 @@ export default function GemBlocksLayer({
 
   const selectedBlock = selId ? blockByIdRef.current.get(selId) ?? null : null;
   const anchor = selectedBlock
-    ? centersRef.current.get(selectedBlock.id) ??
-      (() => {
-        try {
-          const p = map.getProjection().containerPointFromCoords(new sdk.maps.LatLng(selectedBlock.lat, selectedBlock.lng));
-          return { x: Math.round(p.x), y: Math.round(p.y) };
-        } catch {
-          return null;
-        }
-      })()
+    ? centersRef.current.get(selectedBlock.id) ?? null
     : null;
 
   return (
     <div ref={wrapRef} className="pointer-events-none absolute inset-0 z-[97]" data-testid="gem-layer">
+      {/* ── 경계 폴리곤 — SVG 로 직접 그린다(카카오 폴리곤은 앱 구역 캔버스에 가린다) ── */}
+      <svg
+        className="pointer-events-none absolute inset-0"
+        width={size.w || "100%"}
+        height={size.h || "100%"}
+        aria-hidden
+        data-testid="gem-shapes"
+      >
+        {shapes.map((s) => {
+          const active = s.block.id === selId;
+          const color = GEM_GRADE_COLOR[s.block.grade];
+          return (
+            <polygon
+              key={s.block.id}
+              points={s.points}
+              data-gem-id={s.block.id}
+              fill={color}
+              fillOpacity={active ? 0.34 : s.block.grade === "S" ? 0.17 : 0.12}
+              stroke={color}
+              strokeWidth={active ? 3 : 1.8}
+              strokeDasharray={active ? "0" : "7 5"}
+              strokeLinejoin="round"
+              style={{ pointerEvents: "auto", cursor: "pointer" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelId(s.block.id);
+              }}
+            />
+          );
+        })}
+      </svg>
+
       {/* 배지 */}
       {marks.map((m) => (
         <button
@@ -334,7 +321,7 @@ export default function GemBlocksLayer({
                 <div className="flex flex-wrap gap-1">
                   {selectedBlock.zonesNear.map((z) => (
                     <button
-                      key={z.name + z.dist}
+                      key={z.id + z.dist}
                       type="button"
                       onClick={() => z.id && onOpenZone?.(z.id)}
                       className="rounded-full border border-slate-200 bg-white px-1.5 py-[1px] text-[9.5px] font-semibold text-slate-600 hover:border-brand/40 hover:text-brand"
@@ -363,27 +350,23 @@ export default function GemBlocksLayer({
         );
       })()}
 
-      {/* 범례 — 켜져 있는 동안만 */}
+      {/* 범례 — 켜져 있는 동안만. 왼쪽 아래 구역 범례와 겹치지 않게 위쪽 가운데에 둔다 */}
       {data && (
         <div
           data-testid="gem-legend"
-          className="pointer-events-auto absolute bottom-2 left-2 rounded-lg border border-amber-200 bg-white/95 px-2.5 py-1.5 text-[10px] leading-[1.5] text-slate-600 shadow-md md:bottom-2"
+          className="pointer-events-auto absolute left-1/2 top-2 -translate-x-1/2 rounded-lg border border-amber-200 bg-white/95 px-2.5 py-1 text-[10px] leading-[1.5] text-slate-600 shadow-md"
         >
-          <div className="flex items-center gap-1.5 font-bold text-amber-800">
+          <span className="flex items-center gap-1.5 font-bold text-amber-800">
             <span aria-hidden>💎</span> 원석 블록 {data.summary.total}곳
             <span className="font-normal text-slate-500">
-              (S {data.blocks.filter((b) => b.grade === "S").length} · A {data.blocks.filter((b) => b.grade === "A").length})
+              S {data.blocks.filter((b) => b.grade === "S").length} · A {data.blocks.filter((b) => b.grade === "A").length} ·{" "}
+              {level}단계 {marks.length}개
             </span>
-          </div>
-          <div className="mt-0.5 text-slate-500">
-            정비구역 아닌 노후 저층지 · 현재 {level}단계 {marks.length}개 표시
-          </div>
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-slate-400">경계는 추정 · 고시 아님</span>
+            <span className="font-normal text-slate-400">경계는 추정 · 고시 아님</span>
             <button type="button" onClick={onCloseLayer} className="font-semibold text-amber-700 hover:underline">
               끄기
             </button>
-          </div>
+          </span>
         </div>
       )}
 
