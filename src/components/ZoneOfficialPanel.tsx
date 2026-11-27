@@ -178,6 +178,12 @@ export default function ZoneOfficialPanel({
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3 text-slate-600">
         <h3 className="mb-1.5 text-xs font-bold text-slate-700">{boundaryMissing ? "경계·사업 정보" : "상세 데이터"}</h3>
         {zone.note && <p className="text-[11px] leading-relaxed">{zone.note}</p>}
+        {/* 경계를 어떤 도면에서 옮겼는지 — 고시 지형도면 정합·필지 재작도 구역에서 근거를 밝힌다 */}
+        {zone.boundaryNote && (
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            <span className="font-semibold text-slate-600">경계 근거</span> {zone.boundaryNote}
+          </p>
+        )}
         {zone.nameNote && zone.nameNote !== zone.note && (
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">이름 근거: {zone.nameNote}</p>
         )}
