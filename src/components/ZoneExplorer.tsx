@@ -48,6 +48,7 @@ import type {
   AdminZoneShape,
   DistrictStat,
   JibunPin,
+  MyListingPin,
   StationPin,
   TxMapPin,
 } from "@/components/map/props";
@@ -67,7 +68,7 @@ import {
   listingCountsByZoneId,
   listingMatchesZone,
 } from "@/lib/custom-listings";
-import { MY_LISTINGS, MY_LISTINGS_COUNT, MY_LISTINGS_AS_OF, MY_LISTING_ZONE_IDS } from "@/lib/my-listings";
+import { MY_LISTINGS, MY_LISTINGS_AS_OF, isMyListing, myPinFromListing } from "@/lib/my-listings";
 // 지도 위 `🏠 매물 N` 배지 노출 스위치 — 지금은 초기 화면에서 숨김(마이페이지에서 되살린다)
 import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
@@ -621,20 +622,46 @@ export default function ZoneExplorer() {
   const listingZoneIds = useMemo(() => new Set(Object.keys(listingCounts)), [listingCounts]);
 
   // ── 내 매물만 보기 ────────────────────────────────────────────────────────
-  //   · 지도에 남길 구역: `my-listings.json` 의 zoneId (좌표·매물설명으로 맞춘 정비구역 19곳)
-  //   · 핀: 내 매물 63건 전체(구역 밖 포함) — 좌표는 카카오 지오코딩
-  const myZoneIds = MY_LISTING_ZONE_IDS;
+  //   · 핀: 정적 `my-listings.json`(부동산포스 63건) + **`/api/listings` 공용 DB·이 브라우저에서
+  //     등록한 매물**까지 — `/register` 로 방금 올린 매물도 「내 매물만 보기」에서 바로 보여야 한다
+  //     (2026-11-27 제보: 등록해도 63건만 떠서 새 매물이 지도에 안 나왔다).
+  //   · 지도에 남길 구역: 그 핀들의 zoneId (좌표·매물설명으로 맞춘 정비구역 + 새로 등록한 구역)
+  /** 구역 id → 중심 좌표 — 주소 좌표가 없는 등록 매물의 핀 자리로 쓴다 */
+  const zoneCenterById = useMemo(() => {
+    const m = new Map<string, [number, number]>();
+    for (const z of zones) if (z.center) m.set(z.id, z.center);
+    for (const z of seoulZones) if (z.center) m.set(z.id, z.center);
+    return m;
+  }, [zones, seoulZones]);
+  const myListings = useMemo<MyListingPin[]>(() => {
+    const out: MyListingPin[] = [...MY_LISTINGS];
+    const seen = new Set(out.map((p) => p.id));
+    // 부동산포스 매물과 같은 건으로 표시된 검증 매물(duplicateOf)은 핀을 두 번 찍지 않는다
+    const dupOf = new Set(out.map((p) => p.duplicateOf).filter((id): id is string => !!id));
+    for (const l of listings) {
+      if (seen.has(l.id) || dupOf.has(l.id) || !isMyListing(l)) continue;
+      const pin = myPinFromListing(l, zoneCenterById.get(l.zoneId) ?? null);
+      if (!pin) continue;
+      seen.add(pin.id);
+      out.push(pin);
+    }
+    return out;
+  }, [listings, zoneCenterById]);
+  const myZoneIds = useMemo(
+    () => new Set(myListings.map((p) => p.zoneId).filter((id): id is string => !!id)),
+    [myListings]
+  );
   /** 내 매물 구성 — 패널 요약(거래유형·자치구) */
   const myByDeal = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const p of MY_LISTINGS) m[p.dealType] = (m[p.dealType] ?? 0) + 1;
+    for (const p of myListings) m[p.dealType] = (m[p.dealType] ?? 0) + 1;
     return m;
-  }, []);
+  }, [myListings]);
   const myByGu = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const p of MY_LISTINGS) m[p.gu] = (m[p.gu] ?? 0) + 1;
+    for (const p of myListings) m[p.gu] = (m[p.gu] ?? 0) + 1;
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
-  }, []);
+  }, [myListings]);
 
   /** 「내 매물만 보기」 토글 — 켜면 서울 전체로 넓히고, 끄면 기존 지도로 즉시 돌아간다 */
   function toggleMyOnly() {
@@ -1785,7 +1812,7 @@ export default function ZoneExplorer() {
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
           listingCounts={SHOW_MAP_LISTING_BADGES ? listingCounts : undefined}
-          myPins={MY_LISTINGS}
+          myPins={myListings}
           myPinsOn={myOnly}
           onToggleMyPins={toggleMyOnly}
           fitSeoulRequest={seoulFitRequest}
@@ -2521,7 +2548,7 @@ export default function ZoneExplorer() {
               <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
                 <span className="mr-1 text-[11px] font-semibold text-slate-500">매물 조건</span>
                 <Chip active={myOnly} onClick={toggleMyOnly}>
-                  <span data-testid="filter-my-only">내 매물만 보기 {MY_LISTINGS_COUNT}</span>
+                  <span data-testid="filter-my-only">내 매물만 보기 {myListings.length}</span>
                 </Chip>
                 <Chip
                   active={listingsOnly}
@@ -2537,7 +2564,7 @@ export default function ZoneExplorer() {
                 </Chip>
                 <span className="text-[10px] leading-tight text-slate-400">
                   {myOnly
-                    ? `내 매물 ${MY_LISTINGS_COUNT}건 핀 · 정비구역 ${myZoneIds.size}곳만 표시`
+                    ? `내 매물 ${myListings.length}건 핀 · 정비구역 ${myZoneIds.size}곳만 표시`
                     : SHOW_MAP_LISTING_BADGES
                       ? `${filteredListings.length}건 매물 · 지도에 매물 배지`
                       : `${filteredListings.length}건 매물 · 구역 상세에서 확인`}
@@ -2788,15 +2815,19 @@ export default function ZoneExplorer() {
             {myOnly && !selected && !selectedSeoul && (
               <div data-testid="my-listings-summary" className="mb-3 space-y-1.5 rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <b className="text-sm font-bold text-amber-950">내 매물 {MY_LISTINGS_COUNT}건</b>
-                  <span className="text-[10px] text-amber-800/80">부동산포스 · {MY_LISTINGS_AS_OF} 기준</span>
+                  <b className="text-sm font-bold text-amber-950">내 매물 {myListings.length}건</b>
+                  <span className="text-[10px] text-amber-800/80">
+                    {myListings.length > MY_LISTINGS.length
+                      ? `부동산포스 ${MY_LISTINGS.length}건 + 등록 ${myListings.length - MY_LISTINGS.length}건`
+                      : `부동산포스 · ${MY_LISTINGS_AS_OF} 기준`}
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-amber-900">
                   {["매매", "전세", "월세"].map(
                     (k) => myByDeal[k] && <span key={k}>{k} {myByDeal[k]}</span>
                   )}
                   <span className="text-amber-700/60">·</span>
-                  <span>정비구역 안 {MY_LISTINGS.filter((p) => p.zoneId).length}건 / 구역 밖 {MY_LISTINGS.filter((p) => !p.zoneId).length}건</span>
+                  <span>정비구역 안 {myListings.filter((p) => p.zoneId).length}건 / 구역 밖 {myListings.filter((p) => !p.zoneId).length}건</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {myByGu.map(([gu, n]) => (

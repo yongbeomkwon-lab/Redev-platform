@@ -11,6 +11,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import raw from "@/data/my-listings.json";
 import type { MyListingPin } from "@/components/map/props";
+import type { Listing } from "@/lib/types";
+import { listingTradeType } from "@/lib/types";
+import { formatMan } from "@/lib/format";
+import { eokShort, toPyeong } from "@/lib/molit";
 
 type RawFile = {
   metadata: {
@@ -95,6 +99,62 @@ export function isMyListing(l: { id?: string; brokerPhone?: string }): boolean {
   if (l.id?.startsWith(MY_LISTING_ID_PREFIX)) return true;
   const digits = (l.brokerPhone ?? "").replace(/\D/g, "");
   return digits !== "" && digits === PHONE_DIGITS;
+}
+
+/**
+ * `/register` 로 등록한 매물(공용 DB·이 브라우저 저장분)을 **지도 핀**으로 바꾼다.
+ *   · 2026-11-27 제보: 등록해도 「내 매물만 보기」에 정적 63건만 떠서 새 매물이 지도에 안 나왔다.
+ *     그래서 등록 매물을 같은 핀 모양(가격표·주소·면적)으로 바꿔 63건 뒤에 함께 찍는다.
+ *   · 좌표는 매물에 저장된 주소 좌표(lat·lng)를 먼저 쓰고, 없으면 소속 구역 중심을 쓴다
+ *     (주소 없이 구역만 고른 매물도 지도에서 사라지지 않게).
+ *   · `rfineNo`·`detailUrl` 은 부동산포스 전용이라 비워 둔다 — 핀 카드가 '직접 등록'으로 보여 준다.
+ */
+export function myPinFromListing(l: Listing, fallbackCenter?: [number, number] | null): MyListingPin | null {
+  const lat = typeof l.lat === "number" && Number.isFinite(l.lat) ? l.lat : fallbackCenter?.[0];
+  const lng = typeof l.lng === "number" && Number.isFinite(l.lng) ? l.lng : fallbackCenter?.[1];
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
+
+  const trade = listingTradeType(l);
+  const priceLabel =
+    trade === "전세"
+      ? `전 ${eokShort(l.salePrice)}`
+      : trade === "월세"
+        ? `월 ${eokShort(l.salePrice)}${l.monthlyRent && l.monthlyRent > 0 ? `/${l.monthlyRent.toLocaleString()}` : ""}`
+        : `매 ${eokShort(l.salePrice)}`;
+  const priceText =
+    trade === "전세"
+      ? `전세 ${formatMan(l.salePrice)}`
+      : trade === "월세"
+        ? `보증금 ${formatMan(l.salePrice)} / 월 ${formatMan(l.monthlyRent ?? 0)}`
+        : `매매가 ${formatMan(l.salePrice)}`;
+  const area = typeof l.exclusiveAreaSqm === "number" && l.exclusiveAreaSqm > 0 ? l.exclusiveAreaSqm : null;
+  const areaLabel = area !== null ? `전 ${area}㎡·${toPyeong(area)}평` : "";
+
+  return {
+    id: l.id,
+    rfineNo: "",
+    zoneId: l.zoneId || null,
+    zoneName: l.zoneName ?? null,
+    gu: l.gu ?? "",
+    dong: "",
+    jibun: "",
+    address: (l.address ?? "").trim(),
+    jibunAddress: (l.addressRoad ?? l.address ?? "").trim(),
+    buildingName: (l.buildingName ?? "").trim(),
+    propertyType: (l.propertyType ?? l.unitType ?? "매물").trim(),
+    dealType: trade,
+    priceLabel,
+    priceText,
+    areaLabel,
+    floor: (l.floor ?? "").trim(),
+    feature: (l.description ?? "").trim(),
+    detailUrl: "",
+    expiresAt: "",
+    geoPrecision: typeof l.lat === "number" && typeof l.lng === "number" ? "주소" : "구역중심",
+    duplicateOf: null,
+    lat,
+    lng,
+  };
 }
 
 /** 구역 id 로 내 매물 핀을 고른다(구역 패널에서 쓸 때) */
