@@ -103,6 +103,22 @@ const onlyDigits = (v: string) => v.replace(/[^\d]/g, "");
 /** 평수 표기 — ㎡ 입력 옆에 같이 보여준다 */
 const pyeong = (sqm: number) => (sqm > 0 ? (sqm / 3.305785).toFixed(1) : "");
 
+/**
+ * 건축물대장 API 오류 → 사람이 읽을 문장.
+ *   · 국토부는 일시 장애(SERVICETIMEOUT_ERROR)·일일 한도를 원문 JSON 으로 돌려준다 — 그대로 보여 주면
+ *     중개사가 읽을 수 없다. 원인만 골라 짧게 안내하고, 해결책(다시 조회·직접 입력)을 붙인다.
+ */
+function ledgerErrorText(message?: string): string {
+  const m = message ?? "";
+  if (/SERVICETIMEOUT|서비스 연결실패|TIMEOUT/i.test(m)) {
+    return "국토부 건축물대장 서비스가 잠시 응답하지 않습니다 — '다시 조회'를 눌러 보거나 아래에 직접 입력하세요.";
+  }
+  if (/LIMIT|한도/i.test(m)) {
+    return "국토부 건축물대장 일일 호출 한도에 걸렸습니다 — 내일 다시 조회하거나 직접 입력하세요.";
+  }
+  return m || "건축물대장 조회에 실패했습니다 — 직접 입력하세요.";
+}
+
 /** 필지 API 실패 이유 → 사람이 읽을 문장(서버 환경변수 이름 같은 내부 사정은 감춘다) */
 function parcelErrorText(error?: string, detail?: string): string {
   const all = `${error ?? ""} ${detail ?? ""}`;
@@ -623,7 +639,7 @@ export default function RegisterPage() {
         clearAutoFilledValues();
         setLedgerState({
           status: "error",
-          message: json?.detail ?? json?.error ?? "건축물대장 조회에 실패했습니다 — 직접 입력하세요.",
+          message: ledgerErrorText(json?.detail ?? json?.error),
         });
       }
     } catch {
