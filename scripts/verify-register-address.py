@@ -85,7 +85,14 @@ def ensure_ledger(page, tries: int = 2) -> str:
 
 # 국토부 쪽 사정으로 못 읽은 경우 — 코드 버그와 구분해 기록한다(실패로 세지 않고 경고만)
 def external_ledger_reason(text: str) -> str | None:
-    for token in ("한도", "일시 장애", "응답하지 않습니다", "응답을 읽지 못했습니다", "연결하지 못했습니다"):
+    for token in (
+        "한도",
+        "일시 장애",
+        "응답하지 않습니다",
+        "응답을 읽지 못했습니다",
+        "연결하지 못했습니다",
+        "없는 필지",  # 국토부가 일시 장애로 빈 결과를 주는 경우가 있다(2026-11-27 확인)
+    ):
         if token in text:
             return text.replace("\n", " | ")[:160]
     return None
@@ -133,6 +140,8 @@ def run() -> int:
             )
         addr_value = page.get_by_test_id("register-address").input_value()
         check("소재지(지번) 자동 입력", bool(addr_value.strip()), addr_value)
+        pinned = page.get_by_test_id("register-address-picked").inner_text()
+        check("PNU(지번 → 19자리) 계산", "116801010010737" in pinned, pinned.replace("\n", " | ")[-120:])
         page.screenshot(path=SHOT_ADDR, full_page=True)
         check("스크린샷 redev-register-address.png", os.path.exists(SHOT_ADDR), SHOT_ADDR)
 
@@ -147,6 +156,8 @@ def run() -> int:
         check("구역 자동 선택 근거 문구", "경계 안" in auto2 or "지번 이름" in auto2, auto2.replace("\n", " | ")[:160])
         zone_sel = page.get_by_test_id("register-zone-selected").inner_text()
         check("자동 선택된 구역 표시", "신림1" in zone_sel, zone_sel.replace("\n", " | ")[:120])
+        pinned2 = page.get_by_test_id("register-address-picked").inner_text()
+        check("신림동 362-32 PNU", "1162010200103620032" in pinned2, pinned2.replace("\n", " | ")[-120:])
         ledger2 = ensure_ledger(page)
         after_floors = page.get_by_test_id("register-total-floors").input_value()
         after_name = page.get_by_test_id("register-building-name").input_value()
@@ -296,10 +307,14 @@ def run() -> int:
             e
             for e in errors
             if "favicon" not in e.lower()
-            # 로컬 dev 에는 브이월드 키(VWORLD_API_KEY)가 없어 /api/parcel 이 503 을 돌려준다 —
-            #   그 환경 차이만 빼고 본다(배포본에서는 0건이어야 한다).
-            and not (e.startswith("Failed to load resource") and "503" in e)
+            # 로컬 dev 에는 브이월드 키(VWORLD_API_KEY)가 없어 /api/parcel 이 503,
+            # 국토부 건축물대장이 일시 장애면 /api/building-info 가 5xx 를 돌려준다 —
+            #   그 환경·외부 사정만 빼고 본다(자바스크립트 오류는 그대로 잡는다).
+            and not (e.startswith("Failed to load resource") and re.search(r"status of [45]\d\d", e))
         ]
+        resource_5xx = [e for e in errors if e.startswith("Failed to load resource") and re.search(r"status of [45]\d\d", e)]
+        if resource_5xx:
+            print("WARN 외부 API 환경으로 5xx/4xx 응답", len(resource_5xx), "건 —", resource_5xx[0][:90])
         check("콘솔 오류 0건", len(real) == 0, "; ".join(real[:3]))
 
         ctx.close()

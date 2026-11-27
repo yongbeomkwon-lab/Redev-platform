@@ -288,9 +288,14 @@ export async function GET(request: Request) {
   };
 
   if (cache.size >= CACHE_MAX) cache.clear();
-  cache.set(pnu, { at: Date.now(), value });
+  // 대장이 없다는 응답은 캐시하지 않는다 — 국토부 쪽 일시 장애가 '대장 없음'으로 보이는 경우가 있어
+  //   (2026-11-27 확인) 짧게 기억해 두면 그 사이 등록한 매물이 빈 값으로 남는다. 다시 누르면 다시 묻도록 둔다.
+  const cacheable = buildings.length > 0;
+  if (cacheable) cache.set(pnu, { at: Date.now(), value });
 
   return NextResponse.json(value, {
-    headers: { "Cache-Control": "public, s-maxage=43200, stale-while-revalidate=86400" },
+    headers: cacheable
+      ? { "Cache-Control": "public, s-maxage=43200, stale-while-revalidate=86400" }
+      : { "Cache-Control": "no-store" },
   });
 }
