@@ -307,6 +307,7 @@ function toBuilding(pnu: string, item: RawItem, floors: LedgerFloor[]): LedgerBu
     structure: strctCdNm === "기타구조" && etcStrct ? etcStrct : strctCdNm || etcStrct,
     group: classifyStructure(strctCdNm, etcStrct),
     mainPurps: mainPurpsCdNm || etcPurps,
+    etcPurps,
     residential,
     year: yearFromUseAprDay(useAprDay),
     useAprDay,

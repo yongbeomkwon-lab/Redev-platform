@@ -14,6 +14,9 @@
 //   **조례 기준 호수밀도**, **추정 조합원(토지등소유자) 수**, 추정 대지지분을 낸다.
 //   · 추정 조합원 = 공동주택 세대수 + 단독·다가구 필지당 1명 + 비주거 필지당 1명(집합건물은 호수).
 //     세입자 가구수(fmlyCnt)는 조합원이 아니어서 세지 않는다.
+//   · 「유형 비율 (단독·근생 vs 빌라)」(2026-11-27) — 표제부 주용도로 주건축물을
+//     빌라(다세대·연립) / 단독·다가구 / 근생·비주거 / (있으면) 아파트로 나눠 동수·비율·세대(가구)를
+//     컬러 바와 카드로 보여 주고, "단독·다가구+근생 vs 빌라"를 한 줄로 맞세운다(아파트는 비교에서 뺀다).
 //   · 노후도 요건은 재개발뷰식 가로 눈금바 대신 **모아타운 50%↑ / 신통기획 60%↑ 두 판정 타일**
 //     (원형 게이지 + 충족/미달 + 초과·부족 %p)로 보여 주고, 그 아래에 구조별 기여
 //     (철콘 30년↑ · 비철콘 20년↑ · 유효 동)를 한 줄로 붙인다 — 리디브 고유 표기.
@@ -45,6 +48,8 @@ import {
   type PreciseChunkResponse,
   type PreciseChunkStats,
   type PreciseSummary,
+  type ZoneTypeBreakdown,
+  type ZoneTypeBucket,
 } from "@/lib/zone-ledger";
 import ZoneAppraisalRank from "@/components/ZoneAppraisalRank";
 
@@ -114,6 +119,106 @@ function Skeleton() {
           <div className="mt-1 h-2 w-20 animate-pulse rounded bg-slate-100" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 유형 비율 (단독·근생 vs 빌라) — 건축물대장 표제부 주용도로 나눈 주건축물 동수 구성.
+ *   · 컬러 바 위에 빌라·단독·다가구·근생·비주거·(아파트) 비중을 그리고,
+ *     아래 카드에 동수·비율(%)·세대(가구) 또는 면적을 적는다.
+ *   · 맨 아래 한 줄이 이 패널의 핵심 — 「단독·다가구 N동 (X%) · 근생/비주거 N동 (X%) vs 빌라 N동 (X%)」.
+ *     아파트가 있는 구역은 아파트를 빼고 맞세운다(재개발 검토 구도와 같다).
+ */
+function TypeRatio({ breakdown }: { breakdown: ZoneTypeBreakdown }) {
+  const bd = breakdown;
+  if (bd.total <= 0) return null;
+  const pct = (v: number) => `${v.toFixed(1)}%`;
+  const detail = (b: ZoneTypeBucket, residential: boolean) =>
+    residential && b.units > 0 ? `${n(b.units)}세대·가구` : `${man(b.floorArea)}`;
+  const cards: {
+    key: string;
+    label: string;
+    bucket: ZoneTypeBucket;
+    dot: string;
+    text: string;
+    bar: string;
+    residential: boolean;
+  }[] = [
+    { key: "villa", label: "빌라(다세대·연립)", bucket: bd.villa, dot: "bg-sky-500", text: "text-sky-700", bar: "bg-sky-500", residential: true },
+    { key: "detached", label: "단독·다가구", bucket: bd.detached, dot: "bg-amber-500", text: "text-amber-700", bar: "bg-amber-500", residential: true },
+    { key: "commercial", label: "근생·비주거", bucket: bd.commercial, dot: "bg-violet-400", text: "text-violet-700", bar: "bg-violet-400", residential: false },
+  ];
+  if (bd.apartment.dong > 0) {
+    cards.push({ key: "apartment", label: "아파트", bucket: bd.apartment, dot: "bg-rose-400", text: "text-rose-700", bar: "bg-rose-400", residential: true });
+  }
+
+  return (
+    <div className="mt-2 rounded-xl bg-white/70 px-2 py-1.5 ring-1 ring-slate-200" data-testid="zone-precise-type-ratio">
+      <div className="mb-1 flex items-baseline justify-between gap-1">
+        <span className="text-[10px] font-bold text-slate-700">유형 비율 (단독·근생 vs 빌라)</span>
+        <span className="whitespace-nowrap text-[10px] font-medium text-slate-400">주건축물 {n(bd.total)}동</span>
+      </div>
+
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-200" data-testid="zone-precise-type-bar">
+        {cards.map((c) =>
+          c.bucket.dong > 0 ? (
+            <span
+              key={c.key}
+              className={`h-full ${c.bar}`}
+              style={{ width: `${(c.bucket.dong / bd.total) * 100}%` }}
+              title={`${c.label} ${n(c.bucket.dong)}동 (${pct(c.bucket.pct)})`}
+              data-testid={`zone-precise-type-seg-${c.key}`}
+            />
+          ) : null
+        )}
+      </div>
+
+      <div className="mt-1 grid grid-cols-2 gap-1">
+        {cards.map((c) => (
+          <div
+            key={c.key}
+            className="min-w-0 rounded-lg bg-slate-50 px-2 py-1"
+            data-testid={`zone-precise-type-${c.key}`}
+          >
+            <div className="flex items-center gap-1">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${c.dot}`} aria-hidden />
+              <span className={`truncate text-[9.5px] font-semibold ${c.text}`}>{c.label}</span>
+            </div>
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-sm font-bold tabular-nums leading-tight text-slate-900">
+                {n(c.bucket.dong)}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-600">동</span>
+              <span className="ml-auto text-[10px] font-bold tabular-nums text-slate-500">
+                {pct(c.bucket.pct)}
+              </span>
+            </div>
+            <div className="truncate text-[9.5px] text-slate-400">{detail(c.bucket, c.residential)}</div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-1 break-keep text-[10px] leading-snug text-slate-600" data-testid="zone-precise-type-compare">
+        <span className="font-semibold text-amber-700">단독·다가구 {n(bd.detached.dong)}동</span> ·{" "}
+        <span className="font-semibold text-violet-700">근생/비주거 {n(bd.commercial.dong)}동</span>{" "}
+        <span className="font-bold text-slate-700">
+          = {n(bd.compare.nonVillaDong)}동 ({pct(bd.compare.nonVillaPct)})
+        </span>{" "}
+        <span className="font-semibold text-slate-500">vs</span>{" "}
+        <span className="font-bold text-sky-700">
+          빌라 {n(bd.villa.dong)}동 ({pct(bd.compare.villaPct)})
+        </span>{" "}
+        <span className="text-slate-400">
+          — {bd.apartment.dong > 0 ? `아파트 ${n(bd.apartment.dong)}동 뺀 ` : ""}
+          {n(bd.compare.base)}동 기준
+        </span>
+      </p>
+
+      <p className="mt-0.5 break-keep text-[9.5px] leading-snug text-slate-400" data-testid="zone-precise-type-note">
+        주거 {n(bd.residential.dong)}동 ({pct(bd.residential.pct)}) · 비주거 {n(bd.nonResidential.dong)}동 (
+        {pct(bd.nonResidential.pct)}) — 표제부 주용도(mainPurpsCdNm·etcPurps) 기준 동수이고, 부속건축물은 뺐습니다.
+      </p>
     </div>
   );
 }
@@ -292,7 +397,7 @@ function findZoneByShape(
 const CHUNK = 50;
 /** 동시에 보내는 청크 수 — 2로 두면 1,400필지 구역도 60초 안에 끝난다 */
 const PARALLEL = 2;
-const CACHE_PREFIX = "redev-precise:v4:";
+const CACHE_PREFIX = "redev-precise:v5:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type PreciseState =
@@ -905,37 +1010,10 @@ export default function ZoneVitalStats({
               </p>
             </div>
 
-            {/* 유형별 현황 — 조합원 산정에 쓴 유형 비율 */}
-            <div className="mt-1.5" data-testid="zone-precise-types">
-              <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                <span
-                  className="h-full bg-sky-500"
-                  style={{
-                    width: `${(preciseResult.ownerHouseholds / Math.max(1, preciseResult.owners)) * 100}%`,
-                  }}
-                  aria-hidden
-                />
-                <span
-                  className="h-full bg-amber-500"
-                  style={{
-                    width: `${(preciseResult.ownerDetached / Math.max(1, preciseResult.owners)) * 100}%`,
-                  }}
-                  aria-hidden
-                />
-                <span
-                  className="h-full bg-violet-400"
-                  style={{
-                    width: `${(preciseResult.ownerNonResidential / Math.max(1, preciseResult.owners)) * 100}%`,
-                  }}
-                  aria-hidden
-                />
-              </div>
-              <p className="mt-1 break-keep text-[10px] leading-snug text-slate-600">
-                <span className="font-semibold text-sky-700">공동주택 {n(preciseResult.ownerHouseholds)}세대</span> ·{" "}
-                <span className="font-semibold text-amber-700">단독/다가구 {n(preciseResult.ownerDetached)}동</span> ·{" "}
-                <span className="font-semibold text-violet-700">근린/기타 {n(preciseResult.ownerNonResidential)}</span>
-              </p>
-            </div>
+            {/* 유형 비율 (단독·근생 vs 빌라) — 표제부 주용도 기준 동수 구성 */}
+            {preciseResult.typeBreakdown && (
+              <TypeRatio breakdown={preciseResult.typeBreakdown} />
+            )}
 
             <div className="mt-1 flex flex-wrap gap-1">
               <Req ok={preciseResult.areaSqm >= 10000} text="면적 1만㎡↑" note="필수" />

@@ -28,6 +28,11 @@
 //       대장 `platArea`(대지면적)는 한 필지에 동이 여럿이면 같은 값이 여러 번 오므로
 //       **필지(PNU) 단위로 한 번만** 더한다(동별 중복 합산 금지).
 //       `platArea` 가 0·빈 값인 필지는 연속지적도 필지면적이 있으면 그것으로 보완한다.
+//   · **유형 비율** — 표제부 주용도(`mainPurpsCdNm`·`etcPurps`)로 주건축물을
+//       빌라(다세대·연립·도시형생활주택) / 단독·다가구 / 근생·비주거 / 아파트 네 버킷으로 나눠
+//       동수·비율·세대(가구)·연면적을 낸다. 표제부는 아파트·다세대·연립을 모두 '공동주택'으로 주므로
+//       `etcPurps` 의 갈래까지 읽어 가른다. 아파트가 없는 구역은 세 버킷만 보여 준다.
+//       화면의 「유형 비율 (단독·근생 vs 빌라)」가 이 값을 쓴다.
 //   · **추정 조합원(토지등소유자) 수** — 정비사업 조합원은 토지등소유자다.
 //       ① 공동주택(아파트·연립·다세대) — 구분소유이므로 표제부 세대수(hhldCnt)를 그대로
 //          합산한다(0이면 1명으로 보정).
@@ -77,6 +82,8 @@ export type LedgerBuilding = {
   group: StructureGroup | null;
   /** 주용도(공동주택·단독주택·제2종근린생활시설 등) */
   mainPurps: string;
+  /** 그 밖의 용도 설명(etcPurps) — 공동주택의 실제 갈래(아파트·다세대·연립)가 여기 적힌다 */
+  etcPurps: string;
   /** 주거용인지 — 세대수 최소 보정(1가구) 판단에만 쓴다 */
   residential: boolean;
   /** 사용승인 연도 — 미상이면 null */
@@ -108,6 +115,133 @@ export type LedgerBuilding = {
   /** 주용도 코드(01 단독 / 02 공동 …) — 공동주택 판별에 쓴다 */
   mainPurpsCd: string;
 };
+
+// ── 유형(주용도) 분류 ─────────────────────────────────────────────
+//   표제부 `mainPurpsCdNm` 은 아파트·다세대·연립을 모두 '공동주택'(코드 02000)으로 주고,
+//   실제 갈래는 `etcPurps` 에 적힌다 — 예: `공동주택(다세대주택)`, `다세대주택(8세대)`,
+//   `아파트`, `근린생활시설,다가구주택`. 그래서 코드·이름·설명을 함께 본다.
+
+/** 유형 버킷 키 — 빌라 / 단독·다가구 / 근생·비주거 / 아파트 */
+export type ZoneTypeKey = "villa" | "detached" | "commercial" | "apartment";
+
+/** 유형 한 버킷의 원자료 합계 */
+export type ZoneTypeTallyItem = {
+  /** 주건축물 동수(부속건축물 제외) */
+  dong: number;
+  /** 세대·가구 합(호수) — 비주거는 대개 0 */
+  units: number;
+  /** 연면적 합(㎡) */
+  floorArea: number;
+};
+
+/** 청크마다 더해 가는 유형별 원자료 */
+export type ZoneTypeTally = Record<ZoneTypeKey, ZoneTypeTallyItem>;
+
+/** 유형 한 버킷의 비율까지 낸 값 */
+export type ZoneTypeBucket = ZoneTypeTallyItem & { pct: number };
+
+/**
+ * 유형 비율 — 정밀 분석 화면의 「유형 비율 (단독·근생 vs 빌라)」.
+ *   · pct 는 주건축물 동수 대비 비율(%).
+ *   · compare 는 **아파트를 뺀** 저층 주거·근생 동수로 빌라와 단독·다가구(+근생)를 맞세운 값이다
+ *     (재개발 검토에서 보는 구도 — 아파트가 섞인 구역은 아파트를 빼고 본다).
+ */
+export type ZoneTypeBreakdown = {
+  /** 분류 기준 동수 — 주건축물 합계 */
+  total: number;
+  villa: ZoneTypeBucket;
+  detached: ZoneTypeBucket;
+  commercial: ZoneTypeBucket;
+  apartment: ZoneTypeBucket;
+  /** 주거(빌라+단독·다가구+아파트) 동수·비율 */
+  residential: { dong: number; pct: number };
+  /** 비주거(근생·업무·판매 등) 동수·비율 */
+  nonResidential: { dong: number; pct: number };
+  compare: {
+    /** 비교 모수 — 아파트를 뺀 동수 */
+    base: number;
+    /** 단독·다가구 + 근생·비주거 동수와 비율 */
+    nonVillaDong: number;
+    nonVillaPct: number;
+    /** 빌라(다세대·연립) 동수와 비율 */
+    villaDong: number;
+    villaPct: number;
+  };
+};
+
+export const EMPTY_TYPE_TALLY: ZoneTypeTally = {
+  villa: { dong: 0, units: 0, floorArea: 0 },
+  detached: { dong: 0, units: 0, floorArea: 0 },
+  commercial: { dong: 0, units: 0, floorArea: 0 },
+  apartment: { dong: 0, units: 0, floorArea: 0 },
+};
+
+/**
+ * 한 동의 유형 — **주용도 기준**이다(복합 건물의 근생 층은 주용도를 바꾸지 않는다).
+ *   · 코드 02(공동주택) → 이름에 '아파트'가 있으면 아파트, 그 밖(다세대·연립·도시형·기숙사)은 빌라.
+ *     표제부가 아파트·다세대·연립을 모두 '공동주택'으로 주므로 etcPurps 로 갈래를 가른다.
+ *   · 코드 01(단독주택) → 단독·다가구(다중주택·공관 포함).
+ *   · 그 밖 코드(03 제1종근생 … 15 숙박 등) → 근생·비주거.
+ *   · 코드가 비어 있으면 이름으로 판단하고, 그래도 모르면 주거 여부로 나눈다.
+ */
+export function classifyZoneType(b: LedgerBuilding): ZoneTypeKey {
+  const cd = (b.mainPurpsCd ?? "").trim();
+  const text = `${b.mainPurps ?? ""} ${b.etcPurps ?? ""} ${b.floors?.[0]?.use ?? ""}`;
+  if (/^02/.test(cd)) return /아파트/.test(text) ? "apartment" : "villa";
+  if (/^01/.test(cd)) return "detached";
+  if (cd) return "commercial";
+  if (/아파트/.test(text)) return "apartment";
+  if (/다세대|연립|도시형생활주택|공동주택|기숙사/.test(text)) return "villa";
+  if (/단독주택|다가구|다중주택|공관/.test(text)) return "detached";
+  return b.residential ? "detached" : "commercial";
+}
+
+/** 유형별 원자료에 한 동을 더한다 */
+export function addZoneType(tally: ZoneTypeTally, b: LedgerBuilding): ZoneTypeKey {
+  const key = classifyZoneType(b);
+  const item = tally[key];
+  item.dong += 1;
+  item.units += b.units > 0 ? b.units : 0;
+  item.floorArea += b.floorArea > 0 ? b.floorArea : 0;
+  return key;
+}
+
+/** 원자료 합계 → 비율까지 계산한 유형 비율 */
+export function toTypeBreakdown(tally: ZoneTypeTally, totalBuildings?: number): ZoneTypeBreakdown {
+  const sumDong =
+    tally.villa.dong + tally.detached.dong + tally.commercial.dong + tally.apartment.dong;
+  const total = Math.max(0, totalBuildings != null && totalBuildings > 0 ? totalBuildings : sumDong);
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const pctOf = (dong: number) => (total > 0 ? round1((dong / total) * 100) : 0);
+  const bucket = (item: ZoneTypeTallyItem): ZoneTypeBucket => ({
+    dong: item.dong,
+    pct: pctOf(item.dong),
+    units: item.units,
+    floorArea: Math.round(item.floorArea),
+  });
+
+  const residentialDong = tally.villa.dong + tally.detached.dong + tally.apartment.dong;
+  const base = Math.max(0, total - tally.apartment.dong);
+  const nonVillaDong = tally.detached.dong + tally.commercial.dong;
+  const share = (dong: number) => (base > 0 ? round1((dong / base) * 100) : 0);
+
+  return {
+    total,
+    villa: bucket(tally.villa),
+    detached: bucket(tally.detached),
+    commercial: bucket(tally.commercial),
+    apartment: bucket(tally.apartment),
+    residential: { dong: residentialDong, pct: pctOf(residentialDong) },
+    nonResidential: { dong: tally.commercial.dong, pct: pctOf(tally.commercial.dong) },
+    compare: {
+      base,
+      nonVillaDong,
+      nonVillaPct: share(nonVillaDong),
+      villaDong: tally.villa.dong,
+      villaPct: share(tally.villa.dong),
+    },
+  };
+}
 
 export type PreciseChunkStats = {
   /** 이번에 조회한 필지 수 */
@@ -176,6 +310,8 @@ export type PreciseChunkStats = {
   errors: number;
   /** 구조 분포(많은 순, 최대 6개) */
   structures: { name: string; count: number }[];
+  /** 주용도 유형별 동수·세대/가구·연면적 (청크 합산용 원자료) */
+  types: ZoneTypeTally;
 };
 
 export type PreciseSummary = PreciseChunkStats & {
@@ -197,6 +333,8 @@ export type PreciseSummary = PreciseChunkStats & {
   landShareOwnerSqm: number | null;
   /** 추정 조합원 1인당 대지지분(평) */
   landShareOwnerPyeong: number | null;
+  /** 유형 비율 — 빌라(다세대·연립) vs 단독·다가구 · 근생·비주거 · 아파트 */
+  typeBreakdown: ZoneTypeBreakdown;
 };
 
 /** POST /api/zone-stats/precise 응답 */
@@ -238,7 +376,18 @@ export const EMPTY_CHUNK: PreciseChunkStats = {
   ownerHhldAdjusted: 0,
   errors: 0,
   structures: [],
+  types: EMPTY_TYPE_TALLY,
 };
+
+/** 새 유형 원자료 — EMPTY_TYPE_TALLY 를 공유하지 않고 복사해 돌려준다(합산 중 변이 방지) */
+export function emptyTypeTally(): ZoneTypeTally {
+  return {
+    villa: { dong: 0, units: 0, floorArea: 0 },
+    detached: { dong: 0, units: 0, floorArea: 0 },
+    commercial: { dong: 0, units: 0, floorArea: 0 },
+    apartment: { dong: 0, units: 0, floorArea: 0 },
+  };
+}
 
 /** 1평 = 3.305785㎡ */
 export const PYEONG_SQM = 3.305785;
@@ -421,6 +570,7 @@ export function summarizePreciseBuildings(input: {
   const out: PreciseChunkStats = {
     ...EMPTY_CHUNK,
     structures: [],
+    types: emptyTypeTally(),
     parcels: input.parcels,
     ledgerParcels: input.ledgerParcels,
     missingParcels: Math.max(0, input.parcels - input.ledgerParcels),
@@ -438,6 +588,7 @@ export function summarizePreciseBuildings(input: {
     }
     out.buildings++;
     out.units += b.units;
+    addZoneType(out.types, b);
     if (b.minAdjusted) out.minUnitAdjusted++;
 
     // 추정 조합원(토지등소유자) — 공동주택은 세대수, 그 밖은 필지당 1명(집합건물은 호수)
@@ -516,15 +667,27 @@ export function summarizePreciseBuildings(input: {
 /** 여러 청크를 합쳐 지표를 낸다 — 구역 면적(㎡)은 호수밀도 분모 */
 export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear?: number): PreciseSummary {
   const year = nowYear ?? new Date().getFullYear();
-  const total: PreciseChunkStats = { ...EMPTY_CHUNK, structures: [] };
+  const total: PreciseChunkStats = { ...EMPTY_CHUNK, structures: [], types: emptyTypeTally() };
   const structureMap = new Map<string, number>();
 
   for (const c of chunks) {
     for (const key of Object.keys(EMPTY_CHUNK) as (keyof PreciseChunkStats)[]) {
-      if (key === "structures") continue;
+      if (key === "structures" || key === "types") continue;
       (total[key] as number) += (c[key] as number) ?? 0;
     }
     for (const s of c.structures ?? []) structureMap.set(s.name, (structureMap.get(s.name) ?? 0) + s.count);
+    // 유형 원자료 합산 — 옛 캐시(types 없음)는 건너뛴다
+    const t = c.types;
+    if (t) {
+      for (const key of Object.keys(total.types) as ZoneTypeKey[]) {
+        const dst = total.types[key];
+        const src = t[key];
+        if (!src) continue;
+        dst.dong += src.dong ?? 0;
+        dst.units += src.units ?? 0;
+        dst.floorArea += src.floorArea ?? 0;
+      }
+    }
   }
 
   total.structures = [...structureMap.entries()]
@@ -563,5 +726,6 @@ export function sumPrecise(chunks: PreciseChunkStats[], areaSqm: number, nowYear
     landSharePyeong,
     landShareOwnerSqm,
     landShareOwnerPyeong,
+    typeBreakdown: toTypeBreakdown(total.types, total.buildings),
   };
 }
