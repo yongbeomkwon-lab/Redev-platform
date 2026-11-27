@@ -50,7 +50,7 @@ export type StageKey =
   | "complete" // 준공·입주·사용승인
   | "restrict"; // 행위제한(건축허가 제한) — 사다리에 대응 칸이 없으면 무시한다
 
-export type StageFamily = "redev" | "rebuild" | "small" | "moa" | "doum" | "station";
+export type StageFamily = "redev" | "rebuild" | "small" | "moa" | "doum" | "station" | "jiju";
 
 type Step = { keys: StageKey[]; label: string };
 export type StageEvent = { k: StageKey; d?: string; ip?: boolean; note?: string };
@@ -128,6 +128,18 @@ const STATION: Step[] = [
   { keys: ["complete"], label: "준공·입주" },
 ];
 
+/** 지주택(지역주택조합·지구단위계획구역) — 정비구역이 아니라 지구단위계획으로 지정받아 추진한다.
+ *    조합원 모집 → 지구단위계획구역 지정 열람 → 결정·고시 → 조합설립인가 → 사업계획승인 → 착공 → 준공 */
+const JIJU: Step[] = [
+  { keys: ["prep", "restrict"], label: "추진준비·조합원 모집" },
+  { keys: ["notice", "plan"], label: "지구단위계획구역 지정 열람" },
+  { keys: ["district"], label: "지구단위계획 결정·구역 지정" },
+  { keys: ["union"], label: "조합설립인가" },
+  { keys: ["implement", "design"], label: "사업계획승인" },
+  { keys: ["construct"], label: "착공" },
+  { keys: ["complete"], label: "준공·입주" },
+];
+
 const FAMILY_STEPS: Record<StageFamily, Step[]> = {
   redev: REDEV,
   rebuild: REBUILD,
@@ -135,6 +147,7 @@ const FAMILY_STEPS: Record<StageFamily, Step[]> = {
   moa: MOA,
   doum: DOUM,
   station: STATION,
+  jiju: JIJU,
 };
 
 export const FAMILY_LABEL: Record<StageFamily, string> = {
@@ -144,6 +157,7 @@ export const FAMILY_LABEL: Record<StageFamily, string> = {
   moa: "모아타운 절차",
   doum: "도심복합개발 절차",
   station: "역세권·장기전세 절차",
+  jiju: "지역주택조합(지주택) 절차",
 };
 
 /** 사업유형·소분류·단계 표기로 어느 사다리를 쓸지 정한다. */
@@ -160,8 +174,9 @@ export function pickFamily(type: MapZoneType | string, kind: string | undefined,
   if (type === "재건축") return "rebuild";
   if (type === "신통기획" || type === "공공재개발") return "redev";
   if (type === "도공복" || (type ?? "").startsWith("민간도심복합")) return "doum";
-  // 지주택 = 지역주택조합이 지구단위계획구역으로 추진하는 공동주택 — 조합설립·사업계획승인 절차는 재개발과 같다
-  if (type === "지주택") return "redev";
+  // 지주택 = 지역주택조합이 지구단위계획구역으로 추진하는 공동주택 —
+  //   정비구역 지정이 아니라 지구단위계획 결정이라 사다리도 따로 쓴다
+  if (type === "지주택") return "jiju";
   if (type === "역세권" || type === "장기전세") {
     // 역세권·장기전세라도 '도시정비형 재개발'은 정비사업 절차(추진위·조합)를 따른다.
     //   소분류가 일반(장기전세주택·역세권활성화)이어도 단계가 정비구역·추진위·조합설립이면
@@ -300,6 +315,8 @@ export const EXACT_STAGE: Record<string, StageEvent[]> = {
     E("district", "2026-10-21", true, "도계위 수정가결"),
   ],
   "정비구역 지정 공람(2026-10-29)": [E("notice", "2026-10-29", true)],
+  // 지주택(지역주택조합·지구단위계획구역)의 열람공고 — '구역 지정'이 들어가도 지정 완료가 아니라 열람 단계다
+  "지구단위계획구역 지정 열람공고(2026-11-05)": [E("notice", "2026-11-05", true)],
   "정비구역 지정(안) 공람(2026-04-02)": [E("notice", "2026-04-02", true)],
   "정비구역 지정(안) 공람(2026-07-02~08-03)": [E("notice", "2026-07-02~08-03", true)],
   "정비구역 지정(안) 공람(11.19~12.21)": [E("notice", "11.19~12.21", true)],
