@@ -156,7 +156,8 @@ export function minimumDeposit(
 ): number | null {
   if (!minimum || minimum <= 0) return null;
   const rate = typeof ratePct === "number" && ratePct > 0 ? ratePct : 10;
-  return Math.round((minimum * rate) / 100);
+  // 대법원 화면도 `Math.ceil(값/100)*100` 으로 100원 단위 올림해 표시한다(2026-11-27 사건상세 스크립트 확인).
+  return Math.ceil((minimum * rate) / 100 / 100) * 100;
 }
 
 /** 사건번호 짧은 표기 — `서울중앙지방법원 2023타경104875` → `2023타경104875` */
