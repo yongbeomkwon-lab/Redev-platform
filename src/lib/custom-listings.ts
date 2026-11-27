@@ -18,6 +18,7 @@
 import type { Listing, Zone } from "@/lib/types";
 import { LISTINGS, ZONES } from "@/data/sample";
 import verifiedFile from "@/data/verified-listings.json";
+import { sanitizeExtra } from "@/lib/listing-extra";
 
 export const CUSTOM_LISTINGS_STORAGE_KEY = "redev.customListings.v1";
 /** 매물이 바뀌었음을 같은 화면 안에 알리는 이벤트(등록 직후 지도·목록 갱신용) */
@@ -148,6 +149,9 @@ export function normalizeListing(raw: unknown): Listing | null {
     ...(num(l.landShareSqm) !== undefined ? { landShareSqm: num(l.landShareSqm) } : {}),
     ...(bool(l.leaseOperatorOnly) !== undefined ? { leaseOperatorOnly: bool(l.leaseOperatorOnly) } : {}),
     ...(bool(l.landPermitRequired) !== undefined ? { landPermitRequired: bool(l.landPermitRequired) } : {}),
+    // 중개대상물 표시·광고 항목(소재지·거래형태·층·방향·입주가능일 등) — 모든 저장 경로가 이 함수를 지나므로
+    //   DB·JSON·localStorage 어느 곳에서 왔든 같은 방식으로 다듬어 살린다(lib/listing-extra.ts).
+    ...sanitizeExtra(l as Record<string, unknown>),
     ...(str(l.note) ? { note: str(l.note) } : {}),
     verified: l.verified === true,
     ...(str(l.createdAt) ? { createdAt: str(l.createdAt) } : {}),

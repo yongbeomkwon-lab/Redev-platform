@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Listing } from "@/lib/types";
 import { packConsentNote, parseConsentRate, unpackConsentNote } from "@/lib/consent";
+import { packListingNote, unpackListingNote } from "@/lib/listing-extra";
 
 const strOf = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v : undefined);
 const numOf = (v: unknown): number | undefined => {
@@ -36,6 +37,9 @@ export function listingFromRow(row: Record<string, unknown>): Listing | null {
   const salePrice = numOf(row.sale_price);
   if (!zoneId || salePrice === undefined) return null;
   const createdAt = strOf(row.created_at);
+  // 표시·광고 명시사항(소재지·층·방향·입주가능일 등)은 note 끝 표식으로 함께 저장한다
+  //   (listings 테이블에 컬럼이 없다 — lib/listing-extra.ts).
+  const packed = unpackListingNote(strOf(row.note));
   return {
     id: strOf(row.id) ?? `db-${zoneId}-${salePrice}`,
     zoneId,
@@ -64,7 +68,8 @@ export function listingFromRow(row: Record<string, unknown>): Listing | null {
     ...(boolOf(row.land_permit_required) !== undefined
       ? { landPermitRequired: boolOf(row.land_permit_required) }
       : {}),
-    ...(strOf(row.note) ? { note: strOf(row.note) } : {}),
+    ...(packed.note ? { note: packed.note } : {}),
+    ...packed.extra,
     verified: row.verified === true,
     // 화면·정식 JSON 은 날짜만 쓴다('YYYY-MM-DD')
     ...(createdAt ? { createdAt: createdAt.slice(0, 10) } : {}),
@@ -102,7 +107,8 @@ export function listingToRow(l: Listing): Record<string, unknown> {
     lease_operator_only: l.leaseOperatorOnly === true,
     land_permit_required: l.landPermitRequired === true,
     verified: l.verified === true,
-    note: l.note ?? null,
+    // 표시·광고 명시사항은 컬럼이 없어 note 끝 표식 한 줄로 함께 넣는다(lib/listing-extra.ts)
+    note: packListingNote(l.note, l),
     ...(createdAt ? { created_at: createdAt } : {}),
   };
 }

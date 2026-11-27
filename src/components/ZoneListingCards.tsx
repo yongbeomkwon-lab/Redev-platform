@@ -9,18 +9,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import type { Listing } from "@/lib/types";
-import { calcInitialInvestment, listingDeposit } from "@/lib/types";
+import { calcInitialInvestment, listingDeposit, listingTradeType } from "@/lib/types";
 import { formatMan } from "@/lib/format";
-import { isMyListing } from "@/lib/my-listings";
+import { MY_LISTING_ID_PREFIX } from "@/lib/my-listings";
 import { Badge } from "./Badges";
 import Icon from "./Icon";
 import ListingSocial from "./listing/ListingSocial";
+import { ListingAddress, ListingBrokerLegal, ListingPriceLine, ListingSpecLine } from "./ListingSpec";
 
 /** 임대사업자 승계 · 토허제(실거주) 조건 배지 — 매물 카드·목록에서 같은 말을 쓴다 */
 export function ListingConditionBadges({ listing }: { listing: Listing }) {
-  // 부동산포스에서 옮긴 내 매물은 토지거래허가·실거주 조건을 함께 받아 오지 않았다
+  // 부동산포스에서 옮긴 내 매물(rfine-)은 토지거래허가·실거주 조건을 함께 받아 오지 않았다
   // — '없음'이라고 단정하지 않고 '확인 필요'로 보여 준다(계약 전 확인 사항).
-  const permitKnown = !isMyListing(listing);
+  //   그 밖의 매물(검증 JSON·/register 로 새로 등록한 own-)은 중개사가 확인한 값이 있으므로 그대로 보여 준다.
+  const permitKnown = !(listing.id ?? "").startsWith(MY_LISTING_ID_PREFIX);
   return (
     <>
       {listing.verified && <Badge tone="green">검증</Badge>}
@@ -74,6 +76,13 @@ export function ZoneListingCards({
               data-testid="zone-listing-item"
               className="rounded-lg border border-amber-200 bg-white p-2"
             >
+              {/* 소재지 — 공인중개사법 표시·광고 명시사항 (번지 비공개 토글이 켜지면 동까지만) */}
+              {l.address && (
+                <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-slate-500">
+                  <Icon name="pin" size={11} />
+                  <ListingAddress listing={l} className="min-w-0" testId="zone-listing-address" />
+                </div>
+              )}
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <b className="text-sm font-extrabold text-slate-900">{formatMan(l.salePrice)}</b>
                 <span className="text-[11px] font-medium text-slate-600">
@@ -86,24 +95,33 @@ export function ZoneListingCards({
                   </span>
                 ) : null}
               </div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
-                {deposit > 0 && <span>기보증금 {formatMan(deposit)}</span>}
-                <span className="font-semibold text-slate-900">
-                  초기투자금 {formatMan(calcInitialInvestment(l))}
-                </span>
-                {l.landShareSqm ? <span>대지지분 {l.landShareSqm}㎡</span> : null}
-              </div>
+              {listingTradeType(l) === "매매" ? (
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
+                  {deposit > 0 && <span>기보증금 {formatMan(deposit)}</span>}
+                  <span className="font-semibold text-slate-900">
+                    초기투자금 {formatMan(calcInitialInvestment(l))}
+                  </span>
+                  {l.landShareSqm ? <span>대지지분 {l.landShareSqm}㎡</span> : null}
+                </div>
+              ) : (
+                // 전세·월세는 '초기투자금(매매가−기보증금)' 공식이 성립하지 않는다 — 보증금·월세로 보여 준다
+                <div className="mt-1">
+                  <ListingPriceLine listing={l} tone="amber" />
+                  {l.landShareSqm ? (
+                    <span className="text-[11px] text-slate-600">대지지분 {l.landShareSqm}㎡</span>
+                  ) : null}
+                </div>
+              )}
+              {/* 명시사항 — 거래형태·층/총층·방/ 욕실·방향·입주가능일·주차·승인일·관리비 */}
+              <ListingSpecLine listing={l} className="mt-1" />
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 <ListingConditionBadges listing={l} />
               </div>
               {l.note && (
                 <p className="mt-1 whitespace-pre-wrap text-[11px] leading-snug text-slate-600">{l.note}</p>
               )}
-              <p className="mt-1 text-[10px] text-slate-400">
-                {l.brokerAgency}
-                {l.brokerName ? ` · ${l.brokerName}` : ""}
-                {l.brokerPhone ? ` · ${l.brokerPhone}` : ""}
-              </p>
+              {/* 중개사무소 법정 표시 — 사무소명·등록번호 / 대표자·소속공인중개사·연락처 */}
+              <ListingBrokerLegal listing={l} />
               {/* 이 매물에 대한 반응(좋아요·놀람·관심)과 댓글 — 접힌 한 줄로 둔다 */}
               <ListingSocial listingId={l.id} tone="amber" />
             </li>

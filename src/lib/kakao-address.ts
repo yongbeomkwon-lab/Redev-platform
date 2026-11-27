@@ -35,7 +35,27 @@ export type AddressCandidate = {
   jibun?: string;
   /** 지번 주소 전체(예: 서울특별시 동작구 사당동 440-9) */
   jibunAddress?: string;
+  /**
+   * 필지고유번호 19자리 — 카카오 지번 문서의 법정동코드(b_code: 시군구5+법정동5)와
+   * 본번·부번·산 여부로 만든다. 건축물대장(표제부) 조회에 그대로 쓴다.
+   *   · 브이월드 필지 API(/api/parcel)가 응답하지 않는 환경(로컬 dev 등)에서도
+   *     대장 자동 채움이 돌게 하는 안전망이다. 값이 없으면(도로명·장소 결과) undefined.
+   */
+  pnu?: string;
 };
+
+/**
+ * 법정동코드(10자리) + 본번·부번·산 여부 → PNU 19자리.
+ *   · 형식: 시군구(5) + 법정동(5) + 산여부(1: 1=대지, 2=산) + 본번(4) + 부번(4)
+ *   · 본번이 없으면 만들지 않는다(번지 없는 주소는 필지가 아니다).
+ */
+export function pnuFromParts(bcode?: string, bonbun?: string, bubun?: string, mountain?: boolean): string | undefined {
+  const b = (bcode ?? "").trim();
+  const bun = (bonbun ?? "").trim();
+  if (!/^\d{10}$/.test(b) || !/^\d{1,4}$/.test(bun)) return undefined;
+  const ji = /^\d{1,4}$/.test((bubun ?? "").trim()) ? (bubun ?? "").trim() : "0";
+  return `${b}${mountain ? "2" : "1"}${bun.padStart(4, "0")}${ji.padStart(4, "0")}`;
+}
 
 export type AddressSearchResult = {
   ok: boolean;
@@ -80,6 +100,7 @@ function fromAddressDoc(d: KakaoAddressDoc): AddressCandidate | null {
   const bonbun = d.address?.main_address_no?.trim() ?? "";
   const bubun = d.address?.sub_address_no?.trim() ?? "";
   const jibunNo = bonbun ? (bubun && Number(bubun) > 0 ? `${bonbun}-${bubun}` : bonbun) : undefined;
+  const pnu = pnuFromParts(d.address?.b_code, bonbun, bubun, d.address?.mountain_yn === "Y");
 
   return {
     key: `addr:${label}:${lat.toFixed(6)},${lng.toFixed(6)}`,
@@ -92,6 +113,7 @@ function fromAddressDoc(d: KakaoAddressDoc): AddressCandidate | null {
     dong: d.address?.region_3depth_name,
     jibun: jibunNo && d.address?.mountain_yn === "Y" ? `산${jibunNo}` : jibunNo,
     jibunAddress,
+    ...(pnu ? { pnu } : {}),
   };
 }
 

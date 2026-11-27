@@ -142,6 +142,15 @@ export type Transaction = {
 };
 
 /**
+ * 거래형태 — 공인중개사법 중개대상물 표시·광고 명시사항 ①
+ *   · 매매: salePrice = 매매가, deposit = 기보증금(초기투자금 계산에 쓰인다)
+ *   · 전세: salePrice = 전세보증금 (deposit 은 쓰지 않는다)
+ *   · 월세: salePrice = 보증금, monthlyRent = 월세
+ *   · 값이 없는 예전 매물은 매매로 본다(`listingTradeType`).
+ */
+export type ListingTradeType = "매매" | "전세" | "월세";
+
+/**
  * 중개사 매물 (검증 매물 · 등록 매물)
  *
  * ▶ 재개발 실무 필드
@@ -189,6 +198,53 @@ export type Listing = {
   note?: string; // 매물 핵심 특징
   verified: boolean; // 검증 매물 여부
   createdAt?: string;
+
+  // ── 중개대상물 표시·광고 명시사항 (공인중개사법 시행규칙 제25조) ──────────────
+  //   · 모두 선택 필드다 — 예전에 등록된 매물·부동산포스에서 옮긴 매물은 이 값이 없고,
+  //     화면은 없는 항목을 '-'(미입력)으로 둔다(값을 지어내지 않는다).
+  //   · DB(public.listings)에는 이 컬럼들이 없다 → lib/listing-extra.ts 가 note 끝의
+  //     표식 한 줄(⟦매물정보⟧{...})로 함께 저장하고, 읽을 때 다시 풀어놓는다.
+  /** 소재지 — 지번 주소 전체 (예: 서울특별시 동작구 상도동 209-12) */
+  address?: string;
+  /** 도로명 주소 (예: 서울특별시 동작구 장승배기로 1) */
+  addressRoad?: string;
+  /** 소재지 비공개 — 켜면 카드에 '○○동 (번지 비공개)'로 보인다 */
+  addressHidden?: boolean;
+  /** 필지고유번호 19자리 — 건축물대장 조회 근거 */
+  pnu?: string;
+  /** 매물 위치 좌표 [위도, 경도] — 주소 검색으로 고른 필지의 중심 */
+  lat?: number;
+  lng?: number;
+  /** 거래형태 (기본 매매) */
+  tradeType?: ListingTradeType;
+  /** 월세 (만원) — tradeType 이 '월세'일 때 */
+  monthlyRent?: number;
+  /** 해당층 — '3'·'3층'·'반지하'·'옥탑' */
+  floor?: string;
+  /** 총층수 — '5'·'5층' */
+  totalFloors?: string;
+  /** 방 수 */
+  rooms?: number;
+  /** 욕실 수 */
+  baths?: number;
+  /** 방향 — 주실(거실·안방) 기준. '남향'·'남동향' 등 */
+  direction?: string;
+  /** 입주가능일 — '즉시입주' | '협의' | 'YYYY-MM-DD' */
+  moveIn?: string;
+  /** 주차 — '세대당 1대'·'가능(2대)'·'불가' */
+  parking?: string;
+  /** 사용승인일 — 'YYYY-MM-DD' (건축물대장 표제부) */
+  approvalDate?: string;
+  /** 관리비 — '5만원 (수도·전기 별도)'·'없음' */
+  maintenanceFee?: string;
+  /** 대지면적 (㎡) — 건축물대장 표제부. 대지지분(landShareSqm)과 다른 값이다 */
+  platAreaSqm?: number;
+  /** 건물명 — 건축물대장 표제부 (예: 다원씨앤아이) */
+  buildingName?: string;
+  /** 중개사무소 소재지 */
+  brokerAddress?: string;
+  /** 중개사무소 대표자 */
+  brokerCeo?: string;
 };
 
 /** 브로커 요금제 */
@@ -229,6 +285,22 @@ export const UNLOCK_PRICE = 3; // 만원 / 매물 1건
 
 /** 취득세·등기·중개보수 등 부대비용 추정: 매매가의 2% */
 export const EST_OTHER_COST_RATE = 0.02;
+
+/** 매물의 거래형태 — 값이 없는 예전 매물은 매매 */
+export function listingTradeType(l: Listing): ListingTradeType {
+  return l.tradeType ?? "매매";
+}
+
+/**
+ * 매수자가 처음에 들고 가야 하는 돈.
+ *   · 매매: 초기투자금 = 매매가 − 기보증금 (+ 불하금 포함 시)
+ *   · 전세: 전세보증금, 월세: 보증금 — 매매가−기보증금 공식이 성립하지 않으므로 금액을 그대로 쓴다.
+ */
+export function listingUpfrontCash(l: Listing): number {
+  const t = listingTradeType(l);
+  if (t === "매매") return calcInitialInvestment(l);
+  return Math.max(0, Math.round(l.salePrice));
+}
 
 /** 매물의 기보증금 — 새 필드 `deposit`, 없으면 옛 필드 `expectedJeonse` */
 export function listingDeposit(l: Listing): number {

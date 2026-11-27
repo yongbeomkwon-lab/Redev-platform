@@ -12,12 +12,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Listing } from "@/lib/types";
-import { calcInitialInvestment, listingDeposit } from "@/lib/types";
+import { calcInitialInvestment, listingDeposit, listingTradeType } from "@/lib/types";
 import { getProvider } from "@/lib/data-provider";
 import { listingZoneName, LISTINGS_CHANGED_EVENT } from "@/lib/custom-listings";
 import { isMyListing, MY_LISTINGS_COUNT } from "@/lib/my-listings";
 import { formatMan } from "@/lib/format";
+import { priceHeadline, priceLabel, upfrontLabel, upfrontValue } from "@/lib/listing-fields";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
+import { ListingAddress, ListingBrokerLegal, ListingSpecLine } from "@/components/ListingSpec";
 import ListingSocial from "@/components/listing/ListingSocial";
 
 type SortKey = "initial" | "price" | "recent";
@@ -60,7 +62,18 @@ export default function ListingsPage() {
     const term = query.trim().replace(/\s+/g, "");
     const hit = (l: Listing) => {
       if (!term) return true;
-      const hay = [l.zoneName, listingZoneName(l), l.gu, l.unitType, l.propertyType, l.note, l.brokerAgency, l.brokerName]
+      const hay = [
+        l.zoneName,
+        listingZoneName(l),
+        l.gu,
+        l.unitType,
+        l.propertyType,
+        l.note,
+        l.brokerAgency,
+        l.brokerName,
+        l.address,
+        l.buildingName,
+      ]
         .filter(Boolean)
         .join("")
         .replace(/\s+/g, "");
@@ -197,6 +210,12 @@ export default function ListingsPage() {
               />
               <CompareRow label="전용면적" rows={picked.map((l) => (l.exclusiveAreaSqm ? `${l.exclusiveAreaSqm}㎡` : "-"))} />
               <CompareRow label="대지지분" rows={picked.map((l) => (l.landShareSqm ? `${l.landShareSqm}㎡` : "-"))} />
+              <CompareRow label="소재지" rows={picked.map((l) => l.address ?? "-")} />
+              <CompareRow label="해당층/총층" rows={picked.map((l) => [l.floor, l.totalFloors].filter(Boolean).join(" / ") || "-")} />
+              <CompareRow label="방/욕실" rows={picked.map((l) => [l.rooms ? `방 ${l.rooms}` : "", l.baths ? `욕실 ${l.baths}` : ""].filter(Boolean).join(" ") || "-")} />
+              <CompareRow label="방향" rows={picked.map((l) => l.direction ?? "-")} />
+              <CompareRow label="입주가능일" rows={picked.map((l) => l.moveIn ?? "-")} />
+              <CompareRow label="주차" rows={picked.map((l) => l.parking ?? "-")} />
               <CompareRow label="임대사업자" rows={picked.map((l) => (l.leaseOperatorOnly ? "승계 필수" : "무관"))} />
               <CompareRow label="토허제/실거주" rows={picked.map((l) => (l.landPermitRequired ? "해당" : "없음"))} />
               <CompareRow label="특징" rows={picked.map((l) => l.note ?? "-")} />
@@ -254,16 +273,36 @@ export default function ListingsPage() {
                   </span>
                 </div>
 
+                {/* 소재지 — 명시사항 ① (번지 비공개면 동까지만) */}
+                {l.address && (
+                  <div className="mt-1 text-[10.5px] text-slate-500">
+                    <ListingAddress listing={l} testId="listing-card-address" />
+                  </div>
+                )}
                 <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <b className="text-lg font-extrabold text-slate-900">{formatMan(l.salePrice)}</b>
+                  <b className="text-lg font-extrabold text-slate-900">
+                    {listingTradeType(l) === "매매" ? formatMan(l.salePrice) : priceHeadline(l)}
+                  </b>
                   <span className="text-[11px] font-medium text-slate-600">
                     {l.propertyType ? `${l.propertyType} · ` : ""}
                     {l.unitType}
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
-                  {deposit > 0 && <span>기보증금 {formatMan(deposit)}</span>}
-                  <span className="font-semibold text-slate-900">초기투자금 {formatMan(calcInitialInvestment(l))}</span>
+                  {listingTradeType(l) === "매매" ? (
+                    <>
+                      {deposit > 0 && <span>기보증금 {formatMan(deposit)}</span>}
+                      <span className="font-semibold text-slate-900">
+                        초기투자금 {formatMan(calcInitialInvestment(l))}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-semibold text-slate-900">
+                      {priceLabel(l)} {formatMan(l.salePrice)}
+                      {listingTradeType(l) === "월세" && l.monthlyRent ? ` / 월 ${formatMan(l.monthlyRent)}` : ""} ·
+                      {upfrontLabel(l)} {formatMan(upfrontValue(l))}
+                    </span>
+                  )}
                   {l.exclusiveAreaSqm ? (
                     <span>
                       전용 {l.exclusiveAreaSqm}㎡ ({(l.exclusiveAreaSqm / 3.305785).toFixed(1)}평)
@@ -271,15 +310,13 @@ export default function ListingsPage() {
                   ) : null}
                   {l.landShareSqm ? <span>대지지분 {l.landShareSqm}㎡</span> : null}
                 </div>
+                {/* 명시사항 — 거래형태·층/총층·방/ 욕실·방향·입주가능일·주차·승인일·관리비 */}
+                <ListingSpecLine listing={l} className="mt-1" />
                 {l.note && <p className="mt-1.5 text-[11px] leading-snug text-slate-600">{l.note}</p>}
                 {/* 매물별 반응·댓글 — 접힌 한 줄, 누르면 이 카드 안에서 펼쳐진다 */}
                 <ListingSocial listingId={l.id} />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
-                  <span className="text-[10px] text-slate-500">
-                    {l.brokerAgency}
-                    {l.brokerName ? ` · ${l.brokerName}` : ""}
-                    {l.brokerPhone ? ` · ${l.brokerPhone}` : ""}
-                  </span>
+                  <ListingBrokerLegal listing={l} className="mt-0 min-w-0 flex-1" />
                   <Link
                     href={mapHref}
                     className="ml-auto rounded-full border border-slate-300 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-slate-500"
