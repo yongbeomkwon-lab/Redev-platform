@@ -371,15 +371,33 @@ export async function POST(request: Request) {
   const failures: { code: string; message: string }[] = [];
 
   let cursor = 0;
+  /** 정상 응답을 받은 필지 수 — 한도 판정용(빈 대장 필지는 ledgerParcels 에 안 잡힌다) */
+  let okParcels = 0;
+  /** 국토부 호출 한도(429·일일 쿼터)에 걸렸는지 — 걸리면 남은 필지 조회를 멈춘다 */
+  let quotaExhausted = false;
   async function worker() {
-    while (cursor < pnus.length) {
+    while (cursor < pnus.length && !quotaExhausted) {
       const pnu = pnus[cursor++];
       const res = await fetchParcel(pnu, key);
       if (!res.ok) {
         errors++;
         failures.push({ code: res.code, message: res.message });
+        // 429(초당·일일 한도)는 재시도로 풀리는 경우도 있다 — 다만 아직 한 필지도 정상 응답이
+        //   없는데 429 가 3번 이어지면 일일 한도가 바닥난 것이다. 남은 필지를 계속 두드려 봐야
+        //   함수 시간(60초)만 넘겨 504 가 되므로 여기서 멈추고 '한도'라고 정확히 알려 준다
+        //   (2026-11-27: 화면에는 504 로만 보이던 원인).
+        if (
+          (res.code === "429" || /한도|LIMITED|quota/i.test(`${res.code} ${res.message}`)) &&
+          // ① 아예 한 필지도 못 받았는데 429 가 3번 → 일일 한도 바닥
+          ((errors >= 3 && okParcels === 0) ||
+            // ② 받다가 끊겨 실패가 10건을 넘고 성공보다 많음 → 남은 필지를 더 두드려도 같다
+            (errors >= 10 && okParcels * 2 < errors))
+        ) {
+          quotaExhausted = true;
+        }
         continue;
       }
+      okParcels++;
       if (res.items.length > 0) ledgerParcels++;
 
       // 표제부에서 복수 세대·가구 또는 공동·다가구로 확인된 필지만 층별개요를 더 부른다
@@ -404,6 +422,15 @@ export async function POST(request: Request) {
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pnus.length) }, worker));
+
+  // 국토부 호출 한도 — 남은 필지를 더 두드리지 않고 이유를 그대로 알린다
+  if (quotaExhausted && ledgerParcels === 0) {
+    return fail(
+      "MOLIT_QUOTA_EXCEEDED",
+      429,
+      "국토교통부 건축물대장 API 호출 한도에 걸렸습니다 — 한도는 모든 구역이 함께 씁니다. 잠시 뒤(또는 내일) 다시 시도해 주세요."
+    );
+  }
 
   // 전부 실패면 화면이 이유를 보여 줄 수 있게 오류로 돌려준다
   if (ledgerParcels === 0 && errors === pnus.length) {
