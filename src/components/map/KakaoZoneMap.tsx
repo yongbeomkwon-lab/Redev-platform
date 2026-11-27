@@ -36,11 +36,10 @@ import {
 import { TYPE_COLORS, badgeColor, shortStage, shortZoneType, zoneStyle } from "./colors";
 import Icon from "@/components/Icon";
 import { addressPinHtml, parcelBubbleHtml, stationPinHtml, PIN_LAYER_STYLE } from "./address-pin";import { clipZoneToBox, hitTestZones, prepareZones, type PreparedZones } from "./prepare-zones";
-import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin } from "./props";
+import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin, type ZoneDrawState } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
 import DevPressureLayer from "./DevPressureLayer";
-import GemBlocksLayer from "./GemBlocksLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -533,9 +532,8 @@ export default function KakaoZoneMap({
   devPressureOn = false,
   onToggleDevPressure,
   devPressureFocus,
-  gemOn = false,
-  onToggleGem,
-  gemFocus,
+  zoneDraw,
+  onToggleZoneDraw,
   admin,
   onFail,
 }: KakaoZoneMapProps) {
@@ -757,6 +755,14 @@ export default function KakaoZoneMap({
   /** 마지막으로 처리한 관리자 구역 화면 맞춤 토큰 */
   const lastAdminFitRef = useRef(0);
 
+  // ── ✏️ 구역 그려서 분석(일반 방문자) ─────────────────────────────────────────
+  //   관리자 그리기와 완전히 별개다 — 저장도, 콘솔 패널도 없다. 지도는 꼭짓점만 그리고,
+  //   찍은 점·면적·분석은 모두 호출측(ZoneExplorer)이 갖는다.
+  const zoneDrawRef = useRef<ZoneDrawState | null>(zoneDraw ?? null);
+  zoneDrawRef.current = zoneDraw ?? null;
+  /** 마지막으로 찍은 화면 좌표 — 같은 자리 두 번 클릭(더블클릭)을 ‘완료’로 가른다 */
+  const lastUserAddRef = useRef<{ t: number; x: number; y: number } | null>(null);
+
   const prep = useMemo<PreparedZones>(() => prepareZones(seoulZones), [seoulZones]);
   const prepRef = useRef<PreparedZones>(prep);
 
@@ -817,7 +823,9 @@ export default function KakaoZoneMap({
       !agingRef.current &&
       !devPressureRef.current &&
       !myPinsOnRef.current &&
-      !adminRef.current;
+      !adminRef.current &&
+      // ✏️ 구역을 그리는 중에는 구 뱃지 화면을 끈다 — 경계가 보여야 어느 블록을 집는지 안다
+      !zoneDrawRef.current;
     districtModeRef.current = districtMode;
 
     // ── 지도 변환 읽기 ① 기준점(anchor) — 카카오가 방금 그린 실제 화면 좌표 ──────────
@@ -2230,6 +2238,82 @@ export default function KakaoZoneMap({
       }
     }
 
+    // 5) ✏️ 구역 그려서 분석 — 사용자가 찍은 꼭짓점과 (완료 시) 닫힌 면·면적
+    //   관리자 초안과 같은 방식으로 캔버스에 직접 그린다(지도 이동·확대에 같은 프레임으로 따라온다).
+    const zd = zoneDrawRef.current;
+    if (zd && zd.ring.length > 0) {
+      const project = (lat: number, lng: number): [number, number] => [
+        p0x + (lng - lng0) * pxPerLng,
+        p0y + (mercator(lat) - m0) * pxPerMerc,
+      ];
+      const pts = zd.ring.map(([la, ln]) => project(la, ln));
+      const closed = !zd.active && pts.length >= 3;
+      const color = "#7c3aed";
+
+      if (closed) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(124,58,237,0.22)";
+        ctx.fill();
+        ctx.lineWidth = 4.5;
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.stroke();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      } else if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.lineWidth = 4.5;
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.stroke();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      }
+
+      // 꼭짓점 점 — 몇 번째 점인지 숫자까지 찍어 ‘내가 찍은 순서’가 보이게 한다
+      pts.forEach(([x, y], i) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        ctx.font = "700 9px ui-sans-serif, system-ui, -apple-system, sans-serif";
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(i + 1), x, y + 0.5);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+      });
+
+      // 면적 배지 — 3점 이상이면 무게중심 위에 실시간으로 보여 준다
+      if (pts.length >= 3) {
+        const cc = ringCentroid(zd.ring);
+        const [bx, by] = project(cc[0], cc[1]);
+        const text = formatArea(ringAreaSqm(zd.ring));
+        ctx.font = "700 12px ui-sans-serif, system-ui, -apple-system, sans-serif";
+        const tw = ctx.measureText(text).width;
+        const w = tw + 18;
+        const h = 24;
+        roundRectPath(ctx, bx - w / 2, by - h / 2, w, h, 12);
+        ctx.fillStyle = "rgba(76,29,149,0.92)";
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, bx, by + 0.5);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+      }
+    }
+
     setReady(true);
   }, []);
 
@@ -2541,7 +2625,7 @@ export default function KakaoZoneMap({
             draw();
           }
           clearHoverCursor();
-          if (adminRef.current?.adding) el.style.cursor = "crosshair";
+          if (adminRef.current?.adding || zoneDrawRef.current?.active) el.style.cursor = "crosshair";
           return;
         }
 
@@ -2549,13 +2633,30 @@ export default function KakaoZoneMap({
           hoverRef.current = hit.id;
           draw();
         }
-        el.style.cursor = adminRef.current?.adding ? "crosshair" : "pointer";
+        el.style.cursor = adminRef.current?.adding || zoneDrawRef.current?.active ? "crosshair" : "pointer";
       });
     };
 
     const onMapClick = (e: KakaoMouseEvent) => {
       const lat = e.latLng.getLat();
       const lng = e.latLng.getLng();
+      // ── ✏️ 구역 그려서 분석(일반 방문자): 탭 = 꼭짓점 추가 ─────────────────────
+      //   같은 자리를 빠르게 두 번 누르면(더블클릭) 점을 또 찍지 않고 ‘그리기 완료’로 본다.
+      const uz = zoneDrawRef.current;
+      if (uz?.active) {
+        clearHoverCursor();
+        const px = e.point;
+        const last = lastUserAddRef.current;
+        const nowMs = performance.now();
+        if (px && last && nowMs - last.t < 350 && Math.hypot(px.x - last.x, px.y - last.y) <= 7) {
+          lastUserAddRef.current = null;
+          if (uz.ring.length >= 3) uz.onFinish?.();
+          return;
+        }
+        lastUserAddRef.current = px ? { t: nowMs, x: px.x, y: px.y } : null;
+        uz.onAddPoint(lat, lng);
+        return;
+      }
       const adm = adminRef.current;
       // ── 관리자 모드: 탭 = 꼭짓점 추가 (첫 점 클릭이나 더블클릭으로 실수로 완료되지 않게 단순 점 추가만) ──
       if (adm?.adding && adm.draft) {
@@ -2669,6 +2770,12 @@ export default function KakaoZoneMap({
       ev.stopPropagation();
     };
     const onMapContextMenu = (ev: MouseEvent) => {
+      // ✏️ 구역을 그리는 중에는 우클릭도 지번 찍기로 새지 않게 막는다(브라우저 메뉴만 막는다)
+      if (zoneDrawRef.current?.active) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        return;
+      }
       if (drawingNow()) {
         // 그리기 중 우클릭: 브라우저 메뉴만 막고 실수로 완료되지 않게 한다(완료는 상단 [완료] 버튼 또는 Enter).
         const t0 = ev.target as HTMLElement | null;
@@ -2837,13 +2944,13 @@ export default function KakaoZoneMap({
     if (!map?.setOptions) return;
     // 초안이 하나라도 있으면(새로 그리기 0점 포함) 더블클릭 확대를 끈다 — 빠르게 연달아
     //   점을 찍는 클릭이 더블클릭으로 잡혀 화면 배율이 바뀌는 것을 막는다(2026-11-24 제보).
-    const drawing = !!admin?.draft;
+    const drawing = !!admin?.draft || !!zoneDraw?.active;
     try {
       map.setOptions({ disableDoubleClickZoom: drawing });
     } catch {
       // 옵션을 모르는 SDK 버전이면 그냥 둔다(더블클릭 완료는 DOM 리스너가 그대로 처리한다)
     }
-  }, [admin?.adding, admin?.draft]);
+  }, [admin?.adding, admin?.draft, zoneDraw?.active]);
 
   // ── 데이터·선택 변경 → 다시 그리기 ──────────────────────────────────────────
   useEffect(() => {
@@ -2887,6 +2994,15 @@ export default function KakaoZoneMap({
   useEffect(() => {
     draw();
   }, [admin?.draft, admin?.zones, admin?.selectedId, admin?.adding, draw]);
+
+  // ── ✏️ 구역 그려서 분석: 꼭짓점이 바뀌면 즉시 다시 그리기 ─────────────────
+  //   링 배열은 매 렌더 새로 올 수 있어, 그리기 여부·점 수·마지막 점으로 바뀜을 가른다.
+  const drawSig = `${zoneDraw?.active ? 1 : 0}:${zoneDraw?.ring.length ?? 0}:${
+    zoneDraw?.ring[zoneDraw.ring.length - 1]?.join(",") ?? ""
+  }`;
+  useEffect(() => {
+    draw();
+  }, [drawSig, draw]);
 
   // ── 관리자 구역으로 화면 맞추기(목록에서 골랐을 때) ────────────────────────
   useEffect(() => {
@@ -4303,18 +4419,6 @@ export default function KakaoZoneMap({
         />
       )}
 
-      {/* ── 💎 원석 찾기 레이어 — 아직 정비구역 아닌 노후 저층 블록 후보(z 97) ── */}
-      {gemOn && mapReady && sdkRef.current && mapRef.current && (
-        <GemBlocksLayer
-          sdk={sdkRef.current}
-          map={mapRef.current}
-          focus={gemFocus ?? null}
-          onOpenZone={onSelectZone}
-          onPickJibun={onPickJibun}
-          onCloseLayer={onToggleGem}
-        />
-      )}
-
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
       {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}
       <div className="absolute right-2 top-1/2 z-[600] flex -translate-y-1/2 flex-col items-end gap-1.5 md:bottom-2 md:left-2 md:right-auto md:top-auto md:translate-y-0 md:flex-row md:items-center">
@@ -4417,21 +4521,23 @@ export default function KakaoZoneMap({
           <span aria-hidden className="text-[12px] leading-none">🔥</span>
           <span className="hidden md:inline">개발압력</span>
         </button>
-        <button
-          type="button"
-          onClick={() => onToggleGem?.()}
-          aria-pressed={!!gemOn}
-          data-testid="gem-toggle"
-          title="원석 찾기 — 아직 정비구역으로 지정되지 않은 노후 저층 블록(30년↑ 60% 이상)을 호박색으로 표시합니다. 경계는 추정입니다"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
-            gemOn
-              ? "border-amber-500 bg-amber-500 text-white"
-              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
-          }`}
-        >
-          <span aria-hidden className="text-[12px] leading-none">💎</span>
-          <span className="hidden md:inline">원석 찾기</span>
-        </button>
+        {onToggleZoneDraw && (
+          <button
+            type="button"
+            onClick={() => onToggleZoneDraw()}
+            aria-pressed={!!zoneDraw?.active}
+            data-testid="zone-draw-toggle"
+            title="구역 그려서 분석 — 지도에서 꼭짓점을 찍어 그린 구역의 노후도·요건·조합원·유형 비율을 바로 분석합니다"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+              zoneDraw?.active
+                ? "border-violet-600 bg-violet-600 text-white"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+            }`}
+          >
+            <span aria-hidden className="text-[12px] leading-none">✏️</span>
+            <span className="whitespace-nowrap">구역 그려서 분석</span>
+          </button>
+        )}
         {onToggleJibunPick && (
           <button
             type="button"

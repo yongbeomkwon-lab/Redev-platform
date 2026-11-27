@@ -154,11 +154,28 @@ export type ZoneMapProps = {
   onToggleDevPressure?: () => void;
   /** 핫스팟으로 지도를 옮기고 그 카드를 열라는 요청 — token 이 바뀔 때마다 처리한다 */
   devPressureFocus?: { id: string; lat: number; lng: number; token: number } | null;
-  /** 💎 원석 찾기(미지정 노후 저층 블록) ON/OFF — 상태는 ZoneExplorer 가 갖는다 */
-  gemOn?: boolean;
-  onToggleGem?: () => void;
-  /** 원석 블록으로 지도를 옮기고 그 카드를 열라는 요청 */
-  gemFocus?: { id: string; lat: number; lng: number; token: number } | null;
+  /**
+   * ✏️ 구역 그려서 분석 — 일반 방문자가 지도에서 직접 꼭짓점을 찍어 만든 링.
+   *   · 관리자 그리기(`admin`)와 완전히 별개다: 저장하지 않고 화면 상태로만 그린다.
+   *   · 넘기면 지도 툴바에 「✏️ 구역 그려서 분석」 버튼이 생긴다(누구나 누를 수 있다).
+   */
+  zoneDraw?: ZoneDrawState | null;
+  onToggleZoneDraw?: () => void;
+};
+
+/**
+ * 사용자가 그리는 구역(분석용) — 찍은 꼭짓점과 그리기 상태만 담는다.
+ *   · active=true: 지도 클릭이 꼭짓점 추가로 간다(구역 선택·지번 찍기 대신).
+ *   · active=false: ring 이 3점 이상이면 완성된 폴리곤으로 닫아 그린다.
+ */
+export type ZoneDrawState = {
+  active: boolean;
+  /** 꼭짓점 [위도, 경도] — 찍은 순서 */
+  ring: [number, number][];
+  /** 지도 클릭 → 꼭짓점 추가 */
+  onAddPoint: (lat: number, lng: number) => void;
+  /** 같은 자리 더블클릭 → 그리기 완료(3점 이상일 때만 지도가 부른다) */
+  onFinish?: () => void;
 };
 
 /**

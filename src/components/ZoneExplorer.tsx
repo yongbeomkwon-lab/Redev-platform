@@ -22,7 +22,6 @@ import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
 import { DEV_GRADE_COLOR, loadDevPressure, type DevHotspot, type RecentZone } from "@/lib/dev-pressure";
-import { GEM_GRADE_COLOR, gemSummary, loadGemBlocks, type GemBlock, type GemData } from "@/lib/gem-blocks";
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT } from "@/components/map/colors";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
@@ -272,12 +271,13 @@ export default function ZoneExplorer() {
   const [devPressureOn, setDevPressureOn] = useState(false);
   const [dpFocus, setDpFocus] = useState<{ id: string; lat: number; lng: number; token: number } | null>(null);
   const [dpTop, setDpTop] = useState<DevHotspot[]>([]);
-  // ── 💎 원석 찾기 ────────────────────────────────────────────────────
-  //   · 켜면 public/data/gem-blocks.json 을 받아 지도에 호박색 블록을 얹는다(그때 처음 받는다).
   //   · 🔥 개발압력과는 같은 자리를 두고 겹치므로 함께 켜지지 않게 한다(켜면 다른 쪽을 끈다).
-  const [gemOn, setGemOn] = useState(false);
-  const [gemFocus, setGemFocus] = useState<{ id: string; lat: number; lng: number; token: number } | null>(null);
-  const [gemData, setGemData] = useState<GemData | null>(null);
+  // ── ✏️ 구역 그려서 분석 (일반 방문자) ────────────────────────────────────
+  //   · 지도에서 꼭짓점을 찍어 만든 링을 /api/zone-stats·/api/zone-stats/precise 로 분석한다.
+  //   · 저장하지 않는다 — 화면 메모리 상태뿐이다(관리자 그리기·공용 DB 와 별개).
+  const [zoneDrawOn, setZoneDrawOn] = useState(false);
+  const [zoneDrawPoints, setZoneDrawPoints] = useState<[number, number][]>([]);
+  const [zoneDrawDone, setZoneDrawDone] = useState<[number, number][] | null>(null);
   /** ⚡ 최근 변동 구역 — public/data/recent-zones.json (scripts/build-recent-zones.py) */
   const [recentZones, setRecentZones] = useState<RecentZone[]>([]);
   // ── 구역 내 법원경매 물건 (public/data/auctions.json) ─────────────
@@ -1323,33 +1323,57 @@ export default function ZoneExplorer() {
 
   /** 첫 화면 패널의 핫스팟 → 지도를 그 자리로 옮기고 🔥 개발압력 레이어·카드를 연다 */
   function openDevPressure(h: DevHotspot) {
-    setGemOn(false); // 원석과 같은 자리를 두고 겹친다 — 한 번에 하나만
     setDevPressureOn(true);
     setDpFocus({ id: h.id, lat: h.lat, lng: h.lng, token: Date.now() });
     // 좁은 화면은 패널이 지도 아래를 덮으므로 접어 카드가 보이게 한다
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
 
-  /** 💎 원석 블록 → 지도를 그 자리로 옮기고 카드를 연다 */
-  function openGem(b: GemBlock) {
-    setDevPressureOn(false);
-    setGemOn(true);
-    setGemFocus({ id: b.id, lat: b.lat, lng: b.lng, token: Date.now() });
-    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
-  }
+  // ── ✏️ 구역 그려서 분석 (일반 방문자) ──────────────────────────────────
 
-  /** 💎 토글 — 켤 때 데이터를 처음 받는다(수십 KB) */
-  function toggleGem() {
-    setGemOn((v) => {
+  /** 툴바 「✏️ 구역 그려서 분석」 — 켜면 지도 클릭이 꼭짓점 추가로 간다(누구나 사용) */
+  function toggleZoneDraw() {
+    setZoneDrawOn((v) => {
       const next = !v;
-      if (next) setDevPressureOn(false);
-      if (next && !gemData) {
-        loadGemBlocks()
-          .then((d) => setGemData(d))
-          .catch(() => {});
+      if (next) {
+        // 새로 그리기 — 이전 결과·선택을 거둔다
+        setZoneDrawPoints([]);
+        setZoneDrawDone(null);
+        setSelectedId(undefined);
+        setJibunPickOn(false);
       }
+      // 지도가 넓어야 점을 찍기 좋다 — 좁은 화면은 상세 패널을 접는다
+      if (next && typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
       return next;
     });
+  }
+
+  /** 그리기 닫기 — 찍은 점·완성된 폴리곤·분석 카드를 모두 거둔다 */
+  function closeZoneDraw() {
+    setZoneDrawOn(false);
+    setZoneDrawPoints([]);
+    setZoneDrawDone(null);
+  }
+
+  /**
+   * 그리기 완료(더블클릭·「분석하기」) — 폴리곤을 닫고 패널에 분석 카드를 연다.
+   *   1차 추정(/api/zone-stats)은 ZoneVitalStats 가 카드를 열 때 바로 돌린다.
+   */
+  function finishZoneDraw() {
+    if (zoneDrawPoints.length < 3) return;
+    setZoneDrawDone(zoneDrawPoints.slice());
+    setZoneDrawOn(false);
+    setZoneDrawPoints([]);
+    setSelectedId(undefined);
+    setPanelOpen(true);
+  }
+
+  /** 그린 구역을 그대로 두고 다시 그리기 — 지도는 그 상태에서 새 점을 받는다 */
+  function redrawZoneDraw() {
+    setZoneDrawDone(null);
+    setZoneDrawPoints([]);
+    setZoneDrawOn(true);
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
 
   /** 역 검색 결과 선택 — 역으로 지도를 옴기고, 역 주변 구역 목록을 띄운다 */
@@ -1823,17 +1847,19 @@ export default function ZoneExplorer() {
             buildingTarget ? { umdNm: buildingTarget.dong, jibun: buildingTarget.jibun } : null
           }
           devPressureOn={devPressureOn}
-          onToggleDevPressure={() => {
-            setDevPressureOn((v) => {
-              const next = !v;
-              if (next) setGemOn(false);
-              return next;
-            });
-          }}
+          onToggleDevPressure={() => setDevPressureOn((v) => !v)}
           devPressureFocus={dpFocus}
-          gemOn={gemOn}
-          onToggleGem={toggleGem}
-          gemFocus={gemFocus}
+          zoneDraw={
+            zoneDrawOn || zoneDrawDone
+              ? {
+                  active: zoneDrawOn,
+                  ring: zoneDrawOn ? zoneDrawPoints : (zoneDrawDone ?? []),
+                  onAddPoint: (lat, lng) => setZoneDrawPoints((pts) => [...pts, [lat, lng]]),
+                  onFinish: finishZoneDraw,
+                }
+              : null
+          }
+          onToggleZoneDraw={toggleZoneDraw}
           jibunPickOn={jibunPickOn}
           onToggleJibunPick={() => setJibunPickOn((v) => !v)}
           onPickJibun={(lat, lng) => {
@@ -1881,6 +1907,73 @@ export default function ZoneExplorer() {
             onExportCopy={() => void exportCopy()}
             onExit={exitAdminMode}
           />
+        </div>
+      )}
+
+      {/* ── ✏️ 구역 그려서 분석: 그리는 동안의 안내·조작 막대 ────────────────────
+          · 모바일은 화면 아래(상세 패널은 접힌 상태), 데스크톱은 검색 패널 오른쪽 위에 띄운다 —
+            검색창·필터와 지도 우측 상세 패널을 가리지 않는 자리다. */}
+      {zoneDrawOn && (
+        <div className="pointer-events-none absolute bottom-3 left-2 right-2 z-[640] md:bottom-auto md:left-[400px] md:right-3 md:top-3">
+          <div
+            data-testid="zone-draw-bar"
+            className="pointer-events-auto mx-auto w-full max-w-[560px] rounded-xl border-2 border-violet-300 bg-white/97 px-2.5 py-2 shadow-[0_2px_4px_rgba(16,24,40,.08),0_14px_32px_-18px_rgba(76,29,149,.55)]"
+          >
+            <div className="flex items-baseline gap-1.5">
+              <b className="whitespace-nowrap text-[12.5px] font-bold text-violet-900">✏️ 구역 그려서 분석</b>
+              <span className="truncate text-[10.5px] text-slate-500">
+                지도에서 꺽지점을 클릭(터치)하세요 — 마지막에 <b>분석하기</b> 또는 같은 자리 <b>더블클릭</b>
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className="rounded-full bg-violet-100 px-2 py-[2px] text-[10.5px] font-bold text-violet-800">
+                {zoneDrawPoints.length}점
+              </span>
+              {zoneDrawPoints.length >= 3 && (
+                <span className="whitespace-nowrap text-[11px] font-bold text-violet-900">
+                  {formatArea(ringAreaSqm(zoneDrawPoints))}
+                </span>
+              )}
+              <span className="ml-auto flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="zone-draw-undo"
+                  onClick={() => setZoneDrawPoints((pts) => pts.slice(0, -1))}
+                  disabled={zoneDrawPoints.length === 0}
+                  className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-400 disabled:opacity-40"
+                >
+                  한 점 취소
+                </button>
+                <button
+                  type="button"
+                  data-testid="zone-draw-reset"
+                  onClick={() => setZoneDrawPoints([])}
+                  disabled={zoneDrawPoints.length === 0}
+                  className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-slate-400 disabled:opacity-40"
+                >
+                  초기화
+                </button>
+                <button
+                  type="button"
+                  data-testid="zone-draw-finish"
+                  onClick={finishZoneDraw}
+                  disabled={zoneDrawPoints.length < 3}
+                  title={zoneDrawPoints.length < 3 ? "꼭짓점을 3개 이상 찍어야 분석할 수 있습니다" : "이 구역을 분석합니다"}
+                  className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  분석하기
+                </button>
+                <button
+                  type="button"
+                  data-testid="zone-draw-close"
+                  onClick={closeZoneDraw}
+                  className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-500 hover:border-slate-400 hover:text-slate-800"
+                >
+                  닫기 ✕
+                </button>
+              </span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2616,7 +2709,15 @@ export default function ZoneExplorer() {
         <aside className="absolute z-[610] flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(16,24,40,.05),0_18px_44px_-24px_rgba(16,24,40,.38)] inset-x-2 bottom-2 top-auto max-h-[62dvh] md:inset-x-auto md:left-auto md:right-3 md:top-3 md:bottom-3 md:max-h-none md:w-[400px]">
           <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
             <b className="text-sm font-bold text-slate-900">
-              {selectedCustom ? selectedCustom.name : selected ? selected.name : selectedSeoul ? "서울시 고시 구역" : "리디브 대시보드"}
+              {selectedCustom
+                ? selectedCustom.name
+                : zoneDrawDone && !selected && !selectedSeoul
+                  ? "✏️ 내가 그린 구역"
+                  : selected
+                    ? selected.name
+                    : selectedSeoul
+                      ? "서울시 고시 구역"
+                      : "리디브 대시보드"}
             </b>
             {!selected && !selectedSeoul && (
               <span className="text-[11px] text-slate-500">개발압력 TOP · 최근 변동</span>
@@ -2647,6 +2748,54 @@ export default function ZoneExplorer() {
             </button>
           </div>
           <div className="ui-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            {/* ── ✏️ 내가 그린 구역 — 1차 추정(구역현황) → 「분석 실행」으로 정밀 분석 ──
+                · ZoneVitalStats 가 /api/zone-stats(노후도·동수·밀도·과소필지)를 바로 돌리고,
+                  「분석 실행」을 누르면 /api/zone-stats/precise(조례 호수밀도·조합원·대지지분·
+                  모아타운50%·신통기획60% 판정·유형 비율)까지 낸다.
+                · 저장하지 않는 임시 분석이다 — 관리자(R?admin=1)의 구역 저장과 무관하다. */}
+            {zoneDrawDone && !selected && !selectedSeoul && (
+              <div
+                data-testid="zone-draw-card"
+                className="mb-3 space-y-2 rounded-xl border-2 border-violet-300 bg-violet-50/60 p-2.5"
+              >
+                <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                  <span className="rounded-md bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">분석</span>
+                  <b className="text-sm font-bold text-slate-900">내가 그린 구역</b>
+                  <span className="whitespace-nowrap text-[11px] font-bold text-violet-900">
+                    {formatArea(ringAreaSqm(zoneDrawDone))}
+                  </span>
+                  <span className="ml-auto whitespace-nowrap text-[10px] text-slate-400">
+                    {zoneDrawDone.length}점 · 저장 안 됨
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="zone-draw-redraw"
+                    onClick={redrawZoneDraw}
+                    className="rounded-full bg-violet-700 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-violet-800"
+                  >
+                    다시 그리기
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="zone-draw-clear"
+                    onClick={closeZoneDraw}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-slate-400 hover:text-slate-900"
+                  >
+                    지우기
+                  </button>
+                  <span className="ml-auto self-center text-[10px] text-slate-400">
+                    건축물대장·연속지적도 기준 추정치
+                  </span>
+                </div>
+                <ZoneVitalStats shape={{ polygon: zoneDrawDone }} areaSqm={ringAreaSqm(zoneDrawDone)} />
+                <p className="break-keep text-[10px] leading-snug text-slate-500">
+                  경계는 내가 그린 선이라 실제 필지와 다를 수 있습니다 — 건물·필지는 그 선 안에 중심이
+                  드는 것만 센다. 범위를 고치려면 <b>다시 그리기</b>.
+                </p>
+              </div>
+            )}
             {/* 0-0) 관리자 — 고른 구역의 경계·정보를 바로 고치는 자리.
                 왼쪽 관리자 패널까지 가지 않아도, 구역을 클릭한 그 자리에서 수정 화면이 열린다. */}
             {adminMode && !selectedCustom && (selectedSeoul || selected) && (
@@ -2959,46 +3108,23 @@ export default function ZoneExplorer() {
                         {/* 3) 아무것도 선택되지 않았을 때: 🔥 개발압력 TOP + ⚡ 최근 변동 구역 */}
             {!selected && !selectedSeoul && (
               <div className="space-y-3">
-                {/* 💎 원석 찾기를 켰을 때 — 서울 원석 블록 목록(누르면 지도에서 그 블록을 연다) */}
-                {gemOn && (
-                  <section data-testid="gem-top" className="rounded-xl border border-amber-200 bg-white p-2.5">
-                    <div className="mb-1 flex items-baseline gap-1.5">
-                      <b className="text-[12.5px] font-bold text-amber-900">💎 원석 블록</b>
-                      <span className="text-[10px] text-slate-500">
-                        정비구역 아닌 노후 저층지 {gemData ? `· 서울 ${gemData.summary.total}곳` : "· 불러오는 중…"}
-                      </span>
-                    </div>
-                    <div className="max-h-[320px] space-y-0.5 overflow-y-auto pr-0.5">
-                      {(gemData?.blocks ?? []).slice(0, 30).map((b, i) => (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => openGem(b)}
-                          data-testid="gem-top-item"
-                          data-gem-id={b.id}
-                          title={`${b.addr ?? ""} — ${gemSummary(b)}`}
-                          className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-amber-50/80"
-                        >
-                          <span className="w-3 shrink-0 text-center text-[10px] font-bold text-amber-600">{i + 1}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[12px] font-bold text-slate-900">
-                              {b.gu} {b.dong} <span className="font-semibold text-slate-500">{b.jibun}</span>
-                            </span>
-                            <span className="mt-[1px] block truncate text-[10px] text-slate-500">{gemSummary(b)}</span>
-                          </span>
-                          <span
-                            className="shrink-0 rounded-full px-1.5 py-[2px] text-[10px] font-extrabold text-white"
-                            style={{ backgroundColor: GEM_GRADE_COLOR[b.grade] }}
-                          >
-                            {Math.round(b.score)}점
-                          </span>
-                        </button>
-                      ))}
-                      {!gemData && <p className="px-1 py-2 text-[11px] text-slate-400">불러오는 중…</p>}
-                    </div>
-                    <p className="mt-1 px-1 text-[9.5px] leading-[1.4] text-slate-400">
-                      경계는 건물 위치로 추정한 참고선입니다 · 고시 구역계 아님
+                {/* ✏️ 구역 그려서 분석 — 아무것도 선택되지 않은 화면에서도 바로 시작할 수 있게 */}
+                {!zoneDrawDone && !zoneDrawOn && (
+                  <section
+                    data-testid="zone-draw-start"
+                    className="rounded-xl border border-violet-200 bg-violet-50/60 p-2.5"
+                  >
+                    <b className="text-[12.5px] font-bold text-violet-900">✏️ 구역 그려서 분석</b>
+                    <p className="mt-0.5 break-keep text-[10.5px] leading-snug text-violet-900/70">
+                      지도에서 꼭짓점을 찍어 그린 블록의 노후도·요건·조합원·유형 비율을 바로 분석합니다
                     </p>
+                    <button
+                      type="button"
+                      onClick={toggleZoneDraw}
+                      className="mt-1.5 w-full rounded-lg bg-violet-600 py-1.5 text-[11px] font-bold text-white hover:bg-violet-700"
+                    >
+                      지도에서 그리기 시작
+                    </button>
                   </section>
                 )}
 
