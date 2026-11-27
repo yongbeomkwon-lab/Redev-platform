@@ -34,6 +34,8 @@ type District = {
   byYear: Record<string, number>;
   peakYear: number | null;
   beyond: { y2032: number; y2033plus: number; undated: number };
+  /** 2032·2033+ 구역 목록 — 2026~2031 `zones` 와 같은 스키마(막대 툴팁·아래 목록용) */
+  beyondZones: { y2032: ZoneRow[]; y2033plus: ZoneRow[] };
   zoneCount: number;
   zones: ZoneRow[];
 };
@@ -72,7 +74,8 @@ export default function SupplyForecast() {
   const [data, setData] = useState<ForecastData | null>(null);
   const [error, setError] = useState(false);
   const [gu, setGu] = useState<string | null>(null);
-  const [selYear, setSelYear] = useState<number | null>(null);
+  // 막대 키 — 2026~2031 은 "2030" 처럼 연도, 2032 이후는 "2032"·"2033plus"
+  const [selKey, setSelKey] = useState<string | null>(null);
   const [beyond, setBeyond] = useState(false);
 
   useEffect(() => {
@@ -91,12 +94,30 @@ export default function SupplyForecast() {
 
   // 선택한 범위(서울 전체 또는 자치구 하나)의 연도별 합계·구역 목록
   const scope = useMemo(() => {
-    if (!data) return { byYear: {} as Record<number, number>, zones: [] as (ZoneRow & { gu: string })[] };
-    const list = gu ? data.districts.filter((d) => d.gu === gu) : data.districts;
+    if (!data)
+      return {
+        byYear: {} as Record<number, number>,
+        zones: [] as (ZoneRow & { gu: string })[],
+        beyondZones: { y2032: [] as (ZoneRow & { gu: string })[], y2033plus: [] as (ZoneRow & { gu: string })[] },
+        beyond: { y2032: 0, y2033plus: 0, undated: 0 },
+      };
+    const list: District[] = gu ? data.districts.filter((d) => d.gu === gu) : data.districts;
     const byYear: Record<number, number> = {};
     for (const y of data.meta.years) byYear[y] = list.reduce((s, d) => s + (d.byYear[String(y)] ?? 0), 0);
     const zones = list.flatMap((d) => d.zones.map((z) => ({ ...z, gu: d.gu })));
-    return { byYear, zones };
+    // 2032·2033+ — 막대 툴팁·목록이 쓰는 구역 배열(자치구별로 담겨 있으므로 범위에 맞춰 합친다)
+    const laterOf = (k: "y2032" | "y2033plus") =>
+      list.flatMap((d) => (d.beyondZones?.[k] ?? []).map((z) => ({ ...z, gu: d.gu })));
+    return {
+      byYear,
+      zones,
+      beyondZones: { y2032: laterOf("y2032"), y2033plus: laterOf("y2033plus") },
+      beyond: {
+        y2032: list.reduce((s, d) => s + d.beyond.y2032, 0),
+        y2033plus: list.reduce((s, d) => s + d.beyond.y2033plus, 0),
+        undated: list.reduce((s, d) => s + d.beyond.undated, 0),
+      },
+    };
   }, [data, gu]);
 
   const bars = useMemo(() => {
@@ -123,20 +144,46 @@ export default function SupplyForecast() {
     return years.reduce((best, y) => ((scope.byYear[y] ?? 0) > (scope.byYear[best] ?? 0) ? y : best), years[0]);
   }, [years, scope]);
 
-  const activeYear = useMemo(() => {
-    if (selYear != null && bars.some((b) => b.key === String(selYear))) return selYear;
-    return peakYear;
-  }, [selYear, bars, peakYear]);
+  const activeKey = useMemo(() => {
+    if (selKey != null && bars.some((b) => b.key === selKey)) return selKey;
+    return peakYear != null ? String(peakYear) : null;
+  }, [selKey, bars, peakYear]);
+
+  const isLater = activeKey === "2032" || activeKey === "2033plus";
+
+  /** 2032·2033+ 는 목록이 길어 상위 10곳만 보여 준다 — “전체 몇 곳 중”인지 함께 적는다 */
+  const activePool = isLater
+    ? activeKey === "2032"
+      ? scope.beyondZones.y2032.length
+      : scope.beyondZones.y2033plus.length
+    : null;
 
   const activeZones = useMemo(() => {
-    if (activeYear == null) return [];
+    if (activeKey == null) return [];
+    // 2032·2033+ — 데이터에 담긴 구역 목록에서 바로 (예전에는 “집계에서 제외”로 비어 있었다)
+    if (activeKey === "2032" || activeKey === "2033plus") {
+      const rows = activeKey === "2032" ? scope.beyondZones.y2032 : scope.beyondZones.y2033plus;
+      return [...rows].sort((a, b) => b.households - a.households).slice(0, 10);
+    }
     return scope.zones
-      .filter((z) => z.year === activeYear)
+      .filter((z) => z.year === Number(activeKey))
       .sort((a, b) => b.households - a.households)
       .slice(0, 10);
-  }, [scope, activeYear]);
+  }, [scope, activeKey]);
 
-  const activeTotal = activeYear != null ? scope.byYear[activeYear] ?? 0 : 0;
+  const activeTotal = useMemo(() => {
+    if (activeKey == null) return 0;
+    if (activeKey === "2032") return scope.beyond.y2032;
+    if (activeKey === "2033plus") return scope.beyond.y2033plus;
+    return scope.byYear[Number(activeKey)] ?? 0;
+  }, [scope, activeKey]);
+
+  /** 목록 제목 — 2032·2033+ 는 “2032년”·“2033년 이후”로 읽힌다 */
+  const activeLabel = isLater
+    ? activeKey === "2032"
+      ? "2032년"
+      : "2033년 이후"
+    : `${activeKey ?? "-"}년`;
 
   const guide = data?.meta.demandGuide;
   const guideTop = guide ? (guide.max / scaleMax) * 100 : 0;
@@ -274,15 +321,18 @@ export default function SupplyForecast() {
             <div className="relative z-10 flex h-full items-end gap-1 px-0.5 sm:gap-2">
               {bars.map((b, i) => {
                 const pct = (b.value / scaleMax) * 100;
-                const active = activeYear === Number(b.key);
-                const hoverTop = b.kind === "main"
-                  ? scope.zones.filter((z) => z.year === Number(b.key)).sort((a, c) => c.households - a.households).slice(0, 3)
-                  : [];
+                const active = activeKey === b.key;
+                const tips = b.kind === "main"
+                  ? scope.zones.filter((z) => z.year === Number(b.key))
+                  : b.key === "2032"
+                    ? scope.beyondZones.y2032
+                    : scope.beyondZones.y2033plus;
+                const hoverTop = [...tips].sort((a, c) => c.households - a.households).slice(0, 3);
                 return (
                   <button
                     key={b.key}
                     type="button"
-                    onClick={() => setSelYear(Number(b.key))}
+                    onClick={() => setSelKey(b.key)}
                     aria-label={`${b.label} ${fmt(b.value)}세대`}
                     className="group relative flex h-full flex-1 cursor-pointer flex-col justify-end outline-none"
                   >
@@ -331,9 +381,7 @@ export default function SupplyForecast() {
                           </span>
                         ))
                       ) : (
-                        <span className="text-[10px] text-white/60">
-                          {b.kind === "later" ? "구역별 목록은 집계에서 제외" : "세대수 공개 구역 없음"}
-                        </span>
+                        <span className="text-[10px] text-white/60">세대수 공개 구역 없음</span>
                       )}
                     </span>
                   </button>
@@ -349,7 +397,7 @@ export default function SupplyForecast() {
                 key={b.key}
                 className={
                   "flex-1 text-center text-[10px] tabular-nums sm:text-[12px] " +
-                  (activeYear === Number(b.key) ? "font-bold text-brand" : b.kind === "later" ? "text-slate-400" : "text-slate-500")
+                  (activeKey === b.key ? "font-bold text-brand" : b.kind === "later" ? "text-slate-400" : "text-slate-500")
                 }
               >
                 {b.label}
@@ -423,11 +471,14 @@ export default function SupplyForecast() {
       <section className="rounded-2xl border border-line bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-1">
           <h2 className="text-[15px] font-bold text-ink sm:text-base">
-            {activeYear ?? "-"}년 주요 입주 예정 구역
+            {activeLabel} 주요 입주 예정 구역
             <span className="ml-1.5 text-[12px] font-medium text-slate-500">{fmt(activeTotal)}세대</span>
           </h2>
           <span className="text-[11px] text-slate-400">
-            {gu ?? "서울 전체"} · 상위 {activeZones.length}곳
+            {gu ?? "서울 전체"} ·{" "}
+            {activePool != null && activePool > activeZones.length
+              ? `전체 ${fmt(activePool)}곳 중 상위 ${activeZones.length}곳`
+              : `상위 ${activeZones.length}곳`}
           </span>
         </div>
 

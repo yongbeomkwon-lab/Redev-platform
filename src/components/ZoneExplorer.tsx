@@ -8,6 +8,7 @@
 //  · 실거주 의무/토허제 뱃지, 예상 입주 구간
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Listing, MapZoneType, Transaction, Zone, ZoneStage } from "@/lib/types";
 import { STAGE_ORDER, calcInitialInvestment, calcMultiple } from "@/lib/types";
 import {
@@ -201,15 +202,34 @@ export default function ZoneExplorer() {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<MapZoneType | "전체">("전체");
   const [stageFilter, setStageFilter] = useState<ZoneStage | "전체">("전체");
+  // ── 주소가 구역을 지정했는가 — `window.location` 이 아니라 **라우터의 주소**를 본다 ───────
+  //   · `/supply` → `/` 같은 클라이언트 이동에서는 history.pushState 가 **새 화면 커밋 뒤**에
+  //     일어나, 새 화면 첫 렌더의 `window.location.href` 가 아직 이전 화면(`/supply`)이다.
+  //     그래서 `?zone=` 이 붙은 링크를 눌러도 “주소가 지정하지 않았다”로 잘못 판단해
+  //     마지막에 보던 화면(`redev_last_view_v1`)을 덮어썼다(2026-11-27 제보:
+  //     입주물량에서 신림1구역 [지도]를 누르면 대림동 680 이 열렸다).
+  //   · `useSearchParams()` 는 라우터가 이미 바꾼 주소를 그대로 주므로 타이밍에 흔들리지 않는다.
+  const searchParams = useSearchParams();
+  const urlZoneId = searchParams?.get("zone") ?? null;
+  const urlMyId = searchParams?.get("my") ?? null;
+  // 첫 렌더 시점의 판단을 고정한다 — 되살리기는 ‘들어온 주소’ 기준으로 한 번만 결정한다.
+  const urlPinnedOnBootRef = useRef(Boolean(urlZoneId || urlMyId));
+  // 되살리기 effect 가 보는 ‘지금 주소’ — 첫 렌더에 파라미터가 늦게 붙는 경우까지 막는 이중 방어
+  const urlPinnedNowRef = useRef(Boolean(urlZoneId || urlMyId));
+  urlPinnedNowRef.current = Boolean(urlZoneId || urlMyId);
   // ── 마지막으로 보던 화면 (2026-11-27 사용자 요청) ────────────────────────────
   //   · 첫 렌더에서 localStorage(`redev_last_view_v1`)를 한 번만 읽는다.
   //     주소가 특정 구역(`?zone=`)·매물(`?my=`)을 지정했으면 그 주소가 이긴다 — 링크가 목적한
   //     곳을 먼저 보여 줘야 한다.
   //   · 지도에는 `initialView` 로 넘겨, 서울 전체로 맞췄다가 다시 옮기는 깜빡임 없이
   //     닫기 직전 화면에서 바로 시작한다. (렌더 결과에는 쓰지 않아 SSR 불일치도 없다)
-  const [bootView] = useState<StoredView | null>(() =>
-    typeof window === "undefined" || urlPinsView() ? null : readLastView()
-  );
+  const [bootView] = useState<StoredView | null>(() => {
+    if (typeof window === "undefined") return null;
+    // 이중 방어 — 라우터 주소(useSearchParams)와 window 주소 중 하나라도 구역을 지정했으면
+    //   저장본은 읽지도 않는다. 저장본이 있으면 지도가 그 위치로 jump 하고 선택까지 덮어쓴다.
+    if (urlPinnedOnBootRef.current || urlPinsView()) return null;
+    return readLastView();
+  });
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
   const [unlockTarget, setUnlockTarget] = useState<Listing | null>(null);
@@ -439,34 +459,25 @@ export default function ZoneExplorer() {
     return () => window.removeEventListener(LISTINGS_CHANGED_EVENT, reload);
   }, []);
 
-  // `/?zone=<구역 id>` — 매물 목록·등록 완료 화면에서 넘어오면 그 구역 상세를 바로 열어 준다
+  // `/?zone=<구역 id>` — 매물 목록·등록 완료·입주물량에서 넘어오면 그 구역 상세를 바로 열어 준다
+  //   · 라우터 주소를 쓰므로 클라이언트 이동에서도 놓치지 않고, 뒤로/앞으로 가기로 주소가 바뀌어도 따라간다.
   useEffect(() => {
-    let id: string | null = null;
-    try {
-      id = new URL(window.location.href).searchParams.get("zone");
-    } catch {
-      id = null;
-    }
+    const id = urlZoneId;
     if (!id) return;
     setSelectedId(id);
     setPanelOpen(true);
-  }, []);
+  }, [urlZoneId]);
 
   // `/?my=<매물 id>` — 매물 목록에서 내 매물의 [지도에서 보기]로 들어오면
   //   「내 매물만 보기」를 켜고 그 핀을 지도에 펼친다.
   useEffect(() => {
-    let id: string | null = null;
-    try {
-      id = new URL(window.location.href).searchParams.get("my");
-    } catch {
-      id = null;
-    }
+    const id = urlMyId;
     if (!id) return;
     setMyOnly(true);
     setMyFocusId(id);
     setPanelOpen(false);
     setSeoulFitRequest((v) => v + 1);
-  }, []);
+  }, [urlMyId]);
 
   // ── 마지막으로 보던 구역 되살리기 (2026-11-27) ────────────────────────────
   //   · 저장해 둔 구역이 있으면 상세 패널을 연 채로 시작한다 — “닫기 직전에 보던 구역이
@@ -477,13 +488,27 @@ export default function ZoneExplorer() {
   useEffect(() => {
     if (restoredSelectionRef.current) return;
     restoredSelectionRef.current = true;
+    // 주소가 구역을 지정했으면 되살리기는 손대지 않는다 — 주소가 이긴다(이중 방어).
+    if (urlPinnedOnBootRef.current || urlPinnedNowRef.current) return;
     const id = bootView?.selectedZoneId;
     if (!id) return;
-    setSelectedId(id);
+    // `?zone=` 이 먼저 골라 둔 구역이 있으면 덮어쓰지 않는다.
+    setSelectedId((cur) => cur ?? id);
     // 넓은 화면은 오른쪽 드로어라 지도를 가리지 않는다 — 열어 둔 채로 시작한다.
     //   폰은 아래 시트가 지도를 덮으므로 열지 않는다(구역은 선택된 채라 탭 한 번이면 열린다).
     if (typeof window !== "undefined" && window.innerWidth >= 768) setPanelOpen(true);
   }, [bootView]);
+
+  // 주소가 지정한 구역(`?zone=`)으로 지도를 **확실히** 맞춘다 — 구역 데이터가 늦게 와도 놓치지 않게
+  //   · 지도는 선택 구역이 바뀌면 경계로 맞추지만, 데이터가 아직 없을 때 첫 맞춤을 지나치면
+  //     서울 전체 배율에 머문다(입주물량 [지도] 제보). 구역 목록이 준비된 뒤 한 번 더 맞춘다.
+  const urlZoneFittedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!urlZoneId || urlZoneFittedRef.current === urlZoneId) return;
+    if (!seoulZones.some((z) => z.id === urlZoneId)) return;
+    urlZoneFittedRef.current = urlZoneId;
+    setZoneFitRequest((n) => n + 1);
+  }, [urlZoneId, seoulZones]);
 
   // 저장해 둔 구역이 데이터에서 사라졌으면(구역 개편·이름 변경) 선택을 비운다
   //   — 지도에 없는 id 로 패널만 빈 채 뜨는 일을 막는다.
