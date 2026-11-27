@@ -36,7 +36,7 @@ export type GemBlock = {
   old30Pct: number;
   /** 20년 이상(2006 이전) 비율 % */
   old20Pct: number;
-  /** 최근 10년(2017 이후) 신축 비율 % */
+  /** 최근 10년(2016 이후) 신축 비율 % */
   new10Pct: number;
   /** 건물 중 저층(외곽 250㎡ 이하) 비율 % */
   lowRisePct: number;
