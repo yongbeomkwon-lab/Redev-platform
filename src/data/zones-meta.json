@@ -374,5 +374,35 @@
    "gangnam-daechi-dogok-virtual"
   ],
   "note": "대치4동 4곳을 번지 단위 필지 합집합으로 다시 작도했습니다(테트리스 계단·뾰족 도로 꼬리 제거, 915-3 포함, 901-69·72 등 내부 구멍 메움). 915 모아타운은 북쪽 경계를 915-1·2·3·6·7·8까지 올렸습니다."
+ },
+ "seongdongGwangjin9_20261127": {
+  "asOf": "2026-11-27",
+  "note": "성동·광진 9곳 — 금호동4가 1458 유형·단계 정정(지주택·건축심의통과), 금호21 시공사선정(2026-02-07), 금남시장·금호현대·응봉대림1차·마장동 793-22 신규 등록, 용답1·2 표기·면적·권리산정기준일 갱신",
+  "zones": {
+   "11000UQ120PS202505310983": {
+    "new": false
+   },
+   "11000UQ120PS202411014498": {
+    "new": false
+   },
+   "sd-geumnam-market": {
+    "new": true
+   },
+   "sd-eungbong-geumho-hyundai": {
+    "new": true
+   },
+   "sd-eungbong-daerim1": {
+    "new": true
+   },
+   "sd-majang-793-22": {
+    "new": true
+   },
+   "sy-yongdap1": {
+    "new": false
+   },
+   "yongdap-2": {
+    "new": false
+   }
+  }
  }
 }
