@@ -46,6 +46,7 @@ import {
   type PreciseChunkStats,
   type PreciseSummary,
 } from "@/lib/zone-ledger";
+import ZoneAppraisalRank from "@/components/ZoneAppraisalRank";
 
 function n(v: number): string {
   return v.toLocaleString("ko-KR");
@@ -991,6 +992,12 @@ export default function ZoneVitalStats({
           </div>
         )}
       </div>
+
+      {/* ── 📊 추정 감평 순위(공시가격 기반) ─────────────────────────────
+          구역 안 필지의 국토부 공시가격으로 보정률을 곱한 추정 감정가 순위·분위를 낸다.
+          필지마다 브이월드를 1~3회 왕복해 수백 번 부르므로 자동으로 돌리지 않고
+          「불러오기」를 눌렀을 때만 조회한다(쿼터·체감 속도). 한 번 받은 구역은 30일 저장. */}
+      <ZoneAppraisalRank shape={shape} areaSqm={areaSqm ?? null} />
 
       {status === "ok" && meta?.truncated && (
         <p className="mt-2 text-[10px] leading-snug text-amber-700">
