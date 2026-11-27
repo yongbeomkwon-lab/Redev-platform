@@ -664,3 +664,17 @@ textarea {
 [data-admin-edit="1"] .tx-price-pin {
   pointer-events: none !important;
 }
+
+/* ✏️ 구역 그려서 분석 — 그리는 동안 지도 위 이름표·핀이 클릭을 가로채지 않는다.
+   점을 찍으려는데 구역 이름표·실거래 가격표·매물 핀이 먼저 잡히면 점이 안 찍히고
+   그 구역이 열린다(2026-11-27 제보: 방배동 467-19 이름표를 누르자 구역이 열렸다). */
+[data-zone-draw="1"] .zone-tag,
+[data-zone-draw="1"] .zone-name-label,
+[data-zone-draw="1"] .dev-pressure-pin,
+[data-zone-draw="1"] .tx-price-pin,
+[data-zone-draw="1"] .my-pin,
+[data-zone-draw="1"] .auction-pin,
+[data-zone-draw="1"] .jibun-drop-pin,
+[data-zone-draw="1"] .district-badge {
+  pointer-events: none !important;
+}

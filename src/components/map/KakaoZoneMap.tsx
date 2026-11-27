@@ -3801,6 +3801,9 @@ export default function KakaoZoneMap({
       className="kakao-map-wrap relative h-full w-full overflow-hidden rounded-xl"
       data-jibun-pick={jibunPickOn || boundaryBusy ? "1" : undefined}
       data-admin-edit={admin ? "1" : undefined}
+      // ✏️ 구역을 그리는 중에는 지도 위 이름표·핀이 클릭을 가로채지 않는다(CSS) —
+      //   점을 찍으려는데 구역 이름표·실거래 가격표가 먼저 잡히면 점이 안 찍히고 구역이 열린다.
+      data-zone-draw={zoneDraw?.active ? "1" : undefined}
     >
       <div ref={mapElRef} className="h-full w-full" />
 

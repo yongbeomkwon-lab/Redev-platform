@@ -1922,7 +1922,7 @@ export default function ZoneExplorer() {
             <div className="flex items-baseline gap-1.5">
               <b className="whitespace-nowrap text-[12.5px] font-bold text-violet-900">✏️ 구역 그려서 분석</b>
               <span className="truncate text-[10.5px] text-slate-500">
-                지도에서 꺽지점을 클릭(터치)하세요 — 마지막에 <b>분석하기</b> 또는 같은 자리 <b>더블클릭</b>
+                지도에서 꼭짓점을 클릭(터치)하세요 — 마지막에 <b>분석하기</b> 또는 같은 자리 <b>더블클릭</b>
               </span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1">
