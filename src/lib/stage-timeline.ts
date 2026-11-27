@@ -231,6 +231,9 @@ export const EXACT_STAGE: Record<string, StageEvent[]> = {
   "사업시행계획인가": [E("implement")],
   "사업계획승인": [E("implement")],
   "사업시행자지정": [E("implement")],
+  // 사업시행(계획)인가 '공람' — 인가 전이라 진행 중으로 둔다(상도15, 2026-11-26 공람공고)
+  "사업시행계획인가(공람)": [E("implement", undefined, true, "공람")],
+  "사업시행인가 공람": [E("implement", undefined, true, "공람")],
   "건축심의": [E("design", undefined, true)],
   "건축심의/통합심의": [E("design", undefined, true)],
   "건축허가": [E("design")],
