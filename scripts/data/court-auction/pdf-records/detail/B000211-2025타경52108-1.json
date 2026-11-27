@@ -1,0 +1,129 @@
+{
+ "court": "B000211",
+ "caseNo": "2025타경52108",
+ "seq": "1",
+ "case": {
+  "caseNo": "2025타경52108",
+  "court": "서울동부지방법원",
+  "courtDept": "경매4계",
+  "receiptDate": "20250919",
+  "commenceDate": "20250925",
+  "dividendDeadline": "20251216",
+  "claimAmount": 201159049,
+  "schedules": {
+   "1": [
+    {
+     "date": "20260803",
+     "time": "1000",
+     "kind": "매각기일",
+     "place": "입찰법정[제101호]",
+     "minimum": 425000000,
+     "result": "유찰"
+    },
+    {
+     "date": "20260914",
+     "time": "1000",
+     "kind": "매각기일",
+     "place": "입찰법정[제101호]",
+     "minimum": 340000000,
+     "result": "유찰"
+    },
+    {
+     "date": "20261026",
+     "time": "1000",
+     "kind": "매각기일",
+     "place": "입찰법정[제101호]",
+     "minimum": 272000000,
+     "result": "유찰"
+    },
+    {
+     "date": "20261130",
+     "time": "1000",
+     "kind": "매각기일",
+     "place": "입찰법정[제101호]",
+     "minimum": 217600000,
+     "result": ""
+    },
+    {
+     "date": "20261207",
+     "time": "1400",
+     "kind": "매각결정기일",
+     "place": "입찰법정[제101호]",
+     "minimum": null,
+     "result": ""
+    }
+   ]
+  },
+  "lists": [
+   {
+    "seq": 1,
+    "kind": "집합건물",
+    "address": "1동의 건물의 표시",
+    "closing": ""
+   },
+   {
+    "seq": 2,
+    "kind": "토지",
+    "address": "null 9917.4㎡",
+    "closing": ""
+   }
+  ],
+  "collectedAt": "2026-11-27T22:41:07+09:00",
+  "depositRate": 10,
+  "itemStatus": {
+   "1": "매각공고"
+  }
+ },
+ "item": {
+  "objectKind": "근린시설",
+  "salePlace": "입찰법정[제101호]",
+  "areas": [
+   {
+    "kind": "집합건물",
+    "detail": "1동의 건물의 표시\n서울특별시 성동구 용답동 234\n철근콘크리트조 슬래브지붕 3층시장\n비호 디동\n1층 3776.53㎡\n2층 3776.53㎡\n3층 4048.26㎡\n지하실 4320.66㎡\n옥탑 271.74㎡\n전유부분의 건물의 표시\n건물의 번호 : 비호디동 3층가3호\n구          조 : 철근콘크리트조\n면          적 : 79.27㎡",
+    "areaSqm": 3776.53
+   },
+   {
+    "kind": "토지",
+    "detail": "null 9917.4㎡\n매각지분 : 공유자 지분 중  9917.4분의 26.148 고근수 지분",
+    "areaSqm": 9917.4
+   }
+  ],
+  "area": {
+   "exclusiveSqm": 79.27,
+   "exclusivePy": 24.0,
+   "landSqm": null,
+   "landPy": null
+  },
+  "appraisalSummary": [],
+  "photos": [
+   {
+    "url": "/data/auction-photos/B000211-2025타경52108-01.jpg",
+    "caption": "현장사진 1"
+   },
+   {
+    "url": "/data/auction-photos/B000211-2025타경52108-02.jpg",
+    "caption": "현장사진 2"
+   },
+   {
+    "url": "/data/auction-photos/B000211-2025타경52108-03.jpg",
+    "caption": "현장사진 3"
+   },
+   {
+    "url": "/data/auction-photos/B000211-2025타경52108-04.jpg",
+    "caption": "현장사진 4"
+   },
+   {
+    "url": "/data/auction-photos/B000211-2025타경52108-05.jpg",
+    "caption": "현장사진 5"
+   }
+  ],
+  "collectedAt": "2026-11-27T22:41:07+09:00",
+  "appraised": 425000000,
+  "minimum": 217600000
+ },
+ "meta": {
+  "pages": 2,
+  "source": "법원경매정보 - 경매사건검색-5.pdf"
+ }
+}

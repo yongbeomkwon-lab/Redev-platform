@@ -1,0 +1,6794 @@
+{
+ "generatedAt": "2026-11-27T22:34:44+09:00",
+ "cases": [
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경625",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "DDP 1·2·3구역"
+   ],
+   "ddp": true
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경1997",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "DDP 1·2·3구역"
+   ],
+   "ddp": true
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경101093",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "DDP 1·2·3구역"
+   ],
+   "ddp": true
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경1072",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "DDP 1·2·3구역"
+   ],
+   "ddp": true
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경52108",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261130",
+   "futureSaleDate": "20261130",
+   "zones": [
+    "장안평중고차매매센터"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2026타경50167",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261130",
+   "futureSaleDate": "20261130",
+   "zones": [
+    "천호동 237-45 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경12216",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "살구마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경770",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-2구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경104",
+   "caseYear": "2026",
+   "items": [
+    "1",
+    "2"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "방화동 553-9"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3731",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3749",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "시흥5동 919번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2024타경123773",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "면목역 3의2구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2024타경2548",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "무수골"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경10676",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "방학동 641"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12136",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 460번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12159",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "석관고 3구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12993",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "(가칭)수유동49-62번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13348",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "수유동 392-9"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13422",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "면목역 6의1구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13688",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "(가칭)면목동 371-134 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13714",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "삼환도봉아파트"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13750",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "미아동 258"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13850",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "전농13구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13888",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "숲속마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13949",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "전농8구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경2743",
+   "caseYear": "2025",
+   "items": [
+    "2"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 26 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3012",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "(가칭)묵동 247-1번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3579",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3586",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3661",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3678",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3692",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3753",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3760",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3784",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3845",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3852",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3876",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3937",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3944",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3968",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4022",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4039",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4053",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4114",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4121",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4145",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4206",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4213",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4237",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4299",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4305",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4329",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4381",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4398",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4411",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4473",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4480",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4503",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4565",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4572",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4596",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4626",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4657",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4664",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4688",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4749",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4756",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4770",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4831",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4848",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4862",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4923",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4930",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4954",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5018",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5025",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5049",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5100",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5117",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5131",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5193",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5209",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5223",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5285",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5292",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5315",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5339",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5377",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5384",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5407",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5469",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5476",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5490",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5551",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5568",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5582",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5650",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "무수골"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10007",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "숲속마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10066",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "수유동 392-9"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10182",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "방학동 641"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10256",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "(가칭)묵동 247-1번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10441",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "쌍문동 81 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경107",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261201",
+   "futureSaleDate": "20261201",
+   "zones": [
+    "(가칭) 제기동 345번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103674",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "청룡동 1535"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104370",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "다산권 성곽마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경3860",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "관악아파트 소규모재건축사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100454",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "굴참마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100539",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "새싹마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경101393",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "(가칭)방배16구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경101545",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "청담동128-1번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2024타경4992",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "신길1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경10730",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-1구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경10774",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "(가)신길6"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경10836",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "개봉동 153-19"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경540",
+   "caseYear": "2025",
+   "items": [
+    "1",
+    "3",
+    "4"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "대방역세권",
+    "여의대방 가로주택정비사업",
+    "여의대방2역세권"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경799",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "독산동 468-1"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3880",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "시흥4동 1-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4190",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261202",
+   "futureSaleDate": "20261202",
+   "zones": [
+    "영등포1-2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2024타경135766",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261203",
+   "futureSaleDate": "20261203",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경11113",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261203",
+   "futureSaleDate": "20261203",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경17",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261203",
+   "futureSaleDate": "20261203",
+   "zones": [
+    "마곡엠밸리9단지"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경5629",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261203",
+   "futureSaleDate": "20261203",
+   "zones": [
+    "시흥4동 1-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경5736",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261203",
+   "futureSaleDate": "20261203",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-4구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경6328",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261203",
+   "futureSaleDate": "20261203",
+   "zones": [
+    "독산2동 380 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경11526",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "개봉동 20"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경11619",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 359번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14178",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "방화2동 592-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경8719",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경8911",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "곰달래꿈마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3009",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3210",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3298",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "시흥4동 1-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3432",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-2구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3556",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "목동역 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3823",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "독산2동 380 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3852",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "신월5동 72 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3889",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "공항동 55-327 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3897",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "신정4동 922 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3972",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-3구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4055",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 359번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4081",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "독산2동 380 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4414",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "고척동253번지일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4445",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 1087번지 일대 모아타운 [A1-3구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4494",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "신월1동 229번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4511",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "시흥4동 1-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4536",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 1087번지 일대 모아타운 [A1-3구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4544",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "독산2동 380 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4567",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "온수골"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4609",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "너른뜰마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4708",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-4구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4713",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "고척동 241-23번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4828",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "신월1동 229번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4894",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4986",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261204",
+   "futureSaleDate": "20261204",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경52196",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261207",
+   "futureSaleDate": "20261207",
+   "zones": [
+    "강동역B"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경102067",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "성현동 1021 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경102886",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "신림5구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경102965",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)봉천동 635-184번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103268",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "신대방3구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103560",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)봉천동 635-298번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104611",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2024타경114363",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "온수골"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경11520",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "개봉동 20"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경12011",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경12068",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "독산시흥구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13554",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "구로동 511번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13784",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13846",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "너른뜰마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14029",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "너른뜰마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14055",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "독산2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14109",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "방화2동 592-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14135",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14208",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "시흥5동 919번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14233",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경8351",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경8371",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "해오름마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경8518",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡1동 359번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경9749",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "독산2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경9895",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "복숭아마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3007",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3011",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3141",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "복숭아마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3181",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "시흥5동 919번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3208",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-3구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3336",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "방화2동 592-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3483",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3653",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3761",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3842",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3942",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)신월동 109-1번지 일원 가로주택정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4017",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "화곡1동 359번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12162",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "상계5동 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12815",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "방학동 618번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13447",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "수유동 141"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13752",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)제기동 137-2 가로주택정비사업구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경6240",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10119",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "장안1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10147",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "창동 548-17번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10268",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "쌍문동 460번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10541",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "수유동 392-9"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10543",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "쌍문동 460번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10552",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "도봉동 609 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10570",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "쌍문역 서측"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10605",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "쌍문동 모아타운 2-3구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10794",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "방학동 618번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경21",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "돈암6"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경83",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)수유동478-3번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2024타경59489",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "중동 112"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경1814",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "창천"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경2626",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "성산동 607-6"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경51555",
+   "caseYear": "2025",
+   "items": [
+    "3"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "신사동237번지일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경51916",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "응암동 675"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50054",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "응암동 675"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50091",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "(가칭)성산동 200-281번지 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50455",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "은평3-2지구"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50505",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "은평3-1지구"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50703",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261208",
+   "futureSaleDate": "20261208",
+   "zones": [
+    "은평2지구"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경101733",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "은마아파트"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103505",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "(가칭)봉천동 635-298번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103957",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "신림5구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104219",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "서초교대타운 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100059",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "신대방동 364-190"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경11184",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "신길제2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13192",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "너른뜰마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13680",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "독산4동 1022번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경430",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "방화동 553-9"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3440",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261209",
+   "futureSaleDate": "20261209",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경110204",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "(가칭)봉천동 635-1번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경122955",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "(가칭)봉천동 622-5번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경102071",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103144",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "신림6구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103954",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "래미안 원펜타스"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104359",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100419",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "신림8구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100572",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "양재동 374"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경5344",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261210",
+   "futureSaleDate": "20261210",
+   "zones": [
+    "독산4동 1022번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2024타경195",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261214",
+   "futureSaleDate": "20261214",
+   "zones": [
+    "사근동 293 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경51254",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261214",
+   "futureSaleDate": "20261214",
+   "zones": [
+    "천호동 107-33번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경119034",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)봉천동 635-540번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103473",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "신림5구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104343",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "사당22구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경953",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)봉천동 622-5번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100669",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "굴참마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2026타경100755",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "상도15구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2024타경145114",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13697",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "개봉동 20"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13722",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "시흥1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14234",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3008",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3012",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3056",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "너른뜰마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3283",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3395",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "고척동253번지일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3451",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "개봉동 20"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3552",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "시흥동 864-1번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3636",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3654",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3698",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "신월동 102-33일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3739",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "독산1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3743",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "박미사랑마을Ⅱ"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3947",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "신월1동 229번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3952",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "고척동253번지일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3981",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-3구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4004",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡1동 1087번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4018",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡1동 359번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4075",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "독산2동 380 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4110",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "방화2동 592-1번지 일대 모아타운 통합정비(안) [A-1구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4151",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)신월동 109-1번지 일원 가로주택정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4247",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "독산1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4289",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4388",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "목동역 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4514",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "신월동 102-33일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4535",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡1동 359번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4590",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "신월동 102-33일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4612",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "독산2동 380 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4698",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "독산1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4707",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-4구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4712",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "공항동 55-327 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2024타경109685",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 710"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12164",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)면목역6의2구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12753",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "장안1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13402",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)중화역 3의5구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13738",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "면목역 6의1구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13764",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "전농동 152-65"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3548",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3630",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3722",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3814",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3906",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3999",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4084",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4176",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4268",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4350",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4442",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4534",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4718",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4800",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4893",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4985",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5070",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5162",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5254",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5346",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5438",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5520",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10003",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "(가칭)수유동 58-85번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10168",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "수유동 141"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2026타경10238",
+   "caseYear": "2026",
+   "items": [
+    "1",
+    "10",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "소리마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2023타경61393",
+   "caseYear": "2023",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "합정동 369"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2024타경55203",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "아현2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경1951",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "아현1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경2251",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "연희1"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경2558",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "청파 2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경51688",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "응암동 594-38번지 일대 가로주택정비사업(예정)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경52230",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "불광근린공원인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경52313",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "연남동"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50025",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "불광동 445 일대 신속통합기획 주택재개발사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2026타경50217",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261215",
+   "futureSaleDate": "20261215",
+   "zones": [
+    "역촌역세권(역촌동) 장기전세주택 도시정비형 재개발사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경9872",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261216",
+   "futureSaleDate": "20261216",
+   "zones": [
+    "독산시흥구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3809",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261216",
+   "futureSaleDate": "20261216",
+   "zones": [
+    "살구마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4253",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261216",
+   "futureSaleDate": "20261216",
+   "zones": [
+    "화곡동 424"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경5300",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261216",
+   "futureSaleDate": "20261216",
+   "zones": [
+    "슈프림더하이움)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경102779",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "(가칭)봉천동 635-184번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103173",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103290",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "신림4구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103399",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103869",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103930",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "신림1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104044",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "노량진14구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104682",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "신림동 655-78번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2024타경103790",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "오류동 4"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경10109",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "오류동 4"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경12007",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "(가칭)신월3동 183번지 일대 가로주택정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13302",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "독산2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경8947",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261217",
+   "futureSaleDate": "20261217",
+   "zones": [
+    "살구마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000215",
+   "courtName": "서울서부지방법원",
+   "caseNo": "2025타경50168",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261222",
+   "futureSaleDate": "20261222",
+   "zones": [
+    "은평2지구"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경102621",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20270106",
+   "futureSaleDate": "20270106",
+   "zones": [
+    "상도24구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경2620",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20270106",
+   "futureSaleDate": "20270106",
+   "zones": [
+    "상계역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2024타경56150",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "길동 171지구"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경388",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "고덕 래미안 힐스테이트"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경485",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "올림픽선수기자촌"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경52314",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "올림픽선수기자촌"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경52446",
+   "caseYear": "2025",
+   "items": [
+    "2"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "마천3구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2025타경52541",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "마천1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2026타경50109",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "마천5구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000211",
+   "courtName": "서울동부지방법원",
+   "caseNo": "2026타경50481",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261123",
+   "futureSaleDate": "",
+   "zones": [
+    "풍납동 483-10번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103085",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "사당동 300 모아타운"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103371",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "신림5구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103602",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "신림7구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104008",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "상도동 279"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104530",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "상도15구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104660",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2024타경134077",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "대선제분일대1구역1지구"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경10950",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "오류동 4"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13385",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "엄지마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13882",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "신풍역 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경14093",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "시흥동 817번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경372",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "시흥3동 1005번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경838",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "신길16-2"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경842",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "독산3동 979번지  일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3302",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "신월5동 72 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3835",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "보성연립 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2023타경5748",
+   "caseYear": "2023",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 26 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2024타경107122",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "면목역 3의1구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2024타경119439",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "수유동 31-10"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경10119",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 모아타운 2-4구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12698",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "방학신동아1단지아파트",
+    "쌍문동 26 일대",
+    "쌍문동 모아타운 1-1구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경12874",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "숲속마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13036",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "숲속마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13346",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "하월곡동1"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13370",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "장위13-8구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13595",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "미아8구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13757",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)면목역 10구역 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13847",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "숲속마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경13856",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "상계6구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경1825",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "면목8구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경2422",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)수유동 58-85번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경2705",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)면목동 192-102 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경2965",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)답십리동 271-1 가로주택정비사업구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경2972",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "정릉동 898-16 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3555",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3562",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3654",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3746",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3838",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경3920",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4015",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4107",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4183",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4190",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4275",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4282",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4367",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4374",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4459",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4466",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4541",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4558",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4633",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4640",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4725",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4732",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4817",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4824",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4909",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경4916",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5001",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5087",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5094",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5179",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5186",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5261",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5278",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5353",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5360",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5445",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5452",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5537",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5544",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "쌍문동 507-1일원"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5919",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "면목3,8동 453-1번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경5995",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)면목동 1-4번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000213",
+   "courtName": "서울북부지방법원",
+   "caseNo": "2025타경945",
+   "caseYear": "2025",
+   "items": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "saleDate": "20261124",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)면목동 3-1번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2022타경110060",
+   "caseYear": "2022",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "개봉동 49"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경10545",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "화곡6동 957-1 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경11570",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "목동6단지"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경470",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "도림1구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경9903",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "화곡2동 주민센터 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경130",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)신월동 99-1번지 일원 가로주태정비사업(미등록)"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경30",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "너른뜰마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3169",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "목4동 강서고 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3830",
+   "caseYear": "2026",
+   "items": [
+    "1",
+    "2",
+    "3"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "구로동 466"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4666",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261125",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭)개봉동 108-5번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경118130",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "사당15구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2024타경119508",
+   "caseYear": "2024",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "청룡동 1535"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경103370",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "신림5구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104028",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104447",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "신림10구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000210",
+   "courtName": "서울중앙지방법원",
+   "caseNo": "2025타경104659",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "굴참마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2023타경120378",
+   "caseYear": "2023",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "목4동 강서고 인근"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13363",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "구로동 451번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경13497",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "독산3동 979번지  일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2025타경707",
+   "caseYear": "2025",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "구로동 454번지 일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경180",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "독산동 1035번지 일대"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경3776",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "독산2구역"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4129",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "화곡1동 354번지 일대 모아타운 [A2-1구역] 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4462",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "시흥5동 922번지 일대 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경4980",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "곰달래꿈마을"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경5052",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "(가칭) 구로동 706-30일원 가로주택정비사업"
+   ],
+   "ddp": false
+  },
+  {
+   "court": "B000212",
+   "courtName": "서울남부지방법원",
+   "caseNo": "2026타경5353",
+   "caseYear": "2026",
+   "items": [
+    "1"
+   ],
+   "saleDate": "20261126",
+   "futureSaleDate": "",
+   "zones": [
+    "독산동 468-1"
+   ],
+   "ddp": false
+  }
+ ]
+}

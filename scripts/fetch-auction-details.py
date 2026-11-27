@@ -64,6 +64,8 @@ RAW_DIR = os.path.join(DATA_DIR, "case-raw")        # 사건검색(기존)
 DETAIL_DIR = os.path.join(DATA_DIR, "detail-raw")   # 물건상세
 SURVEY_DIR = os.path.join(DATA_DIR, "survey-raw")   # 현황조사서
 MANUAL = os.path.join(DATA_DIR, "manual-details.json")
+PDF_DETAIL_DIR = os.path.join(DATA_DIR, "pdf-records", "detail")   # 브라우저 인쇄본(PDF) 물건상세
+PDF_SURVEY_DIR = os.path.join(DATA_DIR, "pdf-records", "survey")   # 브라우저 인쇄본(PDF) 현황조사서
 COOKIE = os.path.join(DATA_DIR, "cookies.txt")
 BLOCK_LOG = os.path.join(DATA_DIR, "blocks.json")
 
@@ -776,7 +778,47 @@ def rebuild() -> dict:
         dst = by_case.setdefault(case_key(court, rec.pop("_key", "") or case_part), {})
         merge_case(dst, rec)
 
-    # ④ 화면에서 직접 확인한 레코드(자동 수집이 막혔을 때) — raw 가 우선
+    # ⑤ 브라우저 인쇄본 — 한국 IP 브라우저에서 화면을 인쇄한 PDF 를 파싱한 레코드
+    #    (scripts/auction-pdf-ingest.py). raw 가 있으면 raw 를 지키고 빈 칸만 채운다.
+    for f in sorted(os.listdir(PDF_DETAIL_DIR)) if os.path.isdir(PDF_DETAIL_DIR) else []:
+        if not f.endswith(".json"):
+            continue
+        try:
+            rec = json.load(open(os.path.join(PDF_DETAIL_DIR, f), encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            errors.append(f"pdf/{f}: {e}")
+            continue
+        court, case_no, seq = s(rec.get("court")), s(rec.get("caseNo")), s(rec.get("seq")) or "1"
+        if not court or not case_no:
+            continue
+        key = case_key(court, case_no)
+        by_case.setdefault(key, {})
+        merge_case(by_case[key], rec.get("case") or {})
+        item = rec.get("item") or {}
+        item_id = (idx.get((court, case_no)) or {}).get(seq)
+        if item_id:
+            by_id[item_id] = {**(by_id.get(item_id) or {}), **item}
+
+    for f in sorted(os.listdir(PDF_SURVEY_DIR)) if os.path.isdir(PDF_SURVEY_DIR) else []:
+        if not f.endswith(".json"):
+            continue
+        try:
+            rec = json.load(open(os.path.join(PDF_SURVEY_DIR, f), encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            errors.append(f"pdf-survey/{f}: {e}")
+            continue
+        court, case_no = s(rec.get("court")), s(rec.get("caseNo"))
+        if not court or not case_no:
+            continue
+        dst = by_case.setdefault(case_key(court, case_no), {})
+        if rec.get("tenants"):
+            dst.setdefault("tenants", rec["tenants"])
+        if rec.get("occupancy"):
+            dst.setdefault("occupancy", rec["occupancy"])
+        if rec.get("caseName") and not dst.get("caseName"):
+            dst["caseName"] = rec["caseName"]
+
+    # ⑥ 화면에서 직접 확인한 레코드(자동 수집이 막혔을 때) — raw 가 우선
     if os.path.exists(MANUAL):
         try:
             manual = json.load(open(MANUAL, encoding="utf-8"))
@@ -804,8 +846,10 @@ def rebuild() -> dict:
             "note": ("물건상세(PGJ15BM01: 기일이력·물건상태·목적물 면적/대지권·감정평가요항표·사진)와 "
                      "현황조사서(PGJ15BP01: 임차인·점유관계)를 사건 단위 레코드로 담습니다. 매각물건명세서는 "
                      "PDF 문서라 본문을 담지 않고 문서 ID·뷰어 주소만 둡니다."),
-            # 자동 수집이 한 건도 없으면 '왜 비어 있는지'를 남긴다(화면 안내문에 쓰인다)
-            "blocked": None if count_files(DETAIL_DIR) else (
+            # 자동·브라우저 수집본이 한 건도 없으면 '왜 비어 있는지'를 남긴다(화면 안내문에 쓰인다)
+            "blocked": None if (count_files(DETAIL_DIR) or (
+                os.path.isdir(PDF_DETAIL_DIR) and any(f.endswith(".json") for f in os.listdir(PDF_DETAIL_DIR))
+            )) else (
                 prev_blocked or
                 "아직 대법원 물건상세를 자동 수집하지 못했습니다. 서버 IP가 차단되면 국내 PC에서 "
                 "scripts/fetch-auction-details.py 를 실행해 채웁니다."
