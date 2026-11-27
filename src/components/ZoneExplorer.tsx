@@ -1342,9 +1342,13 @@ export default function ZoneExplorer() {
         setSelectedId(undefined);
         setJibunPickOn(false);
       }
-      // 지도가 넓어야 점을 찍기 좋다 — 그리는 동안은 상세 패널을 접는다(완료하면 다시 연다).
+      // 지도가 넓어야 점을 찍기 좋다 — 그리는 동안은 상세 패널·범례를 접는다(완료하면 패널은 다시 연다).
       //   · 좁은 화면은 패널이 지도 아래를 덮고, 넓은 화면은 안내 막대가 패널 머리말을 가린다.
-      if (next) setPanelOpen(false);
+      //   · 범례는 모바일에서 안내 막대 자리(아래)에 떠 있어 겹친다.
+      if (next) {
+        setPanelOpen(false);
+        setLegendOpen(false);
+      }
       return next;
     });
   }
@@ -1915,7 +1919,7 @@ export default function ZoneExplorer() {
           · 모바일은 화면 아래(상세 패널은 접힌 상태), 데스크톱은 검색 패널 오른쪽 위에 띄운다 —
             검색창·필터와 지도 우측 상세 패널을 가리지 않는 자리다. */}
       {zoneDrawOn && (
-        <div className="pointer-events-none absolute bottom-3 left-2 right-2 z-[640] md:bottom-auto md:left-[400px] md:right-3 md:top-3">
+        <div className="pointer-events-none absolute bottom-[6.6rem] left-2 right-2 z-[640] md:bottom-auto md:left-[400px] md:right-3 md:top-3">
           <div
             data-testid="zone-draw-bar"
             className="pointer-events-auto mx-auto w-full max-w-[560px] rounded-xl border-2 border-violet-300 bg-white/97 px-2.5 py-2 shadow-[0_2px_4px_rgba(16,24,40,.08),0_14px_32px_-18px_rgba(76,29,149,.55)]"
