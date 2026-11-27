@@ -365,13 +365,15 @@ export type ParcelInput = {
  *   · 도로·구거·하천 필지는 면적이 커서 그대로 두면 순위 1·2위를 차지해
  *     “구역에서 제일 비싼 물건”을 도로로 보여 주게 된다 — 목록에서 뺀다.
  */
-const PUBLIC_JIMOK = "도구천제유공철방수학광";
+const PUBLIC_JIMOK = "도구천제유공철수학광";
+/** 지목 28종 — 라벨에서는 지목 글자를 뺀다('산83-27임' → '산83-27') */
+const ALL_JIMOK = "전답과목임광염대공학차주창도철천제구유양수원체종사묘잡";
 
 /** '798-12도' → { jibun: '798-12', jimok: '도' } */
 export function splitJibun(raw: string): { jibun: string; jimok: string | null } {
   const text = raw.trim();
   const m = /^(.*\d)\s*([가-힣])$/.exec(text);
-  if (m && PUBLIC_JIMOK.includes(m[2])) return { jibun: m[1].trim(), jimok: m[2] };
+  if (m && ALL_JIMOK.includes(m[2])) return { jibun: m[1].trim(), jimok: m[2] };
   return { jibun: text, jimok: null };
 }
 
@@ -637,7 +639,7 @@ export async function planZoneParcels(shape: ZoneShapeInput): Promise<PlanResult
       : rawJibun || jibunOf(pnu);
     // 연속지적도 jibun 속성에 붙은 지목(도로·구거 등)은 떼고, 공공 지목 필지는 순위에서 뺀다
     const { jibun, jimok } = splitJibun(base);
-    if (jimok) {
+    if (jimok && PUBLIC_JIMOK.includes(jimok)) {
       excluded++;
       continue;
     }

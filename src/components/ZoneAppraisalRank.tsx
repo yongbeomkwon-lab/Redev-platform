@@ -646,6 +646,16 @@ export default function ZoneAppraisalRank({
                     </li>
                   ))}
                 </ul>
+                {ranked.length > 5 && (
+                  <p className="mt-0.5 flex items-baseline justify-between gap-1 text-[9.5px] text-slate-500">
+                    <span className="min-w-0 truncate">
+                      <span className="font-semibold text-slate-600">꿀등</span> {ranked[ranked.length - 1].jibun}
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums text-slate-600">
+                      {wonLabel(ranked[ranked.length - 1].estimated)}
+                    </span>
+                  </p>
+                )}
               </div>
             )}
           </div>
