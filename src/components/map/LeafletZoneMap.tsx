@@ -801,7 +801,7 @@ export default function LeafletZoneMap({
   zoneFitRequest,
   listingCounts = {},
   txPins = [],
-  txPinsOn = true,
+  txPinsOn = false,
   onToggleTxPins,
   onSelectTxPin,
   activeTxPin,

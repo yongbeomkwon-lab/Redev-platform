@@ -253,7 +253,9 @@ export default function ZoneExplorer() {
   //   · 구역 상세의 실거래 목록(ZoneTransactions)이 지번을 좌표로 바꿔 **구역 안 거래**만
   //     넘겨 준다. 표시 상태(ON/OFF)는 지도 위 토글이 바꾸도록 여기서 갖는다.
   const [txPins, setTxPins] = useState<TxMapPin[]>([]);
-  const [txPinsOn, setTxPinsOn] = useState(true);
+  // 첫 접속에는 **꺼진 상태**로 시작한다(2026-11-27 사용자 요청: 지도 첫 화면이 가격표로 덮여
+  //   구역 경계·이름이 안 보인다). 지도 위 「실거래」 토글을 누르면 예전처럼 모두 표시된다.
+  const [txPinsOn, setTxPinsOn] = useState(false);
   // ── 지도 전체 실거래 가격표 ─────────────────────────────────────────────
   //   · 국토부 신고 최근 3개월을 건물(법정동+지번) 단위로 묶은 정적 데이터(lib/tx-recent.ts).
   //   · 구역을 고르지 않아도 지도 어디에나 가격표가 뜨게 하는 것이 기본값이다(토글로 끈다).
@@ -295,11 +297,12 @@ export default function ZoneExplorer() {
   /** 오른쪽 패널의 경매 목록에서 강조·스크롤할 물건 — 「구역 경매 목록에서 보기」가 정한다 */
   const [auctionListFocus, setAuctionListFocus] = useState<{ id: string; token: number } | null>(null);
   /**
-   * ⚖️ 지도 경매 핀 표시 — `null` 이면 ‘자동’(첫 화면부터 ON).
-   *   사용자 요구(2026-11-22): 구역을 고르기 전 서울 전체 화면에서도 구역 안 경매 핀이 기본으로 보여야 한다.
-   *   사용자가 지도 위 토글을 누르면 true/false 로 굳히고, 구역을 바꾸면 다시 자동(ON)으로 돌린다.
+   * ⚖️ 지도 경매 핀 표시 — **첫 접속에는 꺼진 상태**로 시작한다(2026-11-27 사용자 요청).
+   *   예전(2026-11-22)에는 서울 전체에서도 기본 ON 이었으나, ⚖️ 핀이 실거래 가격표와 겹쳐
+   *   지도 첫 화면이 덮였다. 지도 위 「⚖️ 경매 핀」 토글을 누르면 예전처럼 모두 보인다.
+   *   · 경매 목록·핀에서 구역으로 들어오면 그때는 명시적으로 켠다(pickZone opts.auction).
    */
-  const [auctionPinsChoice, setAuctionPinsChoice] = useState<boolean | null>(null);
+  const [auctionPinsOn, setAuctionPinsOn] = useState(false);
   const [jibunPickOn, setJibunPickOn] = useState(false);
   const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
   const [jibunProbing, setJibunProbing] = useState(false);
@@ -536,8 +539,8 @@ export default function ZoneExplorer() {
     setTxPins([]);
     setAuctionFocus(null);
     setAuctionListFocus(null);
-    // 경매 핀 토글도 ‘자동’(ON)으로 돌린다
-    setAuctionPinsChoice(null);
+    // 경매 핀 토글도 기본(꺼짐)으로 돌린다 — 구역을 바꿀 때마다 사용자가 켠 상태가 남지 않게
+    setAuctionPinsOn(false);
     // 왼쪽 창의 경매 상세는 **그 구역의 물건일 때만** 남긴다(핀을 눌러 들어온 경우)
     setAuctionDetail((d) => (d && d.zoneId === selectedId ? d : null));
   }, [selectedId]);
@@ -570,8 +573,6 @@ export default function ZoneExplorer() {
     [auctions]
   );
   const mapAuctionPins = selectedId ? zoneAuctionPins : allAuctionPins;
-  /** 경매 핀 기본 ON — 첫 화면(광역)에서도 구역 안 물건이 바로 보인다(사용자 요구 2026-11-22) */
-  const auctionPinsOn = auctionPinsChoice ?? true;
 
   /**
    * ⚖️ 지도 경매 핀 클릭 — 그 핀의 물건들을 왼쪽 창에 띄우고, 그 구역을 오른쪽 패널에 연다.
@@ -1287,7 +1288,7 @@ export default function ZoneExplorer() {
     if (z && typeFilter !== "전체" && z.type !== typeFilter) setTypeFilter("전체");
     // 경매 목록에서 들어온 경우 경매 핀도 켠다 — 구역을 고르면 선택 초기화 효과가 ‘자동(켜짐)’으로
     // 돌리지만, 같은 구역에서 핀을 꺼 둔 상태로 목록을 누르는 경우까지 확실히 켜기 위해 명시한다.
-    if (opts?.auction) setAuctionPinsChoice(true);
+    if (opts?.auction) setAuctionPinsOn(true);
   }
 
   // ── ✏️ 구역 그려서 분석 (일반 방문자) ──────────────────────────────────
@@ -1797,7 +1798,7 @@ export default function ZoneExplorer() {
           recentTxLoading={recentTxLoading}
           auctionPins={mapAuctionPins}
           auctionPinsOn={auctionPinsOn}
-          onToggleAuctionPins={() => setAuctionPinsChoice(!auctionPinsOn)}
+          onToggleAuctionPins={() => setAuctionPinsOn((v) => !v)}
           onSelectAuctionPin={openAuctionPin}
           activeAuctionPinId={auctionDetail?.pinId ?? null}
           onSelectTxPin={(pin) =>
@@ -2646,7 +2647,7 @@ export default function ZoneExplorer() {
             <p className="text-[10px] leading-snug text-slate-500">
               <b>지도 가격표</b>는 국토교통부 신고 실거래 최근 {recentTxMeta?.months ?? 3}개월을 건물(법정동+지번) 단위로 묶은 것입니다
               {recentTxPins.length > 0 ? ` (${recentTxPins.length.toLocaleString()}곳${recentTxMeta?.asOf ? ` · ${recentTxMeta.asOf} 기준` : ""})` : ""} ·
-              지도 위 <b>「실거래」</b> 토글로 켜고 끌 수 있습니다. 서울 전체(구 배지) 화면에서는 구를 눌러 확대하면 가격표가 보입니다.
+              첫 화면에서는 꺼 두고, 지도 위 <b>「실거래」</b> 토글을 누르면 표시됩니다. 서울 전체(구 배지) 화면에서는 구를 눌러 확대하면 가격표가 보입니다.
             </p>
             <p className="text-[10px] leading-snug text-slate-500">
               <b style={{ color: TYPE_COLORS["재건축"] }}>재건축</b> = 서울시 사업유형 재건축(단독·공동) ·
