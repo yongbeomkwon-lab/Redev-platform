@@ -484,6 +484,13 @@ export default function AuctionPanel({
               </button>
             )}
 
+            {details?.meta?.blocked && (
+              <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-[9.5px] leading-relaxed text-slate-500">
+                현장 사진·임차인현황·감정평가요항은 <b className="text-slate-600">대법원 물건상세·현황조사서</b>
+                에서만 나옵니다. 그 수집이 끝나기 전이라 지금은 해당 항목이 ‘미수집’으로 표시됩니다.
+              </p>
+            )}
+
             <p className="mt-2 text-[9.5px] leading-relaxed text-slate-400">
               감정가·최저가·기일은 대법원 법원경매정보 원문 기준입니다. 일괄매각으로 한꺼번에 매각되는
               필지·호실은 1건으로 셉니다. 입찰 전 권리분석은 매각물건명세서로 확인하세요.
