@@ -1342,8 +1342,9 @@ export default function ZoneExplorer() {
         setSelectedId(undefined);
         setJibunPickOn(false);
       }
-      // 지도가 넓어야 점을 찍기 좋다 — 좁은 화면은 상세 패널을 접는다
-      if (next && typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+      // 지도가 넓어야 점을 찍기 좋다 — 그리는 동안은 상세 패널을 접는다(완료하면 다시 연다).
+      //   · 좁은 화면은 패널이 지도 아래를 덮고, 넓은 화면은 안내 막대가 패널 머리말을 가린다.
+      if (next) setPanelOpen(false);
       return next;
     });
   }
