@@ -3,7 +3,7 @@ import type { ZoneType } from "@/lib/types";
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT, shortZoneType } from "@/components/map/colors";
 
 /**
- * 사업유형 뱃지 — 지도 폴리곤과 같은 9색 팔레트.
+ * 사업유형 뱃지 — 지도 폴리곤과 같은 11색 팔레트.
  *   · 흰 패널 위에서는 원색을 그대로 칠하면 글자가 묻힌다 — 바탕은 10% 틴트,
  *     글자는 눌러 쓴 잉크색, 점 하나만 원색으로 두어 지도 색과 바로 이어진다.
  */

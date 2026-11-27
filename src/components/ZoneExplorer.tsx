@@ -23,6 +23,7 @@ import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
 import type { RecentZone } from "@/lib/dev-pressure";
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT } from "@/components/map/colors";
+import { clearLastView, readLastView, urlPinsView, writeLastView, type StoredView } from "@/components/map/last-view";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import ZoneVitalStats from "@/components/ZoneVitalStats";
@@ -48,6 +49,7 @@ import type {
   AdminZoneShape,
   DistrictStat,
   JibunPin,
+  MapViewPoint,
   MyListingPin,
   StationPin,
   TxMapPin,
@@ -113,7 +115,7 @@ const ZONE_TYPES: (MapZoneType | "전체")[] = [
 ];
 const STAGES: (ZoneStage | "전체")[] = ["전체", "추진위원회", "사업계획승인", "관리처분", "이주·철거", "착공", "준공"];
 
-/** 범례 9색 — 같은 색으로 묶인 소분류(민간도심복합 성장거점·주거중심, 가로주택·소규모)는
+/** 범례 11색 — 같은 색으로 묶인 소분류(민간도심복합 성장거점·주거중심, 가로주택·소규모)는
  *  한 줄로 합쳐 세고, 사람이 쓰는 이름으로 적는다. */
 const LEGEND_GROUPS: { label: string; color: string; types: MapZoneType[] }[] = [
   { label: "재건축", color: TYPE_COLORS["재건축"], types: ["재건축"] },
@@ -200,6 +202,15 @@ export default function ZoneExplorer() {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<MapZoneType | "전체">("전체");
   const [stageFilter, setStageFilter] = useState<ZoneStage | "전체">("전체");
+  // ── 마지막으로 보던 화면 (2026-11-27 사용자 요청) ────────────────────────────
+  //   · 첫 렌더에서 localStorage(`redev_last_view_v1`)를 한 번만 읽는다.
+  //     주소가 특정 구역(`?zone=`)·매물(`?my=`)을 지정했으면 그 주소가 이긴다 — 링크가 목적한
+  //     곳을 먼저 보여 줘야 한다.
+  //   · 지도에는 `initialView` 로 넘겨, 서울 전체로 맞췄다가 다시 옮기는 깜빡임 없이
+  //     닫기 직전 화면에서 바로 시작한다. (렌더 결과에는 쓰지 않아 SSR 불일치도 없다)
+  const [bootView] = useState<StoredView | null>(() =>
+    typeof window === "undefined" || urlPinsView() ? null : readLastView()
+  );
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
   const [unlockTarget, setUnlockTarget] = useState<Listing | null>(null);
@@ -458,6 +469,32 @@ export default function ZoneExplorer() {
     setPanelOpen(false);
     setSeoulFitRequest((v) => v + 1);
   }, []);
+
+  // ── 마지막으로 보던 구역 되살리기 (2026-11-27) ────────────────────────────
+  //   · 저장해 둔 구역이 있으면 상세 패널을 연 채로 시작한다 — “닫기 직전에 보던 구역이
+  //     바로 열리게”. 화면(중심·배율)은 지도의 `initialView` 가 맡으므로 여기서는 selection 만.
+  //   · 지도는 데이터를 다 불러온 뒤 마운트되므로(loading 가드), 이 effect 가 먼저 돌아
+  //     선택이 이미 잡힌 상태로 지도가 뜨고, 지도는 저장된 화면을 그대로 유지한다(맞춤 생략).
+  const restoredSelectionRef = useRef(false);
+  useEffect(() => {
+    if (restoredSelectionRef.current) return;
+    restoredSelectionRef.current = true;
+    const id = bootView?.selectedZoneId;
+    if (!id) return;
+    setSelectedId(id);
+    // 넓은 화면은 오른쪽 드로어라 지도를 가리지 않는다 — 열어 둔 채로 시작한다.
+    //   폰은 아래 시트가 지도를 덮으므로 열지 않는다(구역은 선택된 채라 탭 한 번이면 열린다).
+    if (typeof window !== "undefined" && window.innerWidth >= 768) setPanelOpen(true);
+  }, [bootView]);
+
+  // 저장해 둔 구역이 데이터에서 사라졌으면(구역 개편·이름 변경) 선택을 비운다
+  //   — 지도에 없는 id 로 패널만 빈 채 뜨는 일을 막는다.
+  useEffect(() => {
+    const id = bootView?.selectedZoneId;
+    if (!id || !seoulZones.length) return;
+    if (seoulZones.some((z) => z.id === id)) return;
+    setSelectedId((cur) => (cur === id ? undefined : cur));
+  }, [bootView, seoulZones]);
 
   // 서울시 정비구역 전수 레이어
   useEffect(() => {
@@ -1296,6 +1333,39 @@ export default function ZoneExplorer() {
     setUnlocked((prev) => new Set(prev).add(id));
   }
 
+  // ── 마지막으로 보던 화면 저장 (2026-11-27 사용자 요청) ───────────────────────
+  /** 지도가 마지막으로 알려 온 화면(중심·배율) — 구역을 열고 닫을 때 이 자리와 함께 저장한다 */
+  const lastMapViewRef = useRef<MapViewPoint | null>(null);
+  /** 저장할 ‘지금 열어 둔 구역’ — 지도 이벤트가 옛 값을 잡지 않게 ref 로 최신을 본다 */
+  const selectedIdRef = useRef<string | undefined>(selectedId);
+  selectedIdRef.current = selectedId;
+
+  /** 지도가 이동·확대를 멈출 때마다 온다 → 지금 화면 + 열어 둔 구역을 저장 */
+  function handleViewChange(v: MapViewPoint) {
+    lastMapViewRef.current = v;
+    writeLastView(v, selectedIdRef.current ?? null);
+  }
+
+  // 구역을 열거나 닫을 때 — 화면은 그대로 두고 ‘열어 둔 구역’만 저장본에 반영한다
+  useEffect(() => {
+    const v = lastMapViewRef.current;
+    if (!v) return;
+    writeLastView(v, selectedId ?? null);
+  }, [selectedId]);
+
+  /**
+   * ‘서울 전체’ 리셋 — 저장해 둔 마지막 화면을 지우고 서울 전체로 돌아간다.
+   *   · 지도 도구 막대의 지도 버튼과 같은 뜻이다(상단 로고로 처음부터 시작하는 것과 동일한 초기화).
+   *   · 지워 두면 다음에 열었을 때도 서울 전체가 기본값이다(테스트·상담 시 깨끗한 화면).
+   */
+  function resetToSeoul() {
+    clearLastView();
+    lastMapViewRef.current = null;
+    setSelectedId(undefined);
+    setStationPick(null);
+    setSeoulFitRequest((v) => v + 1);
+  }
+
   /**
    * 구역 선택. `opts.auction` 은 경매 목록·경매 핀에서 들어온 경우 — 경매 핀이 지도에 보이도록 켠다.
    */
@@ -1811,6 +1881,10 @@ export default function ZoneExplorer() {
           parcel={parcel}
           stationPin={stationPin}
           zoneFitRequest={zoneFitRequest}
+          // 마지막으로 보던 화면 — 첫 렌더에서 읽은 저장본(없으면 서울 전체)
+          initialView={bootView}
+          onViewChange={handleViewChange}
+          onResetView={resetToSeoul}
           listingCounts={SHOW_MAP_LISTING_BADGES ? listingCounts : undefined}
           myPins={myListings}
           myPinsOn={myOnly}

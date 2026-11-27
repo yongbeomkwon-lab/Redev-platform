@@ -37,6 +37,15 @@ export type DistrictStat = {
   lng: number;
 };
 
+/**
+ * 지도 화면(중심 좌표 + 카카오 배율)을 담는 최소 단위 — 마지막 보던 위치 저장·복원에 쓴다.
+ *   · level 은 카카오 레벨(1=최대 확대 … 13=최대 추소)이다.
+ */
+export type MapViewPoint = {
+  center: { lat: number; lng: number };
+  level: number;
+};
+
 export type ZoneMapProps = {
   /** 자치구별 총 구역 수 — 광역 화면에서 개별 구역 뱃지 자리에 깔린다 */
   districtStats?: DistrictStat[];
@@ -147,6 +156,25 @@ export type ZoneMapProps = {
   onToggleMyPins?: () => void;
   /** 지도에 처음 화면을 서울 전체로 맞추라는 요청 토큰(내 매물 토글을 켤 때) */
   fitSeoulRequest?: number;
+  /**
+   * 앱을 처음 열 때 시작할 화면 — 마지막에 보던 위치·배율(없으면 서울 전체).
+   *   · ZoneExplorer 가 localStorage(`redev_last_view_v1`)에서 읽어 넘긴다.
+   *   · 지도가 만들어지는 순간 **한 번만** 읽는다 — 서울 전체로 맞춰 두었다가 다시 옮기는
+   *     깜빡임 없이 닫기 직전 화면이 바로 열린다.
+   */
+  initialView?: MapViewPoint | null;
+  /**
+   * 지도 이동·확대가 멈출 때마다(카카오 idle) 현재 화면을 알려 준다.
+   *   · 호출측이 중심·배율·선택 구역을 localStorage 에 저장해 다음 방문에 되살린다.
+   *   · 같은 자리·같은 배율이면 부르지 않는다(살짝 흔들었다 돌아와도 저장본이 출렁이지 않게).
+   */
+  onViewChange?: (view: MapViewPoint) => void;
+  /**
+   * ‘서울 전체’ 리셋 — 지도 도구 막대의 지도 버튼.
+   *   · 호출측이 마지막 화면 저장본을 지우고 지도를 서울 전체로 넓힌다.
+   *   · 로고로 처음부터 시작하는 것과 같은 ‘초기화’다(저장해 둔 구역·배율을 버린다).
+   */
+  onResetView?: () => void;
   /** 이 매물 핀을 펼쳐 보라는 요청(/?my=<id> 로 들어왔을 때) */
   myFocusId?: string | null;
   /**

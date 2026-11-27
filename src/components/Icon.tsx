@@ -15,6 +15,7 @@ export type IconName =
   | "pin"
   | "train"
   | "search"
+  | "fit"
   | "lock";
 
 const PATHS: Record<IconName, ReactNode> = {
@@ -80,6 +81,15 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="5.2" y="10.4" width="13.6" height="9.4" rx="2.2" />
       <path d="M8.5 10.4V7.9a3.5 3.5 0 0 1 7 0v2.5" />
+    </>
+  ),
+  // ‘서울 전체’ 리셋 — 네 모서리로 ‘화면 맞추기’를 뜻한다
+  fit: (
+    <>
+      <path d="M4 9V4.8h4.2" />
+      <path d="M20 9V4.8h-4.2" />
+      <path d="M4 15v4.2h4.2" />
+      <path d="M20 15v4.2h-4.2" />
     </>
   ),
 };

@@ -15,7 +15,7 @@ export const CATEGORY_LABEL: Record<CommunityCategory, string> = {
   question: "질문",
 };
 
-/** 카테고리 칩 색 — 오레오 블루 계열 안에서만 구분한다(사업유형 9색과 섞이지 않게) */
+/** 카테고리 칩 색 — 오레오 블루 계열 안에서만 구분한다(사업유형 11색과 섞이지 않게) */
 export const CATEGORY_CHIP: Record<CommunityCategory, string> = {
   free: "bg-slate-100 text-slate-700",
   zone: "bg-brand text-white",

@@ -207,11 +207,14 @@
 }
 
 /* ── 자치구 총 구역 수 뱃지 (2026-11-22 사용자 요청 — IMG_0737 참고) ──────────
-   광역(카카오 레벨 7 이상 = 서울 전체가 보이는 초기 화면)에서 구역 폴리곤·개별 뱃지·
+   광역(카카오 레벨 8 이상 = 서울 전체가 보이는 초기 화면)에서 구역 폴리곤·개별 뱃지·
    경매 핀 대신 깔리는 **구 단위 카드**다.
-   · 위 칸: 흰 바탕에 구 이름(진한 글자) · 아래 칸: 오레오 블루(#0054A6) 바탕에 총 개수(흰 글자)
+   · 2026-11-27 개편: 흰 칸 + 오레오 블루 칸 2단을 걷어내고 **다크 차콜 카드 한 장**
+     (#2D3138)에 흰 글씨로 바꿨다 — 25장이 깔려도 지도가 하얗게 뜨지 않고, 구 이름과
+     개수가 한 덩어리로 읽힌다(사용자 요청: 깔끔한 다크 차콜 + 흰 글씨).
+   · 위 줄: 구 이름(흰 글씨) · 아래 줄: 총 개수(흰 글씨, 위에 얇은 구분선)
    · 폭·높이·자리는 지도(KakaoZoneMap draw)가 정한다 — 카드끼리 겹치면 비켜 앉힌다.
-   · 배율이 더 물러나면(레벨 9 이상) draw 가 transform scale 로 통째로 줄인다. */
+   · 배율이 더 물러나면(레벨 9 이상) transform scale 로 통째로 줄어든다. */
 .district-badge {
   position: absolute;
   left: 0;
@@ -222,46 +225,49 @@
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  background: #2d3138;
+  /* 지도 위에서도 카드 윤곽이 살아 있게 흰 헤일로 한 겹 + 부드러운 그림자 */
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.72);
   cursor: pointer;
   pointer-events: auto;
   visibility: hidden;
   /* 위치·배율을 transform 하나로 합치므로 기준점은 왼쪽 위 */
   transform-origin: 0 0;
-  transition: box-shadow 0.12s ease;
+  transition: box-shadow 0.12s ease, background-color 0.12s ease;
 }
 .district-badge .district-badge-name {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
+  height: 21px;
   font-family: "Gmarket Sans", var(--font-ui);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #0f172a;
-  background: #fff;
+  color: #ffffff;
+  background: transparent;
   white-space: nowrap;
 }
 .district-badge .district-badge-count {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 22px;
+  height: 24px;
   font-family: "Gmarket Sans", var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
-  color: #fff;
-  background: #0054a6;
+  color: #ffffff;
+  background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
 .district-badge:hover,
 .district-badge:focus-visible {
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.36), 0 0 0 1px rgba(15, 23, 42, 0.22);
+  background: #1f2329;
+  box-shadow: 0 5px 16px rgba(15, 23, 42, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.9);
   outline: none;
 }
 
