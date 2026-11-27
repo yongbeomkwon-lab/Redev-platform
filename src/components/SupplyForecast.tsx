@@ -492,19 +492,18 @@ export default function SupplyForecast() {
           <span className="text-[11px] text-slate-400">행을 누르면 그 자치구만 봅니다 · 단위 세대</span>
         </div>
         <div className="mt-3 overflow-x-auto">
-          <p className="mb-1 text-[10px] text-slate-400 sm:hidden">← 좌우로 밀면 2029~2031년과 합계가 보입니다</p>
-          <table className="w-full min-w-[600px] border-separate border-spacing-0 text-[11.5px] tabular-nums sm:text-[12px]">
+          <table className="w-full min-w-0 table-fixed border-separate border-spacing-0 text-[9.5px] tabular-nums sm:text-[12px]">
             <thead>
               <tr className="text-[10.5px] text-slate-500">
-                <th className="sticky left-0 z-10 border-b border-line bg-white px-2 py-1.5 text-left font-medium">
+                <th className="sticky left-0 z-10 w-[52px] whitespace-nowrap border-b border-line bg-white px-1 py-1.5 text-left font-medium sm:w-auto sm:px-2">
                   자치구
                 </th>
                 {years.map((y) => (
-                  <th key={y} className="border-b border-line px-1 py-1.5 text-center font-medium">
+                  <th key={y} className="border-b border-line px-0.5 py-1.5 text-center font-medium sm:px-1">
                     {y}
                   </th>
                 ))}
-                <th className="border-b border-line px-2 py-1.5 text-right font-semibold">합계</th>
+                <th className="border-b border-line px-1 py-1.5 text-right font-semibold sm:px-2">합계</th>
               </tr>
             </thead>
             <tbody>
@@ -518,7 +517,7 @@ export default function SupplyForecast() {
                   >
                     <td
                       className={
-                        "sticky left-0 z-10 border-b border-line/70 px-2 py-[5px] text-left font-semibold " +
+                        "sticky left-0 z-10 whitespace-nowrap border-b border-line/70 px-1 py-[5px] text-left font-semibold sm:px-2 " +
                         (on ? "bg-brand-tint text-brand" : "bg-white text-ink")
                       }
                     >
@@ -530,7 +529,7 @@ export default function SupplyForecast() {
                       return (
                         <td
                           key={y}
-                          className="border-b border-line/70 px-1 py-[5px] text-center"
+                          className="border-b border-line/70 px-0.5 py-[5px] text-center sm:px-1"
                           style={{
                             backgroundColor: v > 0 ? `rgba(0,84,166,${a.toFixed(3)})` : "transparent",
                             color: a > 0.7 ? "#fff" : v > 0 ? "#0f172a" : "#cbd5e1",
@@ -540,20 +539,20 @@ export default function SupplyForecast() {
                         </td>
                       );
                     })}
-                    <td className="border-b border-line/70 px-2 py-[5px] text-right font-bold text-ink">{fmt(d.total)}</td>
+                    <td className="border-b border-line/70 px-1 py-[5px] text-right font-bold text-ink sm:px-2">{fmt(d.total)}</td>
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
-              <tr className="text-[11.5px] font-bold">
-                <td className="sticky left-0 z-10 bg-white px-2 py-2 text-left">서울 전체</td>
+              <tr className="text-[9.5px] font-bold sm:text-[11.5px]">
+                <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-1 py-2 text-left sm:px-2">서울 전체</td>
                 {years.map((y) => (
-                  <td key={y} className="px-1 py-2 text-center text-brand">
+                  <td key={y} className="px-0.5 py-2 text-center text-brand sm:px-1">
                     {fmt(scopeAllYear(data, y))}
                   </td>
                 ))}
-                <td className="px-2 py-2 text-right text-brand">{fmt(m.totalHouseholds)}</td>
+                <td className="px-1 py-2 text-right text-brand sm:px-2">{fmt(m.totalHouseholds)}</td>
               </tr>
             </tfoot>
           </table>
