@@ -53,6 +53,8 @@ const EXTRA = [
   "dividers", // 구역 안을 나누는 점선(사업예정구역 1·2 등) + 이름표 자리
   "households", // 세대수(보도 기준)
   "rightsDate", // 권리산정기준일
+  "rightsBasis", // 권리산정기준일 근거(조례·고시)
+  "rightsNote", // 권리산정기준일 부가 설명(병행 적용 기준)
   "stageDates", // 단계별 공식 날짜(서울시 통계·정보몽땅·보도자료)
   "datesAsOf", // 단계 날짜 기준일
   "drawing", // 구역계 도면 파일 경로(작업 참고)
