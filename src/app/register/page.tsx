@@ -63,10 +63,15 @@ import {
 import { searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
 import {
   formValuesFromLedger,
+  formValuesFromUnit,
+  hoLabel,
   ledgerSummaryLine,
+  matchUnit,
   PROPERTY_TYPE_OPTIONS,
+  unitDongs,
   type BuildingInfoResponse,
   type LedgerBuildingBrief,
+  type LedgerUnit,
 } from "@/lib/building-info";
 import { priceLabel, upfrontLabel, upfrontValue } from "@/lib/listing-fields";
 import {
@@ -95,6 +100,8 @@ const VIOLATION_OPTIONS = ["해당 없음", "위반건축물 있음", "확인 �
 const NOTE_BANNED = ["명품", "급급", "초초", "전화문의", "평형", "BEST", "best"] as const;
 const NOTE_MAX = 40;
 const DESCRIPTION_MAX = 1000;
+/** 동·호수 목록에 한 번에 그릴 최대 행 수 — 대단지에서도 스크롤이 무거워지지 않게 */
+const UNIT_SHOW_MAX = 300;
 
 /** 금액 입력 문자열 → 만원 정수 (빈 값은 0) */
 const toNum = (v: string) => Number(v.replace(/[^\d]/g, "")) || 0;
@@ -165,7 +172,19 @@ function loadBrokerProfile(): BrokerProfile {
 }
 
 /** 대장이 자동으로 채우는 칸 — 주소를 바꿨을 때 앞 필지 값을 지우려고 기억해 둔다 */
-type AutoKey = "approvalDate" | "totalFloors" | "platAreaSqm" | "buildingName" | "propertyType";
+type AutoKey =
+  | "approvalDate"
+  | "totalFloors"
+  | "platAreaSqm"
+  | "buildingName"
+  | "propertyType"
+  | "parking"
+  | "elevator"
+  | "violation"
+  | "exclusiveArea"
+  | "supplyArea"
+  | "floor"
+  | "detailAddress";
 
 /** 필지·대장 조회 상태 — 화면 안내 문구를 이 상태로만 만든다 */
 type FetchState =
@@ -199,6 +218,18 @@ export default function RegisterPage() {
   const [ledger, setLedger] = useState<LedgerBuildingBrief | null>(null);
   const [ledgerState, setLedgerState] = useState<FetchState>({ status: "idle" });
   const [autoFilled, setAutoFilled] = useState<string[]>([]);
+  /** 전유부 동·호수 목록 — 호를 고르면 전용·공급면적·층이 채워진다 */
+  const [units, setUnits] = useState<LedgerUnit[]>([]);
+  const [unitsMeta, setUnitsMeta] = useState<{
+    note?: string;
+    total: number;
+    rows: number;
+    truncated: boolean;
+  } | null>(null);
+  /** 동 필터 · 호수 검색어 · 마지막으로 고른 호 */
+  const [unitDong, setUnitDong] = useState("");
+  const [unitQuery, setUnitQuery] = useState("");
+  const [unitPicked, setUnitPicked] = useState<{ dong: string; ho: string } | null>(null);
   /** 대장이 자동으로 채워 둔 값 — 다른 주소로 바꿀 때 이 값만 갈아끼운다 */
   const lastAutoRef = useRef<Partial<Record<AutoKey, string>>>({});
 
@@ -477,6 +508,23 @@ export default function RegisterPage() {
 
   const canSave = !!zone && toNum(salePrice) > 0;
 
+  /** 동·호수 선택 — 동 목록(동이 둘 이상일 때만 드롭다운)과 검색으로 걸러 낸 목록 */
+  const unitDongList = useMemo(() => unitDongs(units), [units]);
+  const shownUnits = useMemo(() => {
+    const rows = units.filter(
+      (u) => (!unitDong || u.dongLabel === unitDong) && matchUnit(u, unitQuery)
+    );
+    return { rows: rows.slice(0, UNIT_SHOW_MAX), count: rows.length };
+  }, [units, unitDong, unitQuery]);
+  /** 마지막으로 고른 호 — 목록에서 표시해 둔다 */
+  const unitPickedUnit = useMemo(
+    () =>
+      unitPicked
+        ? (units.find((u) => u.dongLabel === unitPicked.dong && u.ho === unitPicked.ho) ?? null)
+        : null,
+    [units, unitPicked]
+  );
+
   /** 표시·광고 항목 가운데 아직 빈 칸 — 필수는 아니지만 '무엇이 비었는지' 보여 준다 */
   const missingSpec = [
     !address.trim() && "소재지",
@@ -575,6 +623,13 @@ export default function RegisterPage() {
     setLedger(null);
     setLedgerState({ status: "idle" });
     setAutoFilled([]);
+    // 앞 필지의 동·호수 목록과 선택이 남으면 다른 건물의 면적이 채워질 수 있다 — 비운다
+    setUnits([]);
+    setUnitsMeta(null);
+    setUnitDong("");
+    setUnitQuery("");
+    setUnitPicked(null);
+    clearUnitAutoValues();
 
     let nextPnu = c.pnu ?? "";
     try {
@@ -624,6 +679,18 @@ export default function RegisterPage() {
       const res = await fetch(`/api/building-info?pnu=${targetPnu}${opts.fresh ? "&fresh=1" : ""}`, { cache: "no-store" });
       const json = (await res.json()) as BuildingInfoResponse;
       if (json?.ok) {
+        // 동·호수 목록은 표제부 성공·실패와 별개로 들어온다(전유부가 없는 건물도 있다)
+        const unitList = json.units ?? [];
+        setUnits(unitList);
+        setUnitsMeta({
+          ...(json.unitsNote ? { note: json.unitsNote } : {}),
+          total: json.unitsTotalRows ?? 0,
+          rows: json.unitsRows ?? 0,
+          truncated: !!json.unitsTruncated,
+        });
+        setUnitDong("");
+        setUnitQuery("");
+        setUnitPicked(null);
         if (json.primary) {
           setLedger(json.primary);
           setLedgerState({ status: "ok", message: ledgerSummaryLine(json.primary) });
@@ -691,8 +758,61 @@ export default function RegisterPage() {
     apply("platAreaSqm", "대지면적", v.platAreaSqm, platArea, setPlatArea);
     apply("buildingName", "건물명", v.buildingName, buildingName, setBuildingName);
     apply("propertyType", "매물 종류", v.propertyType, propertyType, setPropertyType);
+    apply("parking", "주차", v.parking, parking, setParking);
+    apply("elevator", "엘리베이터", v.elevator, elevator, setElevator);
+    apply("violation", "위반건축물", v.violation, violation, setViolation);
 
     setAutoFilled(filled);
+  }
+
+  /**
+   * 전유부에서 고른 한 호 → 폼.
+   *   · 전용면적·공급면적(전유+공용)·해당층·상세주소(건물명·동·층·호)를 **바로 채운다**.
+   *     사용자가 직접 호를 골랐으니 앞서 적힌 값도 대장 값으로 바꾼다(그 뒤 다시 고칠 수 있다).
+   *   · 표제부 값(총층수·사용승인일·주차·엘리베이터·위반건축물)은 이미 채워져 있고, 빠졌으면 여기서 보강한다.
+   */
+  function pickUnit(unit: LedgerUnit) {
+    const v = formValuesFromUnit(unit, ledger);
+    const applied: string[] = [];
+    const put = (key: AutoKey, label: string, next: string | undefined, set: (s: string) => void) => {
+      if (!next) return;
+      set(next);
+      lastAutoRef.current[key] = next;
+      applied.push(label);
+    };
+    put("exclusiveArea", "전용면적", v.exclusiveArea, setExclusiveArea);
+    put("supplyArea", "공급면적", v.supplyArea, setSupplyArea);
+    put("floor", "해당층", v.floor, setFloor);
+    put("detailAddress", "상세주소", v.detailAddress, setDetailAddress);
+    // 표제부 값을 여기서 한 번 더 채워 둔다(대장 줄이 늦게 와도 호를 고른 즉시 명시사항이 찬다)
+    if (ledger) {
+      const lead = formValuesFromLedger(ledger);
+      put("approvalDate", "사용승인일", lead.approvalDate, setApprovalDate);
+      put("totalFloors", "총층수", lead.totalFloors, setTotalFloors);
+      put("parking", "주차", lead.parking, setParking);
+      put("elevator", "엘리베이터", lead.elevator, setElevator);
+      put("violation", "위반건축물", lead.violation, setViolation);
+    }
+    setUnitPicked({ dong: unit.dongLabel, ho: unit.ho });
+    setAutoFilled(applied);
+  }
+
+  /** 호를 골라 채웠던 값(전용·공급면적·층·상세주소)만 지운다 — 주소를 바꿧을 때 앞 건물 값이 남지 않게 */
+  function clearUnitAutoValues() {
+    const map: [AutoKey, string, (v: string) => void][] = [
+      ["exclusiveArea", exclusiveArea, setExclusiveArea],
+      ["supplyArea", supplyArea, setSupplyArea],
+      ["floor", floor, setFloor],
+      ["detailAddress", detailAddress, setDetailAddress],
+    ];
+    for (const [key, current, set] of map) {
+      const prev = lastAutoRef.current[key];
+      if (prev !== undefined && current.trim() === prev) {
+        set("");
+        delete lastAutoRef.current[key];
+      }
+    }
+    setUnitPicked(null);
   }
 
   /** 대장을 못 읽었을 때 — 지난번 대장이 채워 둔 값만 지운다(직접 적은 값은 그대로) */
@@ -702,6 +822,13 @@ export default function RegisterPage() {
       ["totalFloors", totalFloors, setTotalFloors],
       ["platAreaSqm", platArea, setPlatArea],
       ["buildingName", buildingName, setBuildingName],
+      ["parking", parking, setParking],
+      ["elevator", elevator, setElevator],
+      ["violation", violation, setViolation],
+      ["exclusiveArea", exclusiveArea, setExclusiveArea],
+      ["supplyArea", supplyArea, setSupplyArea],
+      ["floor", floor, setFloor],
+      ["detailAddress", detailAddress, setDetailAddress],
     ];
     for (const [key, current, set] of map) {
       const prev = lastAutoRef.current[key];
@@ -764,6 +891,11 @@ export default function RegisterPage() {
     setLedger(null);
     setLedgerState({ status: "idle" });
     setAutoFilled([]);
+    setUnits([]);
+    setUnitsMeta(null);
+    setUnitDong("");
+    setUnitQuery("");
+    setUnitPicked(null);
     lastAutoRef.current = {};
     setPropertyTypeTouched(false);
     setSaveFailed(false);
@@ -951,6 +1083,11 @@ export default function RegisterPage() {
                 setParcelState({ status: "idle" });
                 setLedger(null);
                 setLedgerState({ status: "idle" });
+                setUnits([]);
+                setUnitsMeta(null);
+                setUnitDong("");
+                setUnitQuery("");
+                setUnitPicked(null);
               }}
               className="ml-auto rounded-full border border-slate-300 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:border-slate-500"
             >
@@ -1123,8 +1260,7 @@ export default function RegisterPage() {
                   <span className="text-sky-800"> · {ledgerState.message}</span>
                   {autoFilled.length > 0 ? (
                     <span className="block text-[10px] text-sky-700">
-                      폼에 채운 항목: {autoFilled.join(", ")} — 전유면적·대지지분은 대장 표제부에 없어 직접
-                      입력합니다.
+                      폼에 채운 항목: {autoFilled.join(", ")} — 전유·공급면적은 아래에서 동·호수를 고르면 채워집니다.
                     </span>
                   ) : (
                     <span className="block text-[10px] text-sky-700">
@@ -1137,6 +1273,11 @@ export default function RegisterPage() {
                       {ledger.mainPurps ? ` · 주용도 ${ledger.mainPurps}` : ""}
                       {ledger.hhldCnt ? ` · 세대 ${ledger.hhldCnt}` : ""}
                       {ledger.fmlyCnt ? ` · 가구 ${ledger.fmlyCnt}` : ""}
+                      {ledger.parkingTotal !== undefined ? ` · 주차 ${ledger.parkingTotal}대` : ""}
+                      {ledger.elevatorCnt !== undefined
+                        ? ` · 엘리베이터 ${ledger.elevatorCnt > 0 ? `${ledger.elevatorCnt}대` : "없음"}`
+                        : ""}
+                      {ledger.violation ? ` · ${ledger.violation}` : ""}
                     </span>
                   )}
                 </>
@@ -1158,6 +1299,137 @@ export default function RegisterPage() {
                 <span className="text-slate-400">주소를 고르면 건축물대장(사용승인일·층수·대지면적·주용도)을 채웁니다.</span>
               )}
             </div>
+
+            {/* 동·호수 선택 — 건축물대장 전유부. 호를 고르면 전용·공급면적·해당층·상세주소가 바로 찬다 */}
+            {units.length > 0 ? (
+              <div data-testid="register-unit-picker" className="rounded-xl border border-sky-200 bg-white p-2.5">
+                <div className="flex flex-wrap items-baseline gap-1.5">
+                  <b className="text-[12px] text-slate-800">동·호수 선택</b>
+                  {(address || ledger?.name) && (
+                    <span className="max-w-[55%] truncate text-[10px] font-medium text-slate-700">
+                      {[address, ledger?.name].filter(Boolean).join(" ")}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-slate-500">
+                    건축물대장 전유부 {units.length.toLocaleString()}호
+                    {unitsMeta?.truncated && unitsMeta.total > 0
+                      ? ` (전체 ${unitsMeta.total.toLocaleString()}행 중 ${(unitsMeta.rows || 0).toLocaleString()}행)`
+                      : ""}{" "}— 고르면 전용·공급면적·해당층이 채워집니다
+                  </span>
+                </div>
+
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {unitDongList.length > 1 && (
+                    <select
+                      value={unitDong}
+                      onChange={(e) => setUnitDong(e.target.value)}
+                      aria-label="동 선택"
+                      data-testid="register-unit-dong"
+                      className="h-8 rounded-lg border border-slate-300 bg-white px-1.5 text-[12px] text-slate-800"
+                    >
+                      <option value="">전체 동</option>
+                      {unitDongList.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    value={unitQuery}
+                    onChange={(e) => setUnitQuery(e.target.value)}
+                    placeholder="호수·층 검색 — 예: 201, 402, 3층"
+                    aria-label="동·호수 검색"
+                    data-testid="register-unit-search"
+                    className="h-8 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 text-[12px] focus:border-sky-500 focus:outline-none"
+                  />
+                  <span className="shrink-0 text-[10px] text-slate-500">{shownUnits.count}호</span>
+                </div>
+
+                <ul className="mt-1.5 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-100">
+                  {shownUnits.rows.map((u) => {
+                    const pickedRow = u.dongLabel === unitPicked?.dong && u.ho === unitPicked?.ho;
+                    const head = [
+                      ledger?.name && ledger.name !== u.dongLabel ? ledger.name : "",
+                      u.dongLabel,
+                      u.floor,
+                      hoLabel(u.ho),
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    return (
+                      <li
+                        key={`${u.dong}|${u.ho}`}
+                        data-testid="register-unit-row"
+                        data-unit={`${u.dongLabel} ${u.ho}`.trim()}
+                        className={"flex items-center gap-2 px-2 py-1.5 " + (pickedRow ? "bg-sky-50" : "")}
+                      >
+                        <span className="min-w-0 flex-1 leading-tight">
+                          <span className="block truncate text-[12px] font-medium text-slate-800">{head}</span>
+                          <span className="block text-[10px] text-slate-500">
+                            전용 {u.exclusiveArea}㎡
+                            {u.exclusiveArea > 0 ? ` (${pyeong(u.exclusiveArea)}평)` : ""}
+                            {" · "}공급 {u.supplyArea}㎡
+                            {u.commonArea > 0 ? ` (공용 ${u.commonArea}㎡)` : ""}
+                            {u.mainPurps ? ` · ${u.mainPurps}` : ""}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => pickUnit(u)}
+                          data-testid="register-unit-pick"
+                          aria-pressed={pickedRow}
+                          className={
+                            "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold " +
+                            (pickedRow
+                              ? "border-sky-600 bg-sky-600 text-white"
+                              : "border-slate-300 bg-white text-slate-700 hover:border-sky-500 hover:text-sky-700")
+                          }
+                        >
+                          {pickedRow ? "선택됨" : "선택"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {shownUnits.count === 0 && (
+                    <li className="px-2 py-3 text-[11px] text-slate-500">
+                      {unitQuery.trim()
+                        ? `'${unitQuery.trim()}' 에 맞는 동·호수가 없습니다 — 다른 번호로 찾거나 아래에 직접 입력하세요.`
+                        : "이 동에는 표시할 호수가 없습니다."}
+                    </li>
+                  )}
+                </ul>
+
+                {shownUnits.count > shownUnits.rows.length && (
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    {shownUnits.rows.length}개만 표시 중 — 검색으로 좁혀 주세요(전체 {shownUnits.count}호).
+                  </p>
+                )}
+
+                {unitPickedUnit && (
+                  <p
+                    data-testid="register-unit-picked"
+                    className="mt-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900"
+                  >
+                    선택됨 — {unitPickedUnit.dongLabel} {hoLabel(unitPickedUnit.ho)} · 전용 {exclusiveArea || "-"}㎡ ·
+                    공급 {supplyArea || "-"}㎡ · 해당층 {floor || "-"} → 폼에 채웠습니다
+                  </p>
+                )}
+
+                {unitsMeta?.truncated && (
+                  <p className="mt-1 text-[10px] text-amber-700">
+                    대단지라 전유부를 일부만 읽었습니다 — 목록에 없는 동·호는 전용면적을 직접 입력하세요.
+                  </p>
+                )}
+              </div>
+            ) : unitsMeta?.note ? (
+              <div
+                data-testid="register-unit-none"
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] text-slate-600"
+              >
+                동·호수 목록 없음 — {unitsMeta.note}
+              </div>
+            ) : null}
           </div>
         )}
 

@@ -35,11 +35,44 @@ export type LedgerBuildingBrief = {
   hhldCnt?: number;
   fmlyCnt?: number;
   hoCnt?: number;
+  /** 주차대수 — 자주식+기계식 합계 (표제부 indr/oudr Auto·MechUtcnt) */
+  parkingTotal?: number;
+  /** 승강기 — 운용·비상용 합계 (표제부 rideUseElvtCnt + emgenUseElvtCnt) */
+  elevatorCnt?: number;
+  /** 위반건축물 여부 — 표제부 vltnBldYn 이 있을 때만 */
+  violation?: string;
   /** 부속건축물 여부 */
   attached: boolean;
 };
 
-/** `getBrTitleInfo` 응답의 건축물대장 표제부 한 행 */
+/**
+ * 전유부(호별 면적) 한 줄 — `/api/building-info` 의 `units` 항목.
+ *   · `getBrExposPubuseAreaInfo` 는 호마다 **전유 행 + 공용 행**을 따로 주므로
+ *     같은 동·호로 묶어 전유면적·공용면적을 합산한 값이다.
+ *   · 단독·다가구처럼 전유부가 없는 건물은 목록이 비어 있다(면적을 지어내지 않는다).
+ */
+export type LedgerUnit = {
+  /** 동명 원문 — '101동'·'101'·건물명(단일 동)·'' */
+  dong: string;
+  /** 화면에 쓸 동 표기 — '101동' (건물명이 동명인 경우 그대로) */
+  dongLabel: string;
+  /** 호명 — '402' (끝의 '호'는 떼었다) */
+  ho: string;
+  /** 해당층 표기 — '4층'·'지하1층'·'각층' */
+  floor: string;
+  /** 해당층 숫자 — 지하는 음수, 알 수 없으면 0 */
+  floorNo: number;
+  /** 전유면적 합 ㎡ */
+  exclusiveArea: number;
+  /** 공용면적 합 ㎡ */
+  commonArea: number;
+  /** 공급면적 = 전유 + 공용 ㎡ */
+  supplyArea: number;
+  /** 전유부 주용도 (예: 다세대주택) */
+  mainPurps?: string;
+};
+
+/** `/api/building-info` 응답 — 표제부 + 전유부 호수 목록 */
 export type BuildingInfoResponse = {
   ok: boolean;
   pnu?: string;
@@ -47,6 +80,16 @@ export type BuildingInfoResponse = {
   primary?: LedgerBuildingBrief | null;
   buildings?: LedgerBuildingBrief[];
   note?: string;
+  /** 동·호수 목록 (전유부). 전유부가 없는 건물은 빈 배열 */
+  units?: LedgerUnit[];
+  /** 실제로 읽은 전유부 행 수 */
+  unitsRows?: number;
+  /** 국토부가 알려 준 전유부 전체 행 수 */
+  unitsTotalRows?: number;
+  /** 전체를 다 읽지 못했는가(대단지 아파트) — 화면이 '일부만' 이라고 알린다 */
+  unitsTruncated?: boolean;
+  /** 호수 목록을 못 만든 이유(전유부 없음·조회 실패 등) */
+  unitsNote?: string;
   error?: string;
   detail?: string;
 };
@@ -105,12 +148,36 @@ export function propertyTypeFromPurps(brief: LedgerBuildingBrief | null | undefi
  *     `buildingName` 건물명, `propertyType` 주용도에서 옮긴 종류.
  *   · 값이 없는 항목은 키 자체를 넣지 않는다 — 화면은 그 칸을 비워 두고 직접 입력을 받는다.
  */
+/** 주차대수 → 폼 표기 — 부동산포스 양식("총 15대" / "없음") */
+export function parkingText(brief: LedgerBuildingBrief | null | undefined): string | undefined {
+  const n = brief?.parkingTotal;
+  if (n === undefined || !Number.isFinite(n)) return undefined;
+  return n > 0 ? `총 ${n.toLocaleString()}대` : "없음";
+}
+
+/** 승강기 대수 → '있음'/'없음'. 대장에 값이 없으면 비운다(지어내지 않는다) */
+export function elevatorText(brief: LedgerBuildingBrief | null | undefined): string | undefined {
+  const n = brief?.elevatorCnt;
+  if (n === undefined || !Number.isFinite(n)) return undefined;
+  return n > 0 ? "있음" : "없음";
+}
+
+/**
+ * 표제부 → 폼에 채울 값.
+ *   · `approvalDate` 사용승인일, `totalFloors` 지상층수, `platAreaSqm` 대지면적,
+ *     `buildingName` 건물명, `propertyType` 주용도에서 옮긴 종류,
+ *     `parking`·`elevator`·`violation` 은 표시·광고 명시사항(부동산포스가 함께 받는 항목).
+ *   · 값이 없는 항목은 키 자체를 넣지 않는다 — 화면은 그 칸을 비워 두고 직접 입력을 받는다.
+ */
 export function formValuesFromLedger(brief: LedgerBuildingBrief | null | undefined): {
   approvalDate?: string;
   totalFloors?: string;
   platAreaSqm?: string;
   buildingName?: string;
   propertyType?: string;
+  parking?: string;
+  elevator?: string;
+  violation?: string;
 } {
   if (!brief) return {};
   const out: {
@@ -119,6 +186,9 @@ export function formValuesFromLedger(brief: LedgerBuildingBrief | null | undefin
     platAreaSqm?: string;
     buildingName?: string;
     propertyType?: string;
+    parking?: string;
+    elevator?: string;
+    violation?: string;
   } = {};
   if (brief.useAprDay) out.approvalDate = brief.useAprDay;
   if (brief.grndFlrCnt && brief.grndFlrCnt > 0) out.totalFloors = String(brief.grndFlrCnt);
@@ -126,7 +196,87 @@ export function formValuesFromLedger(brief: LedgerBuildingBrief | null | undefin
   if (brief.name) out.buildingName = brief.name;
   const propertyType = propertyTypeFromPurps(brief);
   if (propertyType) out.propertyType = propertyType;
+  const parking = parkingText(brief);
+  if (parking) out.parking = parking;
+  const elevator = elevatorText(brief);
+  if (elevator) out.elevator = elevator;
+  if (brief.violation) out.violation = brief.violation;
   return out;
+}
+
+/** ㎡ 값 → 폼 입력 문자열 — 소수 둘째 자리까지(부동산포스 표기와 같다) */
+export function areaText(v: number | undefined): string {
+  if (v === undefined || !Number.isFinite(v) || v <= 0) return "";
+  return String(Math.round(v * 100) / 100);
+}
+
+/** 호명 표기 — '402' → '제402호'. 이미 '호'가 붙어 있거나 숫자가 아니면 그대로 쓴다 */
+export function hoLabel(ho: string): string {
+  const t = (ho ?? "").trim();
+  if (!t) return "";
+  if (/호$/.test(t)) return /^\d/.test(t) ? `제${t}` : t;
+  return /^\d+(-\d+)?$/.test(t) ? `제${t}호` : t;
+}
+
+/** 동 표기 — '101' → '101동', '제이원'처럼 숫자가 아니면 그대로 */
+export function dongLabel(dong: string): string {
+  const t = (dong ?? "").trim();
+  if (!t) return "";
+  if (/동$/.test(t)) return t;
+  return /^\d+(-\d+)?$/.test(t) ? `${t}동` : t;
+}
+
+/**
+ * 전유부 한 호 → 폼에 채울 값.
+ *   · `exclusiveArea` 전용면적, `supplyArea` 공급면적(전유+공용), `floor` 해당층,
+ *     `detailAddress` 부동산포스 표기(건물명 · 동 · 층 · 호).
+ *   · 층은 전유부의 `flrNoNm`(예: '4층')을 그대로 쓴다 — 카드에 '4층 / 6층'으로 읽힌다.
+ */
+export function formValuesFromUnit(
+  unit: LedgerUnit | null | undefined,
+  brief?: LedgerBuildingBrief | null
+): { exclusiveArea?: string; supplyArea?: string; floor?: string; detailAddress?: string } {
+  if (!unit) return {};
+  const out: { exclusiveArea?: string; supplyArea?: string; floor?: string; detailAddress?: string } = {};
+  const ex = areaText(unit.exclusiveArea);
+  if (ex) out.exclusiveArea = ex;
+  const sp = areaText(unit.supplyArea);
+  if (sp) out.supplyArea = sp;
+  if (unit.floor && unit.floor !== "각층") out.floor = unit.floor;
+  // 상세주소 — 예: '제이원 제4층 제402호' / '제이원 101동 제4층 제402호'
+  const name = (brief?.name ?? "").trim();
+  const dong = unit.dongLabel && unit.dongLabel !== name ? unit.dongLabel : "";
+  const floorPart = unit.floorNo > 0 ? `제${unit.floorNo}층` : unit.floor && unit.floor !== "각층" ? unit.floor : "";
+  const detail = [name, dong, floorPart, hoLabel(unit.ho)].filter(Boolean).join(" ");
+  if (detail) out.detailAddress = detail;
+  return out;
+}
+
+/** 동 목록 — 동 선택 드롭다운에 쓸 값(중복 제거, 등장 순서 유지) */
+export function unitDongs(units: LedgerUnit[] | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of units ?? []) {
+    const d = (u.dongLabel ?? "").trim();
+    if (!d || seen.has(d)) continue;
+    seen.add(d);
+    out.push(d);
+  }
+  return out;
+}
+
+/**
+ * 호수 검색 — '201'·'201호'·'3층'·'101동 201' 같은 입력을 목록에서 걸러 낸다.
+ *   · 숫자만 있으면 호수 우선, '층'이 붙으면 층, 동 이름이 들어가면 동까지 함께 본다.
+ */
+export function matchUnit(u: LedgerUnit, query: string): boolean {
+  const q = query.trim().replace(/\s+/g, "").toLowerCase();
+  if (!q) return true;
+  const hay = `${u.dongLabel}${u.dong}${u.ho}${hoLabel(u.ho)}${u.floor}`.replace(/\s+/g, "").toLowerCase();
+  if (hay.includes(q)) return true;
+  // '201호' → '201', '제201호' → '201' 처럼 접두·접미를 떼고 한 번 더
+  const bare = q.replace(/^제/, "").replace(/호$/, "");
+  return !!bare && hay.includes(bare);
 }
 
 /**
