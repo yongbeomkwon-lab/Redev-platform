@@ -40,6 +40,7 @@ import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type Ji
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
 import DevPressureLayer from "./DevPressureLayer";
+import GemBlocksLayer from "./GemBlocksLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -532,6 +533,9 @@ export default function KakaoZoneMap({
   devPressureOn = false,
   onToggleDevPressure,
   devPressureFocus,
+  gemOn = false,
+  onToggleGem,
+  gemFocus,
   admin,
   onFail,
 }: KakaoZoneMapProps) {
@@ -4299,6 +4303,18 @@ export default function KakaoZoneMap({
         />
       )}
 
+      {/* ── 💎 원석 찾기 레이어 — 아직 정비구역 아닌 노후 저층 블록 후보(z 97) ── */}
+      {gemOn && mapReady && sdkRef.current && mapRef.current && (
+        <GemBlocksLayer
+          sdk={sdkRef.current}
+          map={mapRef.current}
+          focus={gemFocus ?? null}
+          onOpenZone={onSelectZone}
+          onPickJibun={onPickJibun}
+          onCloseLayer={onToggleGem}
+        />
+      )}
+
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
       {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}
       <div className="absolute right-2 top-1/2 z-[600] flex -translate-y-1/2 flex-col items-end gap-1.5 md:bottom-2 md:left-2 md:right-auto md:top-auto md:translate-y-0 md:flex-row md:items-center">
@@ -4400,6 +4416,21 @@ export default function KakaoZoneMap({
         >
           <span aria-hidden className="text-[12px] leading-none">🔥</span>
           <span className="hidden md:inline">개발압력</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onToggleGem?.()}
+          aria-pressed={!!gemOn}
+          data-testid="gem-toggle"
+          title="원석 찾기 — 아직 정비구역으로 지정되지 않은 노후 저층 블록(30년↑ 60% 이상)을 호박색으로 표시합니다. 경계는 추정입니다"
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+            gemOn
+              ? "border-amber-500 bg-amber-500 text-white"
+              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+          }`}
+        >
+          <span aria-hidden className="text-[12px] leading-none">💎</span>
+          <span className="hidden md:inline">원석 찾기</span>
         </button>
         {onToggleJibunPick && (
           <button

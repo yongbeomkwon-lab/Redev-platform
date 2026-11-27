@@ -22,6 +22,7 @@ import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
 import { DEV_GRADE_COLOR, loadDevPressure, type DevHotspot, type RecentZone } from "@/lib/dev-pressure";
+import { GEM_GRADE_COLOR, gemSummary, loadGemBlocks, type GemBlock, type GemData } from "@/lib/gem-blocks";
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT } from "@/components/map/colors";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
@@ -269,6 +270,12 @@ export default function ZoneExplorer() {
   const [devPressureOn, setDevPressureOn] = useState(false);
   const [dpFocus, setDpFocus] = useState<{ id: string; lat: number; lng: number; token: number } | null>(null);
   const [dpTop, setDpTop] = useState<DevHotspot[]>([]);
+  // ── 💎 원석 찾기 ────────────────────────────────────────────────────
+  //   · 켜면 public/data/gem-blocks.json 을 받아 지도에 호박색 블록을 얹는다(그때 처음 받는다).
+  //   · 🔥 개발압력과는 같은 자리를 두고 겹치므로 함께 켜지지 않게 한다(켜면 다른 쪽을 끈다).
+  const [gemOn, setGemOn] = useState(false);
+  const [gemFocus, setGemFocus] = useState<{ id: string; lat: number; lng: number; token: number } | null>(null);
+  const [gemData, setGemData] = useState<GemData | null>(null);
   /** ⚡ 최근 변동 구역 — public/data/recent-zones.json (scripts/build-recent-zones.py) */
   const [recentZones, setRecentZones] = useState<RecentZone[]>([]);
   // ── 구역 내 법원경매 물건 (public/data/auctions.json) ─────────────
@@ -1314,10 +1321,33 @@ export default function ZoneExplorer() {
 
   /** 첫 화면 패널의 핫스팟 → 지도를 그 자리로 옮기고 🔥 개발압력 레이어·카드를 연다 */
   function openDevPressure(h: DevHotspot) {
+    setGemOn(false); // 원석과 같은 자리를 두고 겹친다 — 한 번에 하나만
     setDevPressureOn(true);
     setDpFocus({ id: h.id, lat: h.lat, lng: h.lng, token: Date.now() });
     // 좁은 화면은 패널이 지도 아래를 덮으므로 접어 카드가 보이게 한다
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
+
+  /** 💎 원석 블록 → 지도를 그 자리로 옮기고 카드를 연다 */
+  function openGem(b: GemBlock) {
+    setDevPressureOn(false);
+    setGemOn(true);
+    setGemFocus({ id: b.id, lat: b.lat, lng: b.lng, token: Date.now() });
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
+
+  /** 💎 토글 — 켤 때 데이터를 처음 받는다(수십 KB) */
+  function toggleGem() {
+    setGemOn((v) => {
+      const next = !v;
+      if (next) setDevPressureOn(false);
+      if (next && !gemData) {
+        loadGemBlocks()
+          .then((d) => setGemData(d))
+          .catch(() => {});
+      }
+      return next;
+    });
   }
 
   /** 역 검색 결과 선택 — 역으로 지도를 옴기고, 역 주변 구역 목록을 띄운다 */
@@ -1791,8 +1821,17 @@ export default function ZoneExplorer() {
             buildingTarget ? { umdNm: buildingTarget.dong, jibun: buildingTarget.jibun } : null
           }
           devPressureOn={devPressureOn}
-          onToggleDevPressure={() => setDevPressureOn((v) => !v)}
+          onToggleDevPressure={() => {
+            setDevPressureOn((v) => {
+              const next = !v;
+              if (next) setGemOn(false);
+              return next;
+            });
+          }}
           devPressureFocus={dpFocus}
+          gemOn={gemOn}
+          onToggleGem={toggleGem}
+          gemFocus={gemFocus}
           jibunPickOn={jibunPickOn}
           onToggleJibunPick={() => setJibunPickOn((v) => !v)}
           onPickJibun={(lat, lng) => {
@@ -2950,6 +2989,49 @@ export default function ZoneExplorer() {
                         {/* 3) 아무것도 선택되지 않았을 때: 🔥 개발압력 TOP + ⚡ 최근 변동 구역 */}
             {!selected && !selectedSeoul && (
               <div className="space-y-3">
+                {/* 💎 원석 찾기를 켰을 때 — 서울 원석 블록 목록(누르면 지도에서 그 블록을 연다) */}
+                {gemOn && (
+                  <section data-testid="gem-top" className="rounded-xl border border-amber-200 bg-white p-2.5">
+                    <div className="mb-1 flex items-baseline gap-1.5">
+                      <b className="text-[12.5px] font-bold text-amber-900">💎 원석 블록</b>
+                      <span className="text-[10px] text-slate-500">
+                        정비구역 아닌 노후 저층지 {gemData ? `· 서울 ${gemData.summary.total}곳` : "· 불러오는 중…"}
+                      </span>
+                    </div>
+                    <div className="max-h-[320px] space-y-0.5 overflow-y-auto pr-0.5">
+                      {(gemData?.blocks ?? []).slice(0, 30).map((b, i) => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => openGem(b)}
+                          data-testid="gem-top-item"
+                          data-gem-id={b.id}
+                          title={`${b.addr ?? ""} — ${gemSummary(b)}`}
+                          className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-amber-50/80"
+                        >
+                          <span className="w-3 shrink-0 text-center text-[10px] font-bold text-amber-600">{i + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12px] font-bold text-slate-900">
+                              {b.gu} {b.dong} <span className="font-semibold text-slate-500">{b.jibun}</span>
+                            </span>
+                            <span className="mt-[1px] block truncate text-[10px] text-slate-500">{gemSummary(b)}</span>
+                          </span>
+                          <span
+                            className="shrink-0 rounded-full px-1.5 py-[2px] text-[10px] font-extrabold text-white"
+                            style={{ backgroundColor: GEM_GRADE_COLOR[b.grade] }}
+                          >
+                            {Math.round(b.score)}점
+                          </span>
+                        </button>
+                      ))}
+                      {!gemData && <p className="px-1 py-2 text-[11px] text-slate-400">불러오는 중…</p>}
+                    </div>
+                    <p className="mt-1 px-1 text-[9.5px] leading-[1.4] text-slate-400">
+                      경계는 건물 위치로 추정한 참고선입니다 · 고시 구역계 아님
+                    </p>
+                  </section>
+                )}
+
                 <section
                   data-testid="dev-pressure-top"
                   className="rounded-xl border border-slate-200 bg-white p-2.5"

@@ -154,6 +154,11 @@ export type ZoneMapProps = {
   onToggleDevPressure?: () => void;
   /** 핫스팟으로 지도를 옮기고 그 카드를 열라는 요청 — token 이 바뀔 때마다 처리한다 */
   devPressureFocus?: { id: string; lat: number; lng: number; token: number } | null;
+  /** 💎 원석 찾기(미지정 노후 저층 블록) ON/OFF — 상태는 ZoneExplorer 가 갖는다 */
+  gemOn?: boolean;
+  onToggleGem?: () => void;
+  /** 원석 블록으로 지도를 옮기고 그 카드를 열라는 요청 */
+  gemFocus?: { id: string; lat: number; lng: number; token: number } | null;
 };
 
 /**
