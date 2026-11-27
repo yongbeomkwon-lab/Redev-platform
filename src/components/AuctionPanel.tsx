@@ -247,6 +247,11 @@ export default function AuctionPanel({
           <span className="shrink-0 rounded bg-white px-1.5 py-[1px] text-[10px] font-bold text-amber-900 ring-1 ring-amber-200">
             {salesTotal}건
           </span>
+          {zoneTotal != null && zoneTotal > salesTotal && (
+            <span className="shrink-0 text-[9.5px] font-semibold text-amber-800/70" title="이 구역 전체 경매 건수">
+              / 구역 {zoneTotal}건
+            </span>
+          )}
           {items.length > salesTotal && (
             <span
               className="shrink-0 text-[9.5px] text-amber-800/70"
@@ -337,6 +342,8 @@ export default function AuctionPanel({
             copied={copied}
             onCopy={copyText}
             saleCount={salesTotal}
+            zoneTotal={zoneTotal}
+            onShowZoneAll={onShowZoneAll}
           />
         ) : (
           <div className="px-2.5 pb-2.5 pt-2">
@@ -677,6 +684,8 @@ function ItemDetail({
   copied,
   onCopy,
   saleCount,
+  zoneTotal,
+  onShowZoneAll,
 }: {
   item: AuctionItem;
   detail?: AuctionDetail;
@@ -692,6 +701,8 @@ function ItemDetail({
   copied: string | null;
   onCopy: (text: string, key: string) => void;
   saleCount: number;
+  zoneTotal?: number;
+  onShowZoneAll?: () => void;
 }) {
   const caseNo = shortCaseNo(item);
   const d = daysUntilSale(item.saleDate);
@@ -1171,6 +1182,15 @@ function ItemDetail({
         >
           ⚖️ 경매 {saleCount}건 목록으로
         </button>
+        {onShowZoneAll && zoneTotal != null && zoneTotal > saleCount && (
+          <button
+            type="button"
+            onClick={onShowZoneAll}
+            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10.5px] font-semibold text-slate-600 hover:border-slate-500 hover:text-slate-900"
+          >
+            이 구역 경매 {zoneTotal}건 전체 보기 →
+          </button>
+        )}
       </div>
 
       <p className="mt-2 text-[9.5px] leading-relaxed text-slate-400">
