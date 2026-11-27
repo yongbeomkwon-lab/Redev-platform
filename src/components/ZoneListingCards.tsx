@@ -4,18 +4,25 @@
 //
 //  · 메인 지도에서 구역을 고르면(서울시 고시 구역 · 대표 구역 모두) 이 카드가 맨 위에 붙는다.
 //  · 실무에서 먼저 보는 값 순서로 적는다: 매매가 → 기보증금 → **초기투자금**(매매가−기보증금)
-//    → 임대사업자 승계/토허제 조건 → 특징.
+//    → 프리미엄(감정가 대비) → 임대사업자 승계/토허제 조건 → 명시사항 → 건물 상세 → 특징 → 설명.
 //  · 매물이 없으면 카드 자체를 그리지 않는다(빈 상자를 늘어놓지 않는다).
 // ─────────────────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import type { Listing } from "@/lib/types";
-import { calcInitialInvestment, listingDeposit, listingTradeType } from "@/lib/types";
+import { calcImpliedRights, calcInitialInvestment, listingDeposit, listingTradeType } from "@/lib/types";
 import { formatMan } from "@/lib/format";
 import { MY_LISTING_ID_PREFIX } from "@/lib/my-listings";
 import { Badge } from "./Badges";
 import Icon from "./Icon";
 import ListingSocial from "./listing/ListingSocial";
-import { ListingAddress, ListingBrokerLegal, ListingPriceLine, ListingSpecLine } from "./ListingSpec";
+import {
+  ListingAddress,
+  ListingBrokerLegal,
+  ListingDescription,
+  ListingDetailLine,
+  ListingPriceLine,
+  ListingSpecLine,
+} from "./ListingSpec";
 
 /** 임대사업자 승계 · 토허제(실거주) 조건 배지 — 매물 카드·목록에서 같은 말을 쓴다 */
 export function ListingConditionBadges({ listing }: { listing: Listing }) {
@@ -70,6 +77,7 @@ export function ZoneListingCards({
       <ul className="space-y-2">
         {listings.map((l) => {
           const deposit = listingDeposit(l);
+          const premium = calcImpliedRights(l);
           return (
             <li
               key={l.id}
@@ -101,6 +109,12 @@ export function ZoneListingCards({
                   <span className="font-semibold text-slate-900">
                     초기투자금 {formatMan(calcInitialInvestment(l))}
                   </span>
+                  {l.appraisedValue ? (
+                    <span data-testid="zone-listing-premium">
+                      프리미엄 {premium < 0 ? "−" : ""}
+                      {formatMan(Math.abs(premium))}
+                    </span>
+                  ) : null}
                   {l.landShareSqm ? <span>대지지분 {l.landShareSqm}㎡</span> : null}
                 </div>
               ) : (
@@ -114,12 +128,15 @@ export function ZoneListingCards({
               )}
               {/* 명시사항 — 거래형태·층/총층·방/ 욕실·방향·입주가능일·주차·승인일·관리비 */}
               <ListingSpecLine listing={l} className="mt-1" />
+              {/* 건물·거래 상세 — 공급면적·현관구조·난방·엘리베이터·융자금·기월세·이주비·위반건축물 */}
+              <ListingDetailLine listing={l} className="mt-0.5" />
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 <ListingConditionBadges listing={l} />
               </div>
               {l.note && (
                 <p className="mt-1 whitespace-pre-wrap text-[11px] leading-snug text-slate-600">{l.note}</p>
               )}
+              <ListingDescription listing={l} />
               {/* 중개사무소 법정 표시 — 사무소명·등록번호 / 대표자·소속공인중개사·연락처 */}
               <ListingBrokerLegal listing={l} />
               {/* 이 매물에 대한 반응(좋아요·놀람·관심)과 댓글 — 접힌 한 줄로 둔다 */}

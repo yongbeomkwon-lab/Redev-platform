@@ -45,6 +45,16 @@ export type ListingExtra = Pick<
   | "buildingName"
   | "brokerAddress"
   | "brokerCeo"
+  | "supplyAreaSqm"
+  | "mortgage"
+  | "tenantMonthlyRent"
+  | "relocationCost"
+  | "relocationCostFree"
+  | "entranceType"
+  | "heating"
+  | "elevator"
+  | "violation"
+  | "description"
 >;
 
 /** 포장할 필드 이름 — 목록을 한 곳에 두어 늘리는 곳과 읽는 곳이 어긋나지 않게 한다 */
@@ -70,6 +80,16 @@ export const LISTING_EXTRA_KEYS: (keyof ListingExtra)[] = [
   "buildingName",
   "brokerAddress",
   "brokerCeo",
+  "supplyAreaSqm",
+  "mortgage",
+  "tenantMonthlyRent",
+  "relocationCost",
+  "relocationCostFree",
+  "entranceType",
+  "heating",
+  "elevator",
+  "violation",
+  "description",
 ];
 
 const TRADE_TYPES: ListingTradeType[] = ["매매", "전세", "월세"];
@@ -98,7 +118,8 @@ export function hasExtra(l: Listing): boolean {
  *   · 본문이 비어 있으면 표식 줄만 남는다.
  */
 export function packListingNote(note: string | undefined, l: Listing): string | null {
-  const body = (note ?? "").trim();
+  // 본문에 표식과 같은 글자가 있으면 unpack 이 그 줄을 JSON 시작으로 오해한다 — 본문에서는 지운다
+  const body = (note ?? "").split(LISTING_META_MARK).join("").trim();
   if (!hasExtra(l)) return body || null;
   const line = `${LISTING_META_MARK}${JSON.stringify(extrasOf(l))}`;
   return body ? `${body}\n${line}` : line;
@@ -154,10 +175,21 @@ export function sanitizeExtra(raw: Record<string, unknown>): ListingExtra {
   }
   const tradeType = str(raw.tradeType) as ListingTradeType | undefined;
   if (tradeType && TRADE_TYPES.includes(tradeType)) out.tradeType = tradeType;
-  for (const key of ["monthlyRent", "rooms", "baths", "platAreaSqm"] as const) {
+  for (const key of [
+    "monthlyRent",
+    "rooms",
+    "baths",
+    "platAreaSqm",
+    "supplyAreaSqm",
+    "mortgage",
+    "tenantMonthlyRent",
+    "relocationCost",
+  ] as const) {
     const n = num(raw[key]);
     if (n !== undefined && n >= 0) out[key] = n;
   }
+  const relocationCostFree = bool(raw.relocationCostFree);
+  if (relocationCostFree !== undefined) out.relocationCostFree = relocationCostFree;
   for (const key of [
     "floor",
     "totalFloors",
@@ -169,9 +201,16 @@ export function sanitizeExtra(raw: Record<string, unknown>): ListingExtra {
     "buildingName",
     "brokerAddress",
     "brokerCeo",
+    "entranceType",
+    "heating",
+    "elevator",
+    "violation",
   ] as const) {
     const s = str(raw[key]);
     if (s) out[key] = s;
   }
+  // 상세 설명은 길다 — 줄바꿈을 살려야 매물 설명이 한 덩어리로 붙지 않는다
+  const description = typeof raw.description === "string" ? raw.description.trim() : "";
+  if (description) out.description = description.slice(0, 1000);
   return out;
 }

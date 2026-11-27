@@ -15,6 +15,8 @@ import {
   addressText,
   brokerLegalLines,
   depositLine,
+  descriptionText,
+  detailItems,
   priceHeadline,
   priceLabel,
   specItems,
@@ -58,6 +60,45 @@ export function ListingSpecLine({ listing, className = "" }: { listing: Listing;
         </span>
       ))}
     </p>
+  );
+}
+
+/**
+ * 건물·거래 상세 한 줄 — 공급면적·현관구조·난방방식·엘리베이터·융자금·기월세·이주비·위반건축물.
+ *   · 법정 명시사항(ListingSpecLine)과 따로 두어, 명시사항 줄이 길어지지 않게 한다.
+ */
+export function ListingDetailLine({ listing, className = "" }: { listing: Listing; className?: string }) {
+  const items = detailItems(listing);
+  if (items.length === 0) return null;
+  return (
+    <p
+      data-testid="listing-detail-line"
+      className={"flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10.5px] leading-snug text-slate-500 " + className}
+    >
+      {items.map((v, i) => (
+        <span key={`${v}-${i}`} className="inline-flex items-center gap-1.5">
+          {i > 0 && <span aria-hidden className="text-slate-300">·</span>}
+          <span>{v}</span>
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/**
+ * 상세 설명 — 길어서 카드에서는 접어 둔다(펼치면 전문).
+ *   · 부동산포스 상세설명처럼 인사·푸터가 들어간 여러 줄 글이라 줄바꿈을 살린다.
+ */
+export function ListingDescription({ listing, className = "" }: { listing: Listing; className?: string }) {
+  const text = descriptionText(listing);
+  if (!text) return null;
+  return (
+    <details data-testid="listing-description" className={"mt-1 text-[11px] leading-snug text-slate-600 " + className}>
+      <summary className="cursor-pointer select-none text-[10.5px] font-semibold text-slate-500 hover:text-slate-700">
+        상세 설명 보기
+      </summary>
+      <p className="mt-1 max-h-56 overflow-y-auto whitespace-pre-wrap">{text}</p>
+    </details>
   );
 }
 

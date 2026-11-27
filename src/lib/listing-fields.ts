@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// 매물 표시 문구 — 거래형태·층·방향·입주가능일·중개사무소 같은 **표시·광고 명시사항**을
+// 매물 표시 문구 — 거래형태·층·방향·입주가능일·중개사무소 같은 **표시·광고 명시사항**과
+// 부동산포스 양식의 건물·거래 항목(공급면적·현관구조·난방방식·엘리베이터·융자금·위반건축물)을
 // 카드·목록·등록 미리보기가 같은 말로 쓰게 하는 순수 함수 모음.
 //
 //  · 값이 없으면 빈 문자열을 돌려준다 — 화면은 그 줄을 그리지 않는다(값을 지어내지 않는다).
@@ -100,6 +101,50 @@ export function maintenanceText(l: Listing): string {
   return v.startsWith("관리비") ? v : `관리비 ${v}`;
 }
 
+/** 공급면적 — `공급 49.5㎡` (전용면적과 짝을 이룬다) */
+export function supplyAreaText(l: Listing): string {
+  const v = l.supplyAreaSqm;
+  if (typeof v !== "number" || !(v > 0)) return "";
+  return `공급 ${v.toLocaleString()}㎡`;
+}
+
+/**
+ * 융자금 — 세 상태를 구분한다(부동산포스 '표시안함 / 융자금없음 / 금액').
+ *   · undefined = 표시 안 함 → 빈 문자열(그 줄을 그리지 않는다)
+ *   · 0 = 융자금 없음
+ *   · 1 이상 = 금액
+ */
+export function mortgageText(l: Listing): string {
+  const v = l.mortgage;
+  if (typeof v !== "number" || !Number.isFinite(v)) return "";
+  if (v === 0) return "융자금 없음";
+  return `융자금 ${formatMan(v)}`;
+}
+
+/** 기월세 — 매매에서 승계하는 임차인의 월세 */
+export function tenantRentText(l: Listing): string {
+  const v = l.tenantMonthlyRent;
+  if (typeof v !== "number" || !(v > 0)) return "";
+  return `기월세 ${formatMan(v)}`;
+}
+
+/** 이주비 — `이주비 1억 (무이자)` */
+export function relocationText(l: Listing): string {
+  const v = l.relocationCost;
+  if (typeof v !== "number" || !(v > 0)) return "";
+  return `이주비 ${formatMan(v)} (${l.relocationCostFree === false ? "유이자" : "무이자"})`;
+}
+
+/** 위반건축물 — 값이 없으면 빈 문자열(확인하지 않은 것을 '없음'으로 단정하지 않는다) */
+export function violationText(l: Listing): string {
+  const v = (l.violation ?? "").trim();
+  if (!v) return "";
+  if (v === "해당 없음" || v === "해당없음") return "위반건축물 없음";
+  if (v.startsWith("위반")) return v.endsWith("있음") ? "위반건축물 있음" : v;
+  if (v === "확인 필요") return "위반건축물 확인 필요";
+  return v;
+}
+
 /** 대지면적 — `대지 312.4㎡` (대지지분과 다른 값임을 이름으로 구분한다) */
 export function platAreaText(l: Listing): string {
   const v = l.platAreaSqm;
@@ -120,6 +165,30 @@ export function addressText(l: Listing): string {
     .replace(/\s*산?\d+(-\d+)?\s*$/, "")
     .replace(/\s*번지\s*$/, "")
     .trim();
+}
+
+/**
+ * 건물·거래 상세 한 줄 — 부동산포스 양식 항목 가운데 법정 명시사항이 아닌 것들.
+ *   · 카드에서는 명시사항 줄 아래 한 줄로 붙는다(값이 있는 것만).
+ *   · 순서: 공급면적 → 현관구조 → 난방방식 → 엘리베이터 → 융자금 → 기월세 → 이주비 → 위반건축물
+ */
+export function detailItems(l: Listing): string[] {
+  const items = [
+    supplyAreaText(l),
+    (l.entranceType ?? "").trim(),
+    (l.heating ?? "").trim(),
+    /^(있음|없음)$/.test((l.elevator ?? "").trim()) ? `엘리베이터 ${(l.elevator ?? "").trim()}` : (l.elevator ?? "").trim(),
+    mortgageText(l),
+    tenantRentText(l),
+    relocationText(l),
+    violationText(l),
+  ];
+  return items.filter((v) => v.length > 0);
+}
+
+/** 상세 설명 — 저장된 글을 그대로(앞뒤 공백만 정리) */
+export function descriptionText(l: Listing): string {
+  return (l.description ?? "").trim();
 }
 
 /** 목록 카드에 붙는 명시사항 한 줄들 — 값이 있는 것만(순서: 거래→면적→층→방→방향→입주→주차→승인→관리비) */
@@ -184,6 +253,14 @@ export function specPairs(l: Listing): { label: string; value: string }[] {
   push("사용승인일", (l.approvalDate ?? "").trim());
   push("관리비", (l.maintenanceFee ?? "").trim());
   push("대지면적", platAreaText(l).replace(/^대지\s*/, ""));
+  push("공급면적", supplyAreaText(l).replace(/^공급\s*/, ""));
+  push("현관구조", (l.entranceType ?? "").trim());
+  push("난방방식", (l.heating ?? "").trim());
+  push("엘리베이터", (l.elevator ?? "").trim());
+  push("융자금", mortgageText(l).replace(/^융자금\s*/, ""));
+  push("기월세", tenantRentText(l).replace(/^기월세\s*/, ""));
+  push("이주비", relocationText(l).replace(/^이주비\s*/, ""));
+  push("위반건축물", violationText(l).replace(/^위반건축물\s*/, ""));
   push("건물명", (l.buildingName ?? "").trim());
   return rows;
 }

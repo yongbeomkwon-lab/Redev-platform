@@ -3,7 +3,7 @@
 // /register — 중개사 매물 등록 (베타 무료)
 //
 //  · 예전 화면은 "요금제 선택 → 모의 결제" 3단계라 실제로 매물을 올릴 수 없었다.
-//    지금은 **바로 입력하는 실무 폼**이다: 구역을 2,289곳 중에서 검색해 고르고,
+//    지금은 **바로 입력하는 실무 폼**이다: 구역을 2,300여 곳 중에서 검색해 고르고,
 //    매매가·기보증금·전용면적·임대사업자 승계·토허제 여부를 적으면 초기투자금이 실시간으로 계산된다.
 //  · 저장은 **공용 DB(Supabase `public.listings`)** 와 이 브라우저(localStorage) 두 곳에 동시에 한다.
 //    → 등록한 매물은 메인 지도(`/`)·매물 목록(`/listings`)에 바로 나타나고,
@@ -11,7 +11,7 @@
 //    → DB 가 잠깐 죽거나 로컬 dev(환경변수 없음)이면 예전처럼 이 브라우저에만 저장되고 그 사실을 안내한다.
 //  · 진입: `?zone=<구역 id>` 로 들어오면 그 구역이 미리 선택된다(지도·상세 패널의 '매물 등록하기').
 //
-//  ▶ 2026-11-27 개편 — 현직 공인중개사 실무 + 중개대상물 표시·광고 기준
+//  ▶ 2026-11-27 개편 ① — 현직 공인중개사 실무 + 중개대상물 표시·광고 기준
 //    ① **매물 주소 검색**을 맨 위에 두었다. 주소를 고르면
 //       - 좌표가 어느 정비구역 폴리곤 안인지 광선교차로 판정해 **구역을 자동 선택**(구역 밖이면 안내 +
 //         가까운 구역 · 지번 이름이 같은 구역을 후보로 준다),
@@ -25,6 +25,15 @@
 //       → 카드에서 어떻게 보이는지 폼 안에서 그대로 **미리보기**한다.
 //    · `public.listings` 에는 이 항목들의 컬럼이 없어 **note 끝 표식 한 줄**로 함께 저장한다
 //      (lib/listing-extra.ts — 관리자 구역 동의율과 같은 방식). 따라서 DB 스키마·기존 매물과 호환된다.
+//
+//  ▶ 2026-11-27 개편 ② — 부동산포스(rfine.kr) 매물등록 양식으로 재구성
+//    · 실제 등록 양식 순서(소재지 → 거래·가격 → 건물·상세 → 특징·설명)를 그대로 따르고,
+//      부동산포스가 받는 항목(융자금·기보증금/기월세·공급면적·현관구조·난방방식·엘리베이터·
+//      위반건축물)을 넣었다.
+//    · **중개사무소 입력 섹션은 없앴다** — 가입(프로필) 때 정해지는 정보라 매물마다 적을 이유가 없다.
+//      저장할 때 프로필(없으면 용범님 소속 기본값)에서 자동으로 붙어 법정 표시는 그대로 유지된다.
+//    · 부동산포스에 없는 **재개발 전용 항목**(감정평가액·불하금·대지지분·이주비·임대사업자 승계·
+//      토허제·검증 여부)을 ③ 으로 모아, 재개발 물건을 한 화면에서 끝내게 했다.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -37,7 +46,14 @@ import Icon from "@/components/Icon";
 import { Badge } from "@/components/Badges";
 import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
-import { ListingAddress, ListingBrokerLegal, ListingPriceLine, ListingSpecLine } from "@/components/ListingSpec";
+import {
+  ListingAddress,
+  ListingBrokerLegal,
+  ListingDescription,
+  ListingDetailLine,
+  ListingPriceLine,
+  ListingSpecLine,
+} from "@/components/ListingSpec";
 import {
   judgeAddress,
   prepareAllZones,
@@ -65,9 +81,20 @@ import {
   upsertCustomListing,
 } from "@/lib/custom-listings";
 
+/** 매물 종류 — 부동산포스 24종을 리디브에서 쓰는 갈래로 줄인 것(대장 주용도에서 옮겨 오는 값과 호환) */
 const PROPERTY_TYPES = [...PROPERTY_TYPE_OPTIONS];
 
 const DIRECTIONS = ["남향", "동향", "서향", "북향", "남동향", "남서향", "북동향", "북서향"] as const;
+/** 현관구조 — 부동산포스 아파트·오피스텔 양식의 값 */
+const ENTRANCE_TYPES = ["계단식", "복도식", "복합식", "기타"] as const;
+/** 난방방식 — 부동산포스 시설 정보의 값 */
+const HEATING_TYPES = ["개별난방", "중앙난방", "지역난방"] as const;
+/** 위반건축물 여부 — 건축물대장 확인 결과를 그대로 적는다(비워 두면 표시하지 않는다) */
+const VIOLATION_OPTIONS = ["해당 없음", "위반건축물 있음", "확인 필요"] as const;
+/** 부동산포스가 매물특징에서 걸러 내는 금지문구 — 그대로 쓰면 노출이 삭제될 수 있다 */
+const NOTE_BANNED = ["명품", "급급", "초초", "전화문의", "평형", "BEST", "best"] as const;
+const NOTE_MAX = 40;
+const DESCRIPTION_MAX = 1000;
 
 /** 금액 입력 문자열 → 만원 정수 (빈 값은 0) */
 const toNum = (v: string) => Number(v.replace(/[^\d]/g, "")) || 0;
@@ -89,8 +116,9 @@ function parcelErrorText(error?: string, detail?: string): string {
 
 /**
  * 중개사무소 법정 표시 기본값 — 용범님 소속(이엑스피코리아부동산중개법인).
- *   · 다른 중개사가 이 화면을 써도 되므로 모든 칸은 수정할 수 있고, 고친 값은 이 브라우저에 남긴다.
- *   · 매번 다시 치지 않게 하는 것이 목적이다(등록 폼에서 손대는 칸을 줄인다).
+ *   · 2026-11-27 개편으로 **등록 폼에서 이 칸들을 없앴다** — 가입(프로필) 정보로 보기 때문이다.
+ *   · 저장할 때 이 값(또는 예전에 이 브라우저에서 고쳐 둔 프로필)이 매물에 자동으로 붙는다.
+ *     그래서 매물 카드·목록의 법정 표시(사무소명·등록번호·대표자·소속공인중개사·연락처·소재지)는 그대로다.
  */
 type BrokerProfile = { name: string; agency: string; address: string; license: string; ceo: string; phone: string };
 const BROKER_DEFAULTS: BrokerProfile = {
@@ -138,7 +166,7 @@ export default function RegisterPage() {
   const [zone, setZone] = useState<SeoulZone | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
-  // ── ① 매물 주소 검색 ───────────────────────────────────────────────────────
+  // ── ① 매물 소재지 ─────────────────────────────────────────────────────────
   const [addrQuery, setAddrQuery] = useState("");
   const [addrOpen, setAddrOpen] = useState(false);
   const [addrHits, setAddrHits] = useState<AddressCandidate[]>([]);
@@ -158,49 +186,64 @@ export default function RegisterPage() {
   /** 대장이 자동으로 채워 둔 값 — 다른 주소로 바꿀 때 이 값만 갈아끼운다 */
   const lastAutoRef = useRef<Partial<Record<AutoKey, string>>>({});
 
-  const [propertyType, setPropertyType] = useState<string>(PROPERTY_TYPES[0]);
-  const [propertyTypeTouched, setPropertyTypeTouched] = useState(false);
-  const [unitType, setUnitType] = useState("");
-  const [tradeType, setTradeType] = useState<ListingTradeType>("매매");
-  const [salePrice, setSalePrice] = useState("");
-  const [deposit, setDeposit] = useState("");
-  const [monthlyRent, setMonthlyRent] = useState("");
-  const [appraised, setAppraised] = useState("");
-  const [transferIncluded, setTransferIncluded] = useState(false);
-  const [transferFee, setTransferFee] = useState("");
-  const [exclusiveArea, setExclusiveArea] = useState("");
-  const [landShare, setLandShare] = useState("");
-  const [leaseOperatorOnly, setLeaseOperatorOnly] = useState(false);
-  const [landPermitRequired, setLandPermitRequired] = useState(false);
-  const [note, setNote] = useState("");
-  const [markVerified, setMarkVerified] = useState(true);
-
-  // ── ② 표시·광고 명시사항 ───────────────────────────────────────────────────
   const [address, setAddress] = useState("");
   const [addressRoad, setAddressRoad] = useState("");
   const [addressHidden, setAddressHidden] = useState(false);
   const [pnu, setPnu] = useState("");
   const [coord, setCoord] = useState<{ lat: number; lng: number } | null>(null);
+  /** 상세주소(동·층·호) — 부동산포스 표기처럼 건물명+동+층+호를 한 칸에 적는다 */
+  const [detailAddress, setDetailAddress] = useState("");
+
+  // ── ② 거래·가격 정보 ──────────────────────────────────────────────────────
+  const [propertyType, setPropertyType] = useState<string>(PROPERTY_TYPES[0]);
+  const [propertyTypeTouched, setPropertyTypeTouched] = useState(false);
+  const [tradeType, setTradeType] = useState<ListingTradeType>("매매");
+  const [salePrice, setSalePrice] = useState("");
+  const [deposit, setDeposit] = useState("");
+  const [monthlyRent, setMonthlyRent] = useState("");
+  /** 융자금 — 부동산포스처럼 '표시 안 함 / 없음 / 금액' 세 상태를 구분한다 */
+  const [mortgageMode, setMortgageMode] = useState<"hidden" | "none" | "amount">("hidden");
+  const [mortgageValue, setMortgageValue] = useState("");
+  /** 기월세 — 매매에서 함께 승계하는 임차인의 월세 */
+  const [tenantMonthlyRent, setTenantMonthlyRent] = useState("");
+
+  // ── ③ 재개발 전용 항목 ────────────────────────────────────────────────────
+  const [appraised, setAppraised] = useState("");
+  const [transferIncluded, setTransferIncluded] = useState(false);
+  const [transferFee, setTransferFee] = useState("");
+  const [landShare, setLandShare] = useState("");
+  const [relocationCost, setRelocationCost] = useState("");
+  const [relocationFree, setRelocationFree] = useState(true);
+  const [leaseOperatorOnly, setLeaseOperatorOnly] = useState(false);
+  const [landPermitRequired, setLandPermitRequired] = useState(false);
+  const [markVerified, setMarkVerified] = useState(true);
+
+  // ── ④ 건물·상세 정보 ──────────────────────────────────────────────────────
+  const [supplyArea, setSupplyArea] = useState("");
+  const [exclusiveArea, setExclusiveArea] = useState("");
+  const [platArea, setPlatArea] = useState("");
+  const [buildingName, setBuildingName] = useState("");
   const [floor, setFloor] = useState("");
   const [totalFloors, setTotalFloors] = useState("");
   const [rooms, setRooms] = useState("");
   const [baths, setBaths] = useState("");
   const [direction, setDirection] = useState("");
-  const [moveInKind, setMoveInKind] = useState<"즉시입주" | "협의" | "날짜">("협의");
-  const [moveInDate, setMoveInDate] = useState("");
+  const [entranceType, setEntranceType] = useState("");
+  const [heating, setHeating] = useState("");
+  const [elevator, setElevator] = useState("");
   const [parking, setParking] = useState("");
   const [approvalDate, setApprovalDate] = useState("");
+  const [moveInKind, setMoveInKind] = useState<"즉시입주" | "협의" | "날짜">("협의");
+  const [moveInDate, setMoveInDate] = useState("");
   const [maintenanceFee, setMaintenanceFee] = useState("");
-  const [platArea, setPlatArea] = useState("");
-  const [buildingName, setBuildingName] = useState("");
+  const [violation, setViolation] = useState("");
 
-  // ── ③ 중개사무소 (법정 표시) ──────────────────────────────────────────────
-  const [brokerName, setBrokerName] = useState(BROKER_DEFAULTS.name);
-  const [brokerAgency, setBrokerAgency] = useState(BROKER_DEFAULTS.agency);
-  const [brokerPhone, setBrokerPhone] = useState(BROKER_DEFAULTS.phone);
-  const [brokerLicense, setBrokerLicense] = useState(BROKER_DEFAULTS.license);
-  const [brokerAddress, setBrokerAddress] = useState(BROKER_DEFAULTS.address);
-  const [brokerCeo, setBrokerCeo] = useState(BROKER_DEFAULTS.ceo);
+  // ── ⑤ 매물 특징 · 상세 설명 ───────────────────────────────────────────────
+  const [note, setNote] = useState("");
+  const [description, setDescription] = useState("");
+
+  /** 중개사무소 — 입력 칸 없이 프로필(없으면 기본값)에서 온다 */
+  const [broker, setBroker] = useState<BrokerProfile>(BROKER_DEFAULTS);
 
   const [saved, setSaved] = useState<Listing | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -214,22 +257,16 @@ export default function RegisterPage() {
   /** 공용 DB 에 있는 매물 id — ‘공유됨’ 표시에 쓴다 */
   const [sharedIds, setSharedIds] = useState<string[]>([]);
 
-  // 구역 전수(2,289곳) — 지도와 같은 데이터(public/data/zones.geojson)
+  // 구역 전수(2,300여 곳) — 지도와 같은 데이터(public/data/zones.geojson)
   useEffect(() => {
     loadSeoulZones()
       .then((d) => setSeoulZones(d.zones))
       .catch(() => setSeoulZones([]));
   }, []);
 
-  // 중개사무소 정보 — 지난번에 고친 값이 있으면 그 값으로 시작한다
+  // 중개사무소 정보(프로필) — 등록 폼에는 칸이 없고, 저장할 때 매물에 자동으로 붙는다
   useEffect(() => {
-    const p = loadBrokerProfile();
-    setBrokerName(p.name);
-    setBrokerAgency(p.agency);
-    setBrokerPhone(p.phone);
-    setBrokerLicense(p.license);
-    setBrokerAddress(p.address);
-    setBrokerCeo(p.ceo);
+    setBroker(loadBrokerProfile());
   }, []);
 
   // 이 브라우저에 등록한 매물 + `?zone=` 진입 시 구역 미리 선택
@@ -312,26 +349,42 @@ export default function RegisterPage() {
     };
   }, [addrQuery, picked]);
 
-  // ── 실시간 초기투자금 ─────────────────────────────────────────────────────
+  // ── 실시간 초기투자금 · 프리미엄 ──────────────────────────────────────────
   const draft = useMemo<Listing>(
     () => ({
       id: "",
       zoneId: zone?.id ?? "",
       ...(zone ? { zoneName: zone.name, gu: zone.gu } : {}),
       propertyType,
-      brokerName,
-      brokerAgency,
-      brokerPhone,
-      brokerLicense,
-      unitType: unitType || (exclusiveArea ? `전용 ${Number(exclusiveArea)}㎡` : "일반매물"),
+      brokerName: broker.name,
+      brokerAgency: broker.agency,
+      brokerPhone: broker.phone,
+      brokerLicense: broker.license,
+      // 상세주소(동·층·호)를 카드의 타입 자리에 그대로 쓴다 — 없으면 전용면적으로 대신한다
+      unitType: detailAddress.trim() || (exclusiveArea ? `전용 ${Number(exclusiveArea)}㎡` : "일반매물"),
       salePrice: toNum(salePrice),
       ...(tradeType === "매매" ? { deposit: toNum(deposit) } : {}),
       tradeType,
       ...(tradeType === "월세" && toNum(monthlyRent) > 0 ? { monthlyRent: toNum(monthlyRent) } : {}),
+      ...(mortgageMode === "none"
+        ? { mortgage: 0 }
+        : mortgageMode === "amount" && toNum(mortgageValue) > 0
+          ? { mortgage: toNum(mortgageValue) }
+          : {}),
+      ...(tradeType === "매매" && toNum(tenantMonthlyRent) > 0 ? { tenantMonthlyRent: toNum(tenantMonthlyRent) } : {}),
+      ...(toNum(appraised) > 0 ? { appraisedValue: toNum(appraised) } : {}),
       transferFeeIncluded: transferIncluded,
       transferFee: toNum(transferFee),
-      exclusiveAreaSqm: exclusiveArea ? Number(exclusiveArea) : undefined,
-      landShareSqm: landShare ? Number(landShare) : undefined,
+      ...(toNum(relocationCost) > 0
+        ? { relocationCost: toNum(relocationCost), relocationCostFree: relocationFree }
+        : {}),
+      ...(exclusiveArea ? { exclusiveAreaSqm: Number(exclusiveArea) } : {}),
+      ...(supplyArea ? { supplyAreaSqm: Number(supplyArea) } : {}),
+      ...(landShare ? { landShareSqm: Number(landShare) } : {}),
+      ...(entranceType ? { entranceType } : {}),
+      ...(heating ? { heating } : {}),
+      ...(elevator ? { elevator } : {}),
+      ...(violation ? { violation } : {}),
       leaseOperatorOnly,
       landPermitRequired,
       verified: markVerified,
@@ -351,27 +404,34 @@ export default function RegisterPage() {
       ...(maintenanceFee.trim() ? { maintenanceFee: maintenanceFee.trim() } : {}),
       ...(platArea ? { platAreaSqm: Number(platArea) } : {}),
       ...(buildingName.trim() ? { buildingName: buildingName.trim() } : {}),
-      ...(brokerAddress.trim() ? { brokerAddress: brokerAddress.trim() } : {}),
-      ...(brokerCeo.trim() ? { brokerCeo: brokerCeo.trim() } : {}),
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(broker.address.trim() ? { brokerAddress: broker.address.trim() } : {}),
+      ...(broker.ceo.trim() ? { brokerCeo: broker.ceo.trim() } : {}),
     }),
     [
       zone,
       propertyType,
-      brokerName,
-      brokerAgency,
-      brokerPhone,
-      brokerLicense,
-      brokerAddress,
-      brokerCeo,
-      unitType,
+      broker,
+      detailAddress,
       salePrice,
       tradeType,
       deposit,
       monthlyRent,
+      mortgageMode,
+      mortgageValue,
+      tenantMonthlyRent,
+      appraised,
       transferIncluded,
       transferFee,
+      relocationCost,
+      relocationFree,
       exclusiveArea,
+      supplyArea,
       landShare,
+      entranceType,
+      heating,
+      elevator,
+      violation,
       leaseOperatorOnly,
       landPermitRequired,
       markVerified,
@@ -392,21 +452,29 @@ export default function RegisterPage() {
       maintenanceFee,
       platArea,
       buildingName,
+      description,
     ]
   );
   const transfer = transferIncluded ? toNum(transferFee) : 0;
+  /** 프리미엄 = 매매가 − 감정평가액(권리가액). 감정가가 없으면 0(계산하지 않는다) */
+  const premium = toNum(appraised) > 0 ? toNum(salePrice) - toNum(appraised) : 0;
 
-  const canSave = !!zone && toNum(salePrice) > 0 && !!brokerAgency.trim() && !!brokerName.trim();
+  const canSave = !!zone && toNum(salePrice) > 0;
 
   /** 표시·광고 항목 가운데 아직 빈 칸 — 필수는 아니지만 '무엇이 비었는지' 보여 준다 */
   const missingSpec = [
     !address.trim() && "소재지",
+    !detailAddress.trim() && "상세주소(동·호)",
     !floor.trim() && "해당층",
     !totalFloors.trim() && "총층수",
     !direction.trim() && "방향",
     !approvalDate.trim() && "사용승인일",
     !parking.trim() && "주차",
+    !violation && "위반건축물",
   ].filter((v): v is string => typeof v === "string");
+
+  /** 매물특징에 부동산포스 금지문구가 들어갔는지 — 저장 전에 알려 준다(막지는 않는다) */
+  const noteBanned = NOTE_BANNED.filter((w) => note.includes(w));
 
   /** 고른 주소에서 갈 수 있는 다른 구역 후보 — 안쪽 구역 · 준공 구역 · 인근 구역 순(중복 제거) */
   const zoneCandidates = useMemo(() => {
@@ -575,11 +643,7 @@ export default function RegisterPage() {
     const v = formValuesFromLedger(brief);
     const filled: string[] = [];
 
-    /** 이 칸을 대장 값으로 바꿀 수 있는가 — 비었거나, 지난번에 대장이 채운 그대로일 때 */
-    const replaceable = (key: AutoKey, current: string) => {
-      const prev = lastAutoRef.current[key];
-      return current.trim() === "" || (prev !== undefined && current.trim() === prev);
-    };
+    /** 이 칸을 대장 값으로 바꿀 수 있는가 — 비었거나, 지난번에 대장이 채운 그대로일 때(아래 userEdited 판정) */
     const apply = (key: AutoKey, label: string, next: string | undefined, current: string, set: (v: string) => void) => {
       const prev = lastAutoRef.current[key];
       const userEdited = current.trim() !== "" && !(prev !== undefined && current.trim() === prev);
@@ -633,49 +697,44 @@ export default function RegisterPage() {
     setAutoFilled([]);
   }
 
-  /** 중개사무소 정보를 이 브라우저에 남긴다 — 다음 등록에서 다시 치지 않게 */
-  function rememberBroker() {
-    try {
-      const p: BrokerProfile = {
-        name: brokerName,
-        agency: brokerAgency,
-        phone: brokerPhone,
-        license: brokerLicense,
-        address: brokerAddress,
-        ceo: brokerCeo,
-      };
-      window.localStorage.setItem(BROKER_PROFILE_KEY, JSON.stringify(p));
-    } catch {
-      /* 저장소를 못 쓰면 기본값으로 계속한다 */
-    }
-  }
-
   function resetForm() {
     setSaved(null);
-    setUnitType("");
+    setDetailAddress("");
     setSalePrice("");
     setDeposit("");
     setMonthlyRent("");
+    setMortgageMode("hidden");
+    setMortgageValue("");
+    setTenantMonthlyRent("");
     setAppraised("");
     setTransferIncluded(false);
     setTransferFee("");
-    setExclusiveArea("");
     setLandShare("");
+    setRelocationCost("");
+    setRelocationFree(true);
     setLeaseOperatorOnly(false);
     setLandPermitRequired(false);
-    setNote("");
+    setMarkVerified(true);
+    setSupplyArea("");
+    setExclusiveArea("");
     setFloor("");
     setTotalFloors("");
     setRooms("");
     setBaths("");
     setDirection("");
+    setEntranceType("");
+    setHeating("");
+    setElevator("");
     setMoveInKind("협의");
     setMoveInDate("");
     setParking("");
     setApprovalDate("");
     setMaintenanceFee("");
+    setViolation("");
     setPlatArea("");
     setBuildingName("");
+    setNote("");
+    setDescription("");
     setAddress("");
     setAddressRoad("");
     setAddressHidden(false);
@@ -700,14 +759,13 @@ export default function RegisterPage() {
     const listing: Listing = {
       ...draft,
       id: newListingId(),
-      appraisedValue: toNum(appraised) || undefined,
       note: note.trim() || undefined,
+      description: description.trim() || undefined,
       createdAt: new Date().toISOString().slice(0, 10),
     };
     setSaving(true);
     setShared(null);
     setShareError(null);
-    rememberBroker();
     // ① 이 브라우저 사본(즉시) — DB 가 죽어도 등록한 매물이 화면에서 사라지지 않게
     const { ok, list } = upsertCustomListing(listing);
     setMine(list);
@@ -752,7 +810,6 @@ export default function RegisterPage() {
     }
   }
 
-
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6">
       {/* ── 머리말 + 베타 무료 안내 ── */}
@@ -760,8 +817,8 @@ export default function RegisterPage() {
         <div>
           <h1 className="text-xl font-bold">중개사 매물 등록</h1>
           <p className="text-sm text-slate-600">
-            <b>주소를 먼저 검색</b>하면 구역이 자동 선택되고 건축물대장 값이 채워집니다. 매매가·기보증금만 적으면{" "}
-            <b>초기투자금</b>이 자동 계산됩니다.
+            <b>주소를 먼저 검색</b>하면 구역이 자동 선택되고 건축물대장 값이 채워집니다. 부동산포스 등록 양식 순서대로
+            적고, 재개발 항목은 ③에 모았습니다.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1055,7 +1112,7 @@ export default function RegisterPage() {
                     </span>
                   ) : (
                     <span className="block text-[10px] text-sky-700">
-                      이미 입력한 값은 덮어쓰지 않았습니다(필요하면 위 칸을 직접 고치세요).
+                      이미 입력한 값은 덮어쓰지 않았습니다(필요하면 아래 칸을 직접 고치세요).
                     </span>
                   )}
                   {ledger?.name && (
@@ -1088,11 +1145,11 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* 구역 검색 — 2,289곳 */}
+        {/* 구역 검색 — 2,300여 곳 */}
         <div className="mt-3">
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-slate-700">
-              구역 선택 (서울 정비구역 {(seoulZones.length || 2289).toLocaleString()}곳)
+              구역 선택 (서울 정비구역 {(seoulZones.length || 2300).toLocaleString()}곳)
               <span className="ml-1 text-[10px] font-normal text-slate-400">주소로 자동 선택되며, 직접 바꿀 수도 있습니다</span>
             </span>
             <div className="relative">
@@ -1174,13 +1231,62 @@ export default function RegisterPage() {
             </div>
           )}
         </div>
+
+        {/* 소재지 표기 — 법정 명시사항 (주소 검색이 채우고, 필요하면 직접 고친다) */}
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="소재지 (지번)">
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="input"
+              placeholder="서울특별시 성동구 성수동2가 315-1"
+              data-testid="register-address"
+            />
+          </Field>
+          <Field label="도로명 주소 (선택)">
+            <input
+              value={addressRoad}
+              onChange={(e) => setAddressRoad(e.target.value)}
+              className="input"
+              placeholder="서울특별시 성동구 아차산로 100"
+              data-testid="register-address-road"
+            />
+          </Field>
+          <Field label="상세주소 — 건물명·동·층·호 (선택)">
+            <input
+              value={detailAddress}
+              onChange={(e) => setDetailAddress(e.target.value)}
+              className="input"
+              placeholder="예: 예지팰리스78차 제101동 제2층 제202호"
+              data-testid="register-detail-address"
+            />
+            <Hint>부동산포스 표기처럼 건물명·동·층·호를 한 칸에 적습니다 — 매물 카드의 타입 자리에 표시됩니다.</Hint>
+          </Field>
+          <label className="flex items-start gap-2 self-start rounded-lg border border-slate-200 bg-white p-2 text-xs sm:mt-6">
+            <input
+              type="checkbox"
+              checked={addressHidden}
+              onChange={(e) => setAddressHidden(e.target.checked)}
+              className="mt-0.5"
+              data-testid="register-address-hidden"
+            />
+            <span>
+              <b className="text-slate-800">소재지 번지 비공개</b>
+              <span className="text-slate-500">
+                {" "}
+                — 켜면 카드에 <b>동까지만</b> 표시됩니다(예: 서울특별시 성동구 성수동2가). 계약 전 확인은 중개사에게
+                문의로 받습니다.
+              </span>
+            </span>
+          </label>
+        </div>
       </section>
 
-      {/* ══ ② 매물 정보 ══ */}
+      {/* ══ ② 거래·가격 정보 ══ */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <b className="text-sm text-slate-800">② 매물 정보</b>
-          <span className="text-[11px] text-slate-500">거래형태에 따라 금액 칸의 이름이 바뀝니다</span>
+          <b className="text-sm text-slate-800">② 거래·가격 정보</b>
+          <span className="text-[11px] text-slate-500">부동산포스 순서 — 거래형태 → 매물종류 → 가격 → 융자금</span>
         </div>
 
         {/* 거래형태 */}
@@ -1212,7 +1318,7 @@ export default function RegisterPage() {
           </span>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="매물 종류">
             <select
               value={propertyType}
@@ -1229,18 +1335,7 @@ export default function RegisterPage() {
                 </option>
               ))}
             </select>
-            {ledger?.mainPurps && (
-              <Hint>건축물대장 주용도: {ledger.mainPurps}</Hint>
-            )}
-          </Field>
-          <Field label="호수·타입 (예: 404호, 84D)">
-            <input
-              value={unitType}
-              onChange={(e) => setUnitType(e.target.value)}
-              className="input"
-              placeholder="404호"
-              data-testid="register-unit-type"
-            />
+            {ledger?.mainPurps ? <Hint>건축물대장 주용도: {ledger.mainPurps}</Hint> : null}
           </Field>
 
           <Field label={`${priceLabel(draft)} (만원) *`}>
@@ -1254,18 +1349,32 @@ export default function RegisterPage() {
             />
             <Hint>{toNum(salePrice) > 0 ? formatMan(toNum(salePrice)) : "7.8억은 78000"}</Hint>
           </Field>
+
           {tradeType === "매매" ? (
-            <Field label="기보증금 (만원) — 초기투자금에서 빠집니다">
-              <input
-                value={deposit}
-                onChange={(e) => setDeposit(onlyDigits(e.target.value))}
-                className="input"
-                placeholder="27700"
-                inputMode="numeric"
-                data-testid="register-deposit"
-              />
-              <Hint>{toNum(deposit) > 0 ? formatMan(toNum(deposit)) : "예상 전세보증금으로 적어도 됩니다"}</Hint>
-            </Field>
+            <>
+              <Field label="기보증금 (만원) — 초기투자금에서 빠집니다">
+                <input
+                  value={deposit}
+                  onChange={(e) => setDeposit(onlyDigits(e.target.value))}
+                  className="input"
+                  placeholder="27700"
+                  inputMode="numeric"
+                  data-testid="register-deposit"
+                />
+                <Hint>{toNum(deposit) > 0 ? formatMan(toNum(deposit)) : "승계하는 임차보증금 — 예상 전세보증금으로 적어도 됩니다"}</Hint>
+              </Field>
+              <Field label="기월세 (만원, 선택) — 함께 승계하는 월세">
+                <input
+                  value={tenantMonthlyRent}
+                  onChange={(e) => setTenantMonthlyRent(onlyDigits(e.target.value))}
+                  className="input"
+                  placeholder="40"
+                  inputMode="numeric"
+                  data-testid="register-tenant-rent"
+                />
+                <Hint>{toNum(tenantMonthlyRent) > 0 ? formatMan(toNum(tenantMonthlyRent)) : "임차인이 없는 물건이면 비워 둡니다"}</Hint>
+              </Field>
+            </>
           ) : (
             <Field label="월세 (만원) — 월세 거래일 때">
               <input
@@ -1281,23 +1390,91 @@ export default function RegisterPage() {
             </Field>
           )}
 
-          <Field label="감정평가액 (만원, 선택)">
+          {/* 융자금 — 부동산포스의 3택(표시안함 / 융자금없음 / 금액) */}
+          <div className="sm:col-span-2">
+            <span className="mb-1 block text-sm font-medium text-slate-700">융자금</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  ["hidden", "표시 안 함"],
+                  ["none", "융자금 없음"],
+                  ["amount", "금액 입력"],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setMortgageMode(mode)}
+                  aria-pressed={mortgageMode === mode}
+                  data-testid={`register-mortgage-${mode}`}
+                  className={
+                    "rounded-full border px-2.5 py-1 text-[11px] font-semibold " +
+                    (mortgageMode === mode
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-600 hover:border-slate-500")
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+              {mortgageMode === "amount" && (
+                <input
+                  value={mortgageValue}
+                  onChange={(e) => setMortgageValue(onlyDigits(e.target.value))}
+                  className="h-8 w-32 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+                  placeholder="12000"
+                  inputMode="numeric"
+                  aria-label="융자금 금액 (만원)"
+                  data-testid="register-mortgage-value"
+                />
+              )}
+              {mortgageMode === "amount" && toNum(mortgageValue) > 0 && (
+                <span className="text-[11px] text-slate-600">{formatMan(toNum(mortgageValue))}</span>
+              )}
+            </div>
+            <Hint>융자금은 매수자가 승계하는 채무라 초기투자금에는 넣지 않습니다 — 카드에 따로 표시됩니다.</Hint>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ ③ 재개발 전용 항목 ══ */}
+      <section
+        data-testid="register-redev-section"
+        className="rounded-2xl border-2 border-amber-200 bg-amber-50/40 p-4 shadow-sm"
+      >
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <b className="text-sm text-slate-800">③ 재개발 전용 항목</b>
+          <span className="text-[11px] text-slate-500">
+            감정평가액(권리가액)·불하금·대지지분을 적으면 프리미엄과 초기투자금이 자동 계산됩니다
+          </span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="감정평가액 · 권리가액 (만원)">
             <input
               value={appraised}
               onChange={(e) => setAppraised(onlyDigits(e.target.value))}
               className="input"
-              placeholder="선택"
+              placeholder="50000"
               inputMode="numeric"
+              data-testid="register-appraised"
             />
             <Hint>
-              {toNum(appraised) > 0 && toNum(salePrice) > 0
-                ? `프리미엄 ${formatMan(Math.max(0, toNum(salePrice) - toNum(appraised)))}`
-                : "감정가를 넣으면 프리미엄이 계산됩니다"}
+              {toNum(appraised) > 0 && toNum(salePrice) > 0 ? (
+                <>
+                  프리미엄 {formatMan(Math.abs(premium))}
+                  {premium < 0 ? " (감정가보다 낮음)" : ""}
+                  {toNum(appraised) > 0 ? ` · 감정가 대비 ${((toNum(salePrice) / toNum(appraised)) * 100 - 100).toFixed(1)}%` : ""}
+                </>
+              ) : (
+                "감정평가서·권리가액을 넣으면 프리미엄(매매가−감정가)이 계산됩니다"
+              )}
             </Hint>
           </Field>
-          <Field label="불하금 (만원, 선택)">
+
+          <Field label="불하금 (만원) — 포함하면 초기투자금에 더합니다">
             <div className="flex items-center gap-2">
-              <label className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 px-2 text-xs">
+              <label className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 text-xs">
                 <input
                   type="checkbox"
                   checked={transferIncluded}
@@ -1318,31 +1495,58 @@ export default function RegisterPage() {
             </div>
           </Field>
 
-          <Field label="전용면적 (㎡)">
-            <input
-              value={exclusiveArea}
-              onChange={(e) => setExclusiveArea(e.target.value.replace(/[^\d.]/g, ""))}
-              className="input"
-              placeholder="29.175"
-              inputMode="decimal"
-              data-testid="register-exclusive-area"
-            />
-            <Hint>{exclusiveArea ? `${pyeong(Number(exclusiveArea))}평` : "건축물대장 전유면적"}</Hint>
-          </Field>
-          <Field label="대지지분 (㎡, 선택)">
+          <Field label="대지지분 (㎡)">
             <input
               value={landShare}
               onChange={(e) => setLandShare(e.target.value.replace(/[^\d.]/g, ""))}
               className="input"
-              placeholder="선택"
+              placeholder="18.3"
               inputMode="decimal"
               data-testid="register-land-share"
             />
             <Hint>{landShare ? `${pyeong(Number(landShare))}평` : "지적도·대지권면적 (대지면적과 다릅니다)"}</Hint>
           </Field>
 
-          <div className="md:col-span-2 grid gap-2 sm:grid-cols-2">
-            <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-2.5 text-sm">
+          <Field label="이주비 (만원, 선택)">
+            <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1">
+                {(
+                  [
+                    [true, "무이자"],
+                    [false, "유이자"],
+                  ] as const
+                ).map(([free, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setRelocationFree(free)}
+                    aria-pressed={relocationFree === free}
+                    data-testid={`register-relocation-${label}`}
+                    className={
+                      "h-10 rounded-lg border px-2 text-[11px] font-semibold " +
+                      (relocationFree === free
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 bg-white text-slate-600 hover:border-slate-500")
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={relocationCost}
+                onChange={(e) => setRelocationCost(onlyDigits(e.target.value))}
+                className="input"
+                placeholder="조합 지급 이주비"
+                inputMode="numeric"
+                data-testid="register-relocation-cost"
+              />
+            </div>
+            <Hint>부동산포스 재개발 양식의 이주비 — 비워 두면 표시하지 않습니다</Hint>
+          </Field>
+
+          <div className="sm:col-span-2 grid gap-2 sm:grid-cols-3">
+            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-2.5 text-sm">
               <input
                 type="checkbox"
                 checked={leaseOperatorOnly}
@@ -1357,7 +1561,7 @@ export default function RegisterPage() {
                 </span>
               </span>
             </label>
-            <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-2.5 text-sm">
+            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-2.5 text-sm">
               <input
                 type="checkbox"
                 checked={landPermitRequired}
@@ -1372,29 +1576,29 @@ export default function RegisterPage() {
                 </span>
               </span>
             </label>
-          </div>
-
-          <div className="md:col-span-2">
-            <Field label="매물 핵심 특징">
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="예: 임대사업자 승계 필수 물건 · 초기투자금 약 5.03억 · 2018.08 사용승인"
-                data-testid="register-note"
+            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={markVerified}
+                onChange={(e) => setMarkVerified(e.target.checked)}
+                className="mt-0.5"
+                data-testid="register-mark-verified"
               />
-            </Field>
+              <span>
+                <b className="block text-slate-800">검증 매물로 표시</b>
+                <span className="text-[11px] text-slate-500">건축물대장·현장 확인을 마친 물건</span>
+              </span>
+            </label>
           </div>
         </div>
       </section>
 
-      {/* ══ ③ 중개대상물 표시·광고 명시사항 ══ */}
+      {/* ══ ④ 건물·상세 정보 ══ */}
       <section className="rounded-2xl border-2 border-sky-200 bg-sky-50/40 p-4 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <b className="text-sm text-slate-800">③ 중개대상물 표시·광고 명시사항</b>
+          <b className="text-sm text-slate-800">④ 건물·상세 정보</b>
           <span className="text-[11px] text-slate-500">
-            공인중개사법 시행규칙 제25조 — 매물 카드·목록에 그대로 표시됩니다
+            공인중개사법 시행규칙 제25조 명시사항 — 매물 카드·목록에 그대로 표시됩니다
           </span>
           {missingSpec.length > 0 && (
             <span data-testid="register-spec-missing" className="ml-auto text-[10px] text-amber-700">
@@ -1403,44 +1607,29 @@ export default function RegisterPage() {
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="md:col-span-2 grid gap-3 sm:grid-cols-2">
-            <Field label="소재지 (지번)">
-              <input
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="input"
-                placeholder="서울특별시 성동구 성수동2가 315-1"
-                data-testid="register-address"
-              />
-            </Field>
-            <Field label="도로명 주소 (선택)">
-              <input
-                value={addressRoad}
-                onChange={(e) => setAddressRoad(e.target.value)}
-                className="input"
-                placeholder="서울특별시 성동구 아차산로 100"
-                data-testid="register-address-road"
-              />
-            </Field>
-            <label className="sm:col-span-2 flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-2 text-xs">
-              <input
-                type="checkbox"
-                checked={addressHidden}
-                onChange={(e) => setAddressHidden(e.target.checked)}
-                className="mt-0.5"
-                data-testid="register-address-hidden"
-              />
-              <span>
-                <b className="text-slate-800">소재지 번지 비공개</b>
-                <span className="text-slate-500">
-                  {" "}
-                  — 켜면 카드에 <b>동까지만</b> 표시됩니다(예: 서울특별시 성동구 성수동2가). 계약 전 확인은
-                  중개사에게 문의로 받습니다.
-                </span>
-              </span>
-            </label>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="공급면적 (㎡)">
+            <input
+              value={supplyArea}
+              onChange={(e) => setSupplyArea(e.target.value.replace(/[^\d.]/g, ""))}
+              className="input"
+              placeholder="49.5"
+              inputMode="decimal"
+              data-testid="register-supply-area"
+            />
+            <Hint>{supplyArea ? `${pyeong(Number(supplyArea))}평` : "계약면적·분양면적"}</Hint>
+          </Field>
+          <Field label="전용면적 (㎡)">
+            <input
+              value={exclusiveArea}
+              onChange={(e) => setExclusiveArea(e.target.value.replace(/[^\d.]/g, ""))}
+              className="input"
+              placeholder="39.6"
+              inputMode="decimal"
+              data-testid="register-exclusive-area"
+            />
+            <Hint>{exclusiveArea ? `${pyeong(Number(exclusiveArea))}평` : "건축물대장 전유면적"}</Hint>
+          </Field>
 
           <Field label="해당층">
             <input
@@ -1488,7 +1677,7 @@ export default function RegisterPage() {
             />
           </Field>
 
-          <Field label="방향 (주실 기준)">
+          <Field label="방향 (거실·주실 기준)">
             <select
               value={direction}
               onChange={(e) => setDirection(e.target.value)}
@@ -1502,7 +1691,91 @@ export default function RegisterPage() {
                 </option>
               ))}
             </select>
-            <Hint>거실·안방이 향하는 방향</Hint>
+          </Field>
+          <Field label="현관구조">
+            <select
+              value={entranceType}
+              onChange={(e) => setEntranceType(e.target.value)}
+              className="input"
+              data-testid="register-entrance-type"
+            >
+              <option value="">선택 안 함</option>
+              {ENTRANCE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="난방방식">
+            <select
+              value={heating}
+              onChange={(e) => setHeating(e.target.value)}
+              className="input"
+              data-testid="register-heating"
+            >
+              <option value="">선택 안 함</option>
+              {HEATING_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="엘리베이터">
+            <select
+              value={elevator}
+              onChange={(e) => setElevator(e.target.value)}
+              className="input"
+              data-testid="register-elevator"
+            >
+              <option value="">선택 안 함</option>
+              <option value="있음">있음</option>
+              <option value="없음">없음</option>
+            </select>
+          </Field>
+
+          <Field label="주차 (총 주차대수 · 세대당)">
+            <input
+              value={parking}
+              onChange={(e) => setParking(e.target.value)}
+              className="input"
+              placeholder="총 8대 · 세대당 1대 · 불가"
+              data-testid="register-parking"
+            />
+          </Field>
+          <Field label="관리비">
+            <div className="flex items-center gap-1.5">
+              <input
+                value={maintenanceFee}
+                onChange={(e) => setMaintenanceFee(e.target.value)}
+                className="input"
+                placeholder="5만원 (수도·전기 별도)"
+                data-testid="register-maintenance-fee"
+              />
+              <button
+                type="button"
+                onClick={() => setMaintenanceFee("없음")}
+                className="h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:border-slate-500"
+              >
+                없음
+              </button>
+            </div>
+            <Hint>포함 항목은 괄호로 간단히 적습니다 — 미명시는 과태료 사유입니다</Hint>
+          </Field>
+
+          <Field label="사용승인일">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={approvalDate}
+                onChange={(e) => setApprovalDate(e.target.value)}
+                className="input"
+                data-testid="register-approval-date"
+              />
+            </div>
+            <Hint>{ledger?.useAprDay ? "건축물대장 값이 채워졌습니다 — 다르면 직접 고치세요" : "건축물대장 표제부 기준"}</Hint>
           </Field>
 
           <div>
@@ -1554,46 +1827,21 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <Field label="주차">
-            <input
-              value={parking}
-              onChange={(e) => setParking(e.target.value)}
+          <Field label="위반건축물 여부">
+            <select
+              value={violation}
+              onChange={(e) => setViolation(e.target.value)}
               className="input"
-              placeholder="세대당 1대 · 가능(2대) · 불가"
-              data-testid="register-parking"
-            />
-          </Field>
-
-          <Field label="사용승인일">
-            <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={approvalDate}
-                onChange={(e) => setApprovalDate(e.target.value)}
-                className="input"
-                data-testid="register-approval-date"
-              />
-            </div>
-            <Hint>{ledger?.useAprDay ? "건축물대장 값이 채워졌습니다 — 다르면 직접 고치세요" : "건축물대장 표제부 기준"}</Hint>
-          </Field>
-
-          <Field label="관리비">
-            <div className="flex items-center gap-1.5">
-              <input
-                value={maintenanceFee}
-                onChange={(e) => setMaintenanceFee(e.target.value)}
-                className="input"
-                placeholder="5만원 (수도·전기 별도)"
-                data-testid="register-maintenance-fee"
-              />
-              <button
-                type="button"
-                onClick={() => setMaintenanceFee("없음")}
-                className="h-10 shrink-0 rounded-lg border border-slate-300 px-2 text-[11px] font-semibold text-slate-600 hover:border-slate-500"
-              >
-                없음
-              </button>
-            </div>
+              data-testid="register-violation"
+            >
+              <option value="">선택 안 함</option>
+              {VIOLATION_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+            <Hint>건축물대장 확인 결과 그대로 — 비워 두면 표시하지 않습니다</Hint>
           </Field>
 
           <Field label="대지면적 (㎡, 건축물대장)">
@@ -1619,79 +1867,50 @@ export default function RegisterPage() {
         </div>
       </section>
 
-      {/* ══ ④ 중개사무소 (법정 표시 정보) ══ */}
+      {/* ══ ⑤ 매물 특징 · 상세 설명 ══ */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <b className="text-sm text-slate-800">④ 중개사무소 정보</b>
-          <span className="text-[11px] text-slate-500">
-            광고에 표시되는 법정 정보 — 기본값으로 채워 두었고, 고친 값은 이 브라우저에 기억됩니다
-          </span>
+          <b className="text-sm text-slate-800">⑤ 매물 특징 · 상세 설명</b>
+          <span className="text-[11px] text-slate-500">부동산포스처럼 특징은 한 줄(40자), 설명은 길게</span>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="중개사무소명 *">
-            <input
-              value={brokerAgency}
-              onChange={(e) => setBrokerAgency(e.target.value)}
-              className="input"
-              data-testid="register-broker-agency"
-            />
-          </Field>
-          <Field label="등록번호">
-            <input
-              value={brokerLicense}
-              onChange={(e) => setBrokerLicense(e.target.value)}
-              className="input"
-              placeholder="제11680-2025-00292호"
-              data-testid="register-broker-license"
-            />
-          </Field>
-          <Field label="대표자">
-            <input
-              value={brokerCeo}
-              onChange={(e) => setBrokerCeo(e.target.value)}
-              className="input"
-              data-testid="register-broker-ceo"
-            />
-          </Field>
-          <Field label="소속공인중개사 *">
-            <input
-              value={brokerName}
-              onChange={(e) => setBrokerName(e.target.value)}
-              className="input"
-              data-testid="register-broker-name"
-            />
-          </Field>
-          <div className="md:col-span-2">
-            <Field label="중개사무소 소재지">
-              <input
-                value={brokerAddress}
-                onChange={(e) => setBrokerAddress(e.target.value)}
-                className="input"
-                data-testid="register-broker-address"
-              />
-            </Field>
-          </div>
-          <Field label="연락처 (공개 범위는 직접 결정)">
-            <input
-              value={brokerPhone}
-              onChange={(e) => setBrokerPhone(e.target.value)}
-              className="input"
-              placeholder="010-0000-0000"
-              data-testid="register-broker-phone"
-            />
-            <Hint>비워 두면 &lsquo;문의 요청 시 안내&rsquo;로 표시됩니다</Hint>
-          </Field>
-          <label className="flex items-center gap-2 self-end pb-1 text-sm">
-            <input
-              type="checkbox"
-              checked={markVerified}
-              onChange={(e) => setMarkVerified(e.target.checked)}
-              data-testid="register-mark-verified"
-            />
-            <span>
-              <b>검증 매물</b>로 표시 — 건축물대장·현장 확인을 마친 물건
+
+        <Field label="매물 핵심 특징 (한 줄)">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))}
+            className="input"
+            placeholder="예: 신림4구역 신통기획 내 귀한 3룸 빌라 매매"
+            maxLength={NOTE_MAX}
+            data-testid="register-note"
+          />
+          <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] leading-snug text-slate-400">
+            <span data-testid="register-note-count">
+              {note.length}/{NOTE_MAX}자
             </span>
-          </label>
+            <span>카드·목록에 그대로 표시됩니다. 금지문구(명품·급급·전화문의·평형·BEST)는 노출이 삭제될 수 있습니다.</span>
+          </span>
+          {noteBanned.length > 0 && (
+            <span data-testid="register-note-banned" className="mt-0.5 block text-[10px] font-semibold text-rose-600">
+              금지문구가 들어 있습니다: {noteBanned.join(", ")}
+            </span>
+          )}
+        </Field>
+
+        <div className="mt-3">
+          <Field label="상세 설명 (선택)">
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
+              rows={6}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder={"매물 설명·입지·사업 진행 상황을 적습니다.\n(부동산포스 상세설명처럼 인사·푸터를 넣어도 됩니다)"}
+              maxLength={DESCRIPTION_MAX}
+              data-testid="register-description"
+            />
+            <span className="mt-0.5 block text-[10px] leading-snug text-slate-400" data-testid="register-description-count">
+              {description.length}/{DESCRIPTION_MAX}자 — 카드에서 &lsquo;상세 설명 보기&rsquo;로 펼쳐집니다.
+            </span>
+          </Field>
         </div>
       </section>
 
@@ -1717,6 +1936,20 @@ export default function RegisterPage() {
             {tradeType === "매매" && <span>기보증금 −{formatMan(toNum(deposit))}</span>}
             {tradeType === "월세" && <span>월세 {formatMan(toNum(monthlyRent))}</span>}
             {transfer > 0 && <span>불하금 +{formatMan(transfer)}</span>}
+            {toNum(appraised) > 0 && (
+              <span data-testid="register-premium">
+                프리미엄 {premium < 0 ? "−" : ""}
+                {formatMan(Math.abs(premium))}
+              </span>
+            )}
+            {mortgageMode === "amount" && toNum(mortgageValue) > 0 && (
+              <span>융자금 {formatMan(toNum(mortgageValue))} (승계)</span>
+            )}
+            {toNum(relocationCost) > 0 && (
+              <span>
+                이주비 {formatMan(toNum(relocationCost))} ({relocationFree ? "무이자" : "유이자"})
+              </span>
+            )}
             <span className="ml-auto">등록비 무료 (베타)</span>
           </div>
         </div>
@@ -1726,6 +1959,9 @@ export default function RegisterPage() {
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
             <b className="text-[11px] font-bold text-slate-500">미리보기 — 매물 카드에 이렇게 표시됩니다</b>
             <span className="text-[10px] text-slate-400">{zone?.name ?? "구역 미선택"}</span>
+            <span data-testid="register-broker-auto" className="ml-auto text-[10px] text-slate-400">
+              중개사무소 정보는 내 계정(프로필) 기준으로 자동 표시됩니다
+            </span>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-2.5">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -1741,6 +1977,12 @@ export default function RegisterPage() {
                 <p className="text-[12px] text-slate-400">금액을 입력하면 여기에 표시됩니다</p>
               )}
             </div>
+            {toNum(appraised) > 0 && (
+              <p data-testid="register-preview-premium" className="mt-0.5 text-[10.5px] text-slate-500">
+                감정평가액 {formatMan(toNum(appraised))} · 프리미엄 {premium < 0 ? "−" : ""}
+                {formatMan(Math.abs(premium))}
+              </p>
+            )}
             <p className="mt-0.5 text-[11px] font-medium text-slate-600">
               {draft.propertyType ? `${draft.propertyType} · ` : ""}
               {draft.unitType}
@@ -1748,9 +1990,11 @@ export default function RegisterPage() {
               {landShare ? ` · 대지지분 ${landShare}㎡` : ""}
             </p>
             <ListingSpecLine listing={draft} className="mt-1" />
+            <ListingDetailLine listing={draft} className="mt-1" />
             {note.trim() && (
               <p className="mt-1 whitespace-pre-wrap text-[11px] leading-snug text-slate-600">{note.trim()}</p>
             )}
+            <ListingDescription listing={draft} />
             <ListingBrokerLegal listing={draft} withAddress />
           </div>
         </div>
@@ -1762,12 +2006,13 @@ export default function RegisterPage() {
           data-testid="register-submit"
           className="mt-3 w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {saving ? "공용 DB에 저장하는 중…" : canSave ? "베타 무료로 등록하기" : "구역·매매가·중개사무소를 입력하세요"}
+          {saving ? "공용 DB에 저장하는 중…" : canSave ? "베타 무료로 등록하기" : "구역·매매가를 입력하세요"}
         </button>
         <p className="mt-1.5 text-[11px] text-slate-400">
           등록하면 {SHOW_MAP_LISTING_BADGES && <>메인 지도에 <b>매물</b> 배지가, </>}이 구역 상세 패널과{" "}
           <Link href="/listings" className="underline">매물 목록</Link>에 매물 카드가 바로 나타납니다. 소재지·좌표도
-          함께 저장되어 지도에서 정확한 필지 자리에 놓을 수 있습니다.
+          함께 저장되어 지도에서 정확한 필지 자리에 놓을 수 있습니다. 중개사무소 법정 표시(사무소명·등록번호·대표자·
+          소속공인중개사·연락처)는 프로필 값으로 자동 첨부됩니다.
         </p>
       </section>
 

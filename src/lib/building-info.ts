@@ -62,8 +62,24 @@ export function formatAprDay(raw: string | undefined): string | undefined {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 }
 
-/** 매물 종류 선택지 — /register 의 PROPERTY_TYPES 와 같은 값 */
-export const PROPERTY_TYPE_OPTIONS = ["다세대/도시형", "단독/다가구", "아파트", "상가주택", "오피스텔", "기타"] as const;
+/**
+ * 매물 종류 선택지 — /register 의 PROPERTY_TYPES 와 같은 값.
+ *   · 부동산포스 24종을 리디브에서 쓰는 갈래로 줄였다(2026-11-27 개편).
+ *   · `propertyTypeFromPurps` 가 돌려주는 값(다세대/도시형·단독/다가구·아파트·상가주택·오피스텔)은
+ *     반드시 이 목록 안에 있어야 한다 — 대장이 채운 값이 select 에서 보이지 않으면 안 된다.
+ */
+export const PROPERTY_TYPE_OPTIONS = [
+  "다세대/도시형",
+  "빌라/연립",
+  "단독/다가구",
+  "아파트",
+  "오피스텔",
+  "상가주택",
+  "상가/점포",
+  "건물",
+  "토지",
+  "기타",
+] as const;
 
 /**
  * 표제부 주용도 → 매물 종류.

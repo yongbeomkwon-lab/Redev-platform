@@ -12,14 +12,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Listing } from "@/lib/types";
-import { calcInitialInvestment, listingDeposit, listingTradeType } from "@/lib/types";
+import { calcImpliedRights, calcInitialInvestment, listingDeposit, listingTradeType } from "@/lib/types";
 import { getProvider } from "@/lib/data-provider";
 import { listingZoneName, LISTINGS_CHANGED_EVENT } from "@/lib/custom-listings";
 import { isMyListing, MY_LISTINGS_COUNT } from "@/lib/my-listings";
 import { formatMan } from "@/lib/format";
 import { priceHeadline, priceLabel, upfrontLabel, upfrontValue } from "@/lib/listing-fields";
 import { ListingConditionBadges } from "@/components/ZoneListingCards";
-import { ListingAddress, ListingBrokerLegal, ListingSpecLine } from "@/components/ListingSpec";
+import { ListingAddress, ListingBrokerLegal, ListingDescription, ListingDetailLine, ListingSpecLine } from "@/components/ListingSpec";
 import ListingSocial from "@/components/listing/ListingSocial";
 
 type SortKey = "initial" | "price" | "recent";
@@ -245,6 +245,7 @@ export default function ListingsPage() {
           {filtered.map((l) => {
             const zoneName = listingZoneName(l);
             const deposit = listingDeposit(l);
+            const premium = calcImpliedRights(l);
             const inCompare = compare.includes(l.id);
             const mine = isMyListing(l);
             // 내 매물은 구역이 없을 수 있다 → 지도에서 그 핀을 바로 펀다(/?my=<id>)
@@ -295,6 +296,12 @@ export default function ListingsPage() {
                       <span className="font-semibold text-slate-900">
                         초기투자금 {formatMan(calcInitialInvestment(l))}
                       </span>
+                      {l.appraisedValue ? (
+                        <span data-testid="listing-card-premium">
+                          프리미엄 {premium < 0 ? "−" : ""}
+                          {formatMan(Math.abs(premium))}
+                        </span>
+                      ) : null}
                     </>
                   ) : (
                     <span className="font-semibold text-slate-900">
@@ -312,7 +319,10 @@ export default function ListingsPage() {
                 </div>
                 {/* 명시사항 — 거래형태·층/총층·방/ 욕실·방향·입주가능일·주차·승인일·관리비 */}
                 <ListingSpecLine listing={l} className="mt-1" />
+                {/* 건물·거래 상세 — 공급면적·현관구조·난방·엘리베이터·융자금·기월세·이주비·위반건축물 */}
+                <ListingDetailLine listing={l} className="mt-0.5" />
                 {l.note && <p className="mt-1.5 text-[11px] leading-snug text-slate-600">{l.note}</p>}
+                <ListingDescription listing={l} />
                 {/* 매물별 반응·댓글 — 접힌 한 줄, 누르면 이 카드 안에서 펼쳐진다 */}
                 <ListingSocial listingId={l.id} />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
