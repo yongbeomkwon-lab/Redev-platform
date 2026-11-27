@@ -59,6 +59,14 @@ ok("순위: 0·NaN 금액은 목록에서 빠진다", () => {
   assert.equal(ranked.length, 1);
 });
 
+ok("순위: 큰 목록의 1위는 0 이 아닌 아주 작은 상위 %", () => {
+  const items = Array.from({ length: 2770 }, (_, i) => item(1_000_000 + i));
+  const ranked = rank.rankItems(items, 1);
+  assert.equal(ranked[0].rank, 1);
+  assert.ok(ranked[0].pctFromTop > 0 && ranked[0].pctFromTop < 0.1, String(ranked[0].pctFromTop));
+  assert.equal(ranked[ranked.length - 1].pctFromTop, 100);
+});
+
 // ── 분위 ────────────────────────────────────────────────────────────────
 ok("분위: 100건이면 10·25·50·75% 지점 값이 맞고 구간 합이 전체와 같다", () => {
   const items = Array.from({ length: 100 }, (_, i) => item((100 - i) * 1_000_000));

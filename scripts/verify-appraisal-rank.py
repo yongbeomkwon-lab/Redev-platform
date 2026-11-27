@@ -203,6 +203,14 @@ def main():
         # 안내 문구 · 금지 문구
         text = card.inner_text()
         check("참고용 추정치 안내", "참고용 추정치" in text and "감정평가" in text, "")
+
+        # 저장된 결과 — 새로고침 뒤에도 「불러오기」 없이 바로 뜼다(브라우저 30일 저장)
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_timeout(6000)
+        card2 = page.query_selector("[data-testid=zone-appraisal-rank]")
+        t2 = card2.inner_text() if card2 else ""
+        check("저장 결과 즉시 표시(새로고침)", "분위 분포" in t2, t2.splitlines()[0][:30] if t2 else "카드 없음")
+
         page_text = page.inner_text("body")
         found = [b for b in BANNED if b in page_text]
         check("경쟁사 이름 없음", not found, ",".join(found))

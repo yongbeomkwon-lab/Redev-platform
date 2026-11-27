@@ -43,7 +43,7 @@ export type AppraisalItem = {
 export type RankedItem = AppraisalItem & {
   /** 1부터 — 같은 금액은 같은 순위 */
   rank: number;
-  /** 상위 몇 % 인지 (1자리 반올림, 0.1 ~ 100) */
+  /** 상위 몇 % 인지 (소수 3자리 — 2,770건 중 1위 = 0.036%, 화면은 '0.1% 미만'으로 쓴다) */
   pctFromTop: number;
   /** 추정 감정가 = 공시가격 × 보정률 (원) */
   estimated: number;
@@ -97,6 +97,11 @@ function round1(v: number): number {
   return Math.round(v * 10) / 10;
 }
 
+/** 0.036% 처럼 작은 값이 0 으로 뭉게지지 않게 소수 3자리까지 */
+function round3(v: number): number {
+  return Math.round(v * 1000) / 1000;
+}
+
 /**
  * 공시가격 목록에 보정률을 곱해 **내림차순 순위**를 매긴다.
  *   · 같은 금액은 같은 순위(경쟁 순위) — 다음 순위는 그만큼 건너뛴다.
@@ -119,7 +124,7 @@ export function rankItems(items: AppraisalItem[], multiplier: number): RankedIte
     ranked.push({
       ...it,
       rank,
-      pctFromTop: count > 0 ? round1((rank / count) * 100) : 0,
+      pctFromTop: count > 0 ? round3((rank / count) * 100) : 0,
     });
   }
   return ranked;
@@ -205,7 +210,7 @@ export function rankOfAmount(
   return {
     rank,
     count: n,
-    pctFromTop: round1((rank / n) * 100),
+    pctFromTop: round3((rank / n) * 100),
     higher,
     equal,
   };
