@@ -1,0 +1,100 @@
+{
+ "_note": "구조 검증용 fixture — 실제 사건 값이 아니다. 대법원 물건상세 응답(화면 PGJ15BM01, POST /pgj/pgj15B/selectAuctnCsSrchRslt.on)의 필드 이름과 모양만 담아 파서를 검사한다. 값은 모두 가짜다(사건번호 2020타경123456).",
+ "status": 200,
+ "message": null,
+ "errors": null,
+ "data": {
+  "ipcheck": true,
+  "dma_result": {
+   "csBaseInfo": {
+    "userCsNo": "2020타경123456",
+    "csNo": "20200130012345",
+    "csNm": "부동산임의경매",
+    "cortOfcCd": "B000210",
+    "cortOfcNm": "서울중앙지방법원",
+    "cortAuctnJdbnNm": "경매1계",
+    "jdbnTelno": "02-000-0000",
+    "execrCsTelno": "02-000-0001",
+    "csRcptYmd": "20200101",
+    "csCmdcYmd": "20200102",
+    "clmAmt": 300000000
+   },
+   "dstrtDemnInfo": [
+    {
+     "dstrtDemnLstprdYmd": "20200301",
+     "orddcsDvsCd": "021"
+    }
+   ],
+   "dspslGdsDxdyInfo": {
+    "dspslGdsSeq": "1",
+    "auctnGdsUsgCd": "16",
+    "aeeEvlAmt": "400000000",
+    "prchDposRate": "10",
+    "auctnGdsStatCd": "01",
+    "dspslDxdyYmd": "20261210",
+    "dxdyHm": "1000",
+    "dspslPlcNm": "제1호 법정",
+    "dspslGdsRmk": "비고 없음",
+    "dspslGdsSpcfcEcdocId": "TESTDOCID0001",
+    "orvParam": "TESTORVPARAM"
+   },
+   "gdsDspslDxdyLst": [
+    {
+     "dxdyYmd": "20260601",
+     "dxdyHm": "1000",
+     "auctnDxdyKndCd": "01",
+     "auctnDxdyRsltCd": "002",
+     "dxdyPlcNm": "제1호 법정",
+     "tsLwsDspslPrc": "400000000"
+    },
+    {
+     "dxdyYmd": "20261210",
+     "dxdyHm": "1000",
+     "auctnDxdyKndCd": "01",
+     "auctnDxdyRsltCd": "",
+     "dxdyPlcNm": "제1호 법정",
+     "tsLwsDspslPrc": "320000000"
+    },
+    {
+     "dxdyYmd": "20261217",
+     "dxdyHm": "1400",
+     "auctnDxdyKndCd": "02",
+     "auctnDxdyRsltCd": "",
+     "dxdyPlcNm": "제2호 법정",
+     "tsLwsDspslPrc": null
+    }
+   ],
+   "gdsDspslObjctLst": [
+    {
+     "dspslObjctSeq": 1,
+     "auctnLstDvsCd": "03",
+     "userPrintSt": "서울특별시 ○○구 ○○동 1-1 ○○아파트 제1층 제101호",
+     "ldcgDts": "",
+     "objctArDts": "",
+     "bldDtlDts": "전유부분의 건물의 표시\n건물의 번호 : 1층101호\n구 조 : 철근콘크리트조 59.92㎡\n대지권의 목적인 토지의 표시\n대 100㎡\n대지권 면적 24.71㎡"
+    }
+   ],
+   "aeeWevlMnpntLst": [
+    {
+     "aeeWevlMnpntTbltDvsCd": "01",
+     "aeeWevlMnpntItmCd": "01",
+     "aeeWevlMnpntCtt": "대상물건은 ○○구 ○○동 소재 아파트단지 내에 위치하며\n주위환경은 보통임."
+    },
+    {
+     "aeeWevlMnpntTbltDvsCd": "01",
+     "aeeWevlMnpntItmCd": "02",
+     "aeeWevlMnpntCtt": "본건까지 차량 진출입이 가능함."
+    }
+   ],
+   "csPicLst": [
+    {
+     "cortOfcCd": "B000210",
+     "csNo": "20200130012345",
+     "cortAuctnPicDvsCd": "01",
+     "cortAuctnPicSeq": "1",
+     "picFile": ""
+    }
+   ]
+  }
+ }
+}

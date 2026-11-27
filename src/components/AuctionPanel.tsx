@@ -10,12 +10,19 @@
 //     기일·비고·기일내역·면적·감정평가요항·사진). 뒤로 가면 목록, 앞뒤 화살표로 이웃 물건.
 //   · 공매(온비드)는 2단계에서 붙인다 — 탭 구조(CHANNELS)와 `SaleChannel` 타입을 미리 나눠 두어
 //     목록 컴포넌트를 다시 뜯지 않고 탭 하나를 켜면 되게 했다. 지금은 「공매 · 준비 중」.
-//   · 값은 **보유한 것만** 보여 준다. 대법원 사건상세에서만 나오는 항목(회차별 기일결과·임차인·
-//     매각물건명세서·사진)은 `public/data/auction-details.json` 에 수집돼 있으면 펼치고,
-//     없으면 "대법원 원문에서 확인"과 사건번호 복사·원문 열기를 보여 준다. **추정값을 만들지 않는다.**
+//   · 값은 **보유한 것만** 보여 준다. 대법원 물건상세·현황조사서에서만 나오는 항목(회차별 기일결과·
+//     전용/대지권 면적·감정평가요항표·현장 사진·임차인·점유관계)은 `public/data/auction-details.json`
+//     에 수집돼 있으면 펼치고, 없으면 "대법원 원문에서 확인"과 사건번호 복사·원문 열기를 보여 준다.
+//     **추정값을 만들지 않는다.**
+//   · 맨 위 **권리 안전도 배지**가 이 패널의 차별점이다 — 매각물건명세서의 '매각으로 소멸되지 않는
+//     권리'가 확인되면 빨강(인수 권리 있음), 확인됐는데 없으면 초록, 명세서 본문이 없는데 임차인이
+//     있으면 주황(확인 필요), 아무 자료도 없으면 회색(자료 없음). 판단은 `rightsStatus()` 한 곳에서만.
+//   · 재개발 투자자는 **전용/대지권 평수와 최저가 기준 대지 평단가**를 먼저 본다 — 가격 카드 안에
+//     전용·대지권 ㎡/평 칩과 대지 평단가를 함께 계산해 붙인다(대지권 ㎡ 가 수집된 경우에만).
 //   · 좁은 화면(<768px)에서는 지도 아래에서 올라오는 **시트**로 열린다(오른쪽 패널은 접힘).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   auctionDateStatus,
   auctionNoteFlags,
@@ -31,7 +38,19 @@ import {
   type AuctionsMeta,
   type SaleChannel,
 } from "@/lib/auctions";
-import { loadAuctionDetails, detailForItem, type AuctionDetail, type AuctionDetailsData } from "@/lib/auction-details";
+import {
+  SQM_PER_PY,
+  detailForItem,
+  landPricePerPy,
+  loadAuctionDetails,
+  normalizePhotos,
+  rightsStatus,
+  sqmToPy,
+  type AuctionAppraisalItem,
+  type AuctionDetail,
+  type AuctionDetailsData,
+  type AuctionPhoto,
+} from "@/lib/auction-details";
 
 export const AUCTION_ACCENT = "#b45309";
 
@@ -79,9 +98,28 @@ function firstAreaSqm(text: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * 법원 목록의 면적 문구에서 **라벨이 붙은** 전용·대지권만 읽는다.
+ *   · `전용 83.61㎡ / 대지 31.78㎡` 처럼 라벨이 있을 때만 — 숫자만 있으면 전용으로 본다.
+ *   · 물건상세(수집된 경우)가 우선이고, 이 함수는 그 값이 없을 때의 대체다.
+ */
+function areaFromText(text: string): { exclusive?: number; land?: number } {
+  const t = text || "";
+  const pick = (re: RegExp) => {
+    const m = t.match(re);
+    if (!m) return undefined;
+    const n = Number(m[1].replace(/,/g, ""));
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  return {
+    exclusive: pick(/(?:전용|전유)\s*([0-9][0-9,.]*)\s*㎡/),
+    land: pick(/(?:대지|토지)\s*([0-9][0-9,.]*)\s*㎡/),
+  };
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5">
+    <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5">
       <dt className="whitespace-nowrap pt-[1px] text-[10px] text-slate-400">{label}</dt>
       <dd className="min-w-0 break-words text-[11.5px] leading-snug text-slate-800">{children}</dd>
     </div>
@@ -636,7 +674,12 @@ function Section({
   );
 }
 
-function MissingNote({ what, onCopy, caseNo, copied }: {
+function MissingNote({
+  what,
+  onCopy,
+  caseNo,
+  copied,
+}: {
   what: string;
   onCopy: (text: string, key: string) => void;
   caseNo: string;
@@ -653,7 +696,11 @@ function MissingNote({ what, onCopy, caseNo, copied }: {
   );
 }
 
-function CopyButton({ onCopy, caseNo, copied }: {
+function CopyButton({
+  onCopy,
+  caseNo,
+  copied,
+}: {
   onCopy: (text: string, key: string) => void;
   caseNo: string;
   copied: string | null;
@@ -666,6 +713,526 @@ function CopyButton({ onCopy, caseNo, copied }: {
     >
       {copied === "case" ? "✓ 사건번호 복사됨" : "사건번호 복사"}
     </button>
+  );
+}
+
+/** 법원 사건검색 열기 — 사건상세 딥링크는 열리지 않으므로 검색 화면으로 보낸다 */
+function CourtLink({ href, label = "대법원 사건검색 열기 ↗" }: { href: string; label?: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:border-amber-500 hover:bg-amber-50"
+      title="대법원 사건상세는 주소만으로 열리지 않습니다 — 사건검색 화면에서 사건번호를 붙여 넣으세요"
+    >
+      {label}
+    </a>
+  );
+}
+
+/**
+ * 권리 안전도 배지 — 이 패널에서 **가장 먼저** 봐야 하는 한 줄.
+ *   · 색만으로 판단을 단정하지 않고, 근거 문서와 다음 할 일을 함께 적는다.
+ *   · 등급은 `rightsStatus()` 가 수집된 값만 보고 정한다(추정 금지).
+ */
+function RightsBanner({ detail }: { detail?: AuctionDetail }) {
+  const st = rightsStatus(detail);
+  const style =
+    st.level === "risk"
+      ? "border-rose-300 bg-rose-50 text-rose-900"
+      : st.level === "safe"
+        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+        : st.level === "check"
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : st.level === "survey"
+            ? "border-sky-200 bg-sky-50 text-sky-900"
+            : "border-slate-200 bg-slate-50 text-slate-600";
+  const icon =
+    st.level === "risk"
+      ? "⚠️"
+      : st.level === "safe"
+        ? "✅"
+        : st.level === "check"
+          ? "⚠️"
+          : st.level === "survey"
+            ? "🔎"
+            : "ℹ️";
+  const rights = (detail?.specification?.nonExtinguishedRights || "").trim();
+  return (
+    <div className={`mt-1.5 rounded-lg border px-2 py-1.5 ${style}`} data-testid="auction-rights-badge" data-level={st.level}>
+      <p className="flex items-start gap-1 text-[11px] font-extrabold leading-snug">
+        <span aria-hidden className="shrink-0">{icon}</span>
+        <span className="min-w-0 break-words">{st.title}</span>
+      </p>
+      {rights && (
+        <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words border-l-2 border-rose-300 pl-1.5 text-[10px] leading-relaxed text-rose-800">
+          {rights}
+        </p>
+      )}
+      <p className="mt-0.5 text-[9.5px] leading-relaxed opacity-80">{st.note}</p>
+    </div>
+  );
+}
+
+/**
+ * 사진 확대(라이트박스) — 패널 밖(body)으로 portal 로 띄운다.
+ *   · 지도·패널의 transform/overflow 에 갇히지 않게, 모바일 시트 위에서도 화면 전체를 덮는다.
+ *   · ←/→ 로 넘기고 Esc 로 닫는다. 이때 패널까지 같이 닫히지 않도록 캡처 단계에서 멈춘다.
+ */
+function PhotoLightbox({
+  photos,
+  index,
+  onIndex,
+  onClose,
+  caseNo,
+}: {
+  photos: AuctionPhoto[];
+  index: number;
+  onIndex: (i: number) => void;
+  onClose: () => void;
+  caseNo: string;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const prev = () => onIndex((index - 1 + photos.length) % photos.length);
+  const next = () => onIndex((index + 1) % photos.length);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        onClose();
+      } else if (e.key === "ArrowLeft") {
+        e.stopImmediatePropagation();
+        prev();
+      } else if (e.key === "ArrowRight") {
+        e.stopImmediatePropagation();
+        next();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
+
+  if (!mounted || typeof document === "undefined") return null;
+  const p = photos[index];
+  if (!p) return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${caseNo} 현장 사진 ${index + 1} / ${photos.length}`}
+      data-testid="auction-photo-lightbox"
+      className="fixed inset-0 z-[900] flex flex-col bg-slate-950/90 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="flex shrink-0 items-center gap-2 px-3 py-2 text-white">
+        <span className="text-[11px] font-semibold">
+          {caseNo} · {index + 1} / {photos.length}
+        </span>
+        {p.caption && <span className="min-w-0 truncate text-[10.5px] text-white/70">{p.caption}</span>}
+        <button
+          type="button"
+          aria-label="사진 닫기"
+          onClick={onClose}
+          className="ml-auto shrink-0 rounded border border-white/30 px-2 py-0.5 text-[11px] font-semibold text-white/90 hover:bg-white/10"
+        >
+          ✕ 닫기
+        </button>
+      </div>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 pb-4" onClick={(e) => e.stopPropagation()}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={p.url}
+          alt={p.caption || `${caseNo} 사진 ${index + 1}`}
+          className="max-h-full max-w-full rounded object-contain"
+        />
+        {photos.length > 1 && (
+          <>
+            <button
+              type="button"
+              aria-label="이전 사진"
+              onClick={prev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/15 px-3 py-3 text-[16px] font-bold text-white hover:bg-white/30"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="다음 사진"
+              onClick={next}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/15 px-3 py-3 text-[16px] font-bold text-white hover:bg-white/30"
+            >
+              ›
+            </button>
+          </>
+        )}
+      </div>
+      {p.caption && (
+        <p className="shrink-0 break-words px-3 pb-3 text-center text-[10.5px] leading-relaxed text-white/70">
+          {p.caption}
+        </p>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+/** 현장 사진 — 가로 스크롤 썸네일. 수집 전에는 빈 공간 대신 한 줄 안내만 남긴다. */
+function PhotoStrip({
+  photos,
+  caseNo,
+  onOpen,
+}: {
+  photos: AuctionPhoto[];
+  caseNo: string;
+  onOpen: (i: number) => void;
+}) {
+  if (photos.length === 0) {
+    return (
+      <p className="mt-1.5 rounded-lg bg-slate-50 px-2 py-1 text-[9.5px] leading-relaxed text-slate-400">
+        📷 현장 사진은 아직 수집되지 않았습니다 · 대법원 사건검색에서 사진으로 확인
+      </p>
+    );
+  }
+  return (
+    <div className="mt-1.5" data-testid="auction-photos">
+      <div className="mb-1 flex items-baseline gap-1.5">
+        <span className="text-[10px] font-semibold text-slate-500">현장 사진</span>
+        <span className="text-[9px] text-slate-400">{photos.length}장 · 눌러서 크게</span>
+      </div>
+      <div className="ui-scroll flex gap-1 overflow-x-auto pb-1">
+        {photos.slice(0, 16).map((p, i) => (
+          <button
+            key={`${p.url}-${i}`}
+            type="button"
+            data-testid="auction-photo"
+            onClick={() => onOpen(i)}
+            aria-label={`${caseNo} 사진 ${i + 1} 크게 보기`}
+            className="relative h-16 w-[5.25rem] shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-100 hover:border-amber-500"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={p.url}
+              alt={p.caption || `${caseNo} 사진 ${i + 1}`}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+            {p.caption && (
+              <span className="absolute inset-x-0 bottom-0 truncate bg-slate-900/60 px-1 py-[1px] text-[8.5px] font-medium text-white">
+                {p.caption}
+              </span>
+            )}
+          </button>
+        ))}
+        {photos.length > 16 && (
+          <span className="self-center whitespace-nowrap px-1 text-[9px] text-slate-400">
+            외 {photos.length - 16}장
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 매각물건명세서 — 본문 값은 수집된 것만, 나머지는 원문 확인으로 */
+function SpecificationCard({
+  detail,
+  caseNo,
+  copied,
+  onCopy,
+  detailUrl,
+}: {
+  detail?: AuctionDetail;
+  caseNo: string;
+  copied: string | null;
+  onCopy: (text: string, key: string) => void;
+  detailUrl: string;
+}) {
+  const spec = detail?.specification;
+  const hasBody = !!(spec && (spec.writtenDate || spec.earliestRight || spec.nonExtinguishedRights || spec.hasSuperficies != null));
+  return (
+    <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5" data-testid="auction-spec">
+      <p className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
+        📄 매각물건명세서
+        {hasBody ? (
+          <span className="ml-auto rounded bg-emerald-100 px-1 py-[1px] text-[9px] font-bold text-emerald-800">수집</span>
+        ) : (
+          <span className="ml-auto rounded bg-slate-100 px-1 py-[1px] text-[9px] font-semibold text-slate-500">본문 미수집</span>
+        )}
+      </p>
+
+      {hasBody ? (
+        <dl className="mt-1 space-y-1">
+          {spec?.writtenDate && (
+            <Row label="작성일">
+              {spec.writtenDate.length === 8 ? formatSaleDate(spec.writtenDate) : spec.writtenDate}
+            </Row>
+          )}
+          {spec?.earliestRight && (
+            <Row label="최선순위">
+              <b className="font-semibold text-slate-800">{spec.earliestRight}</b>
+              <span className="ml-1 text-[9.5px] text-slate-400">이보다 뒤 권리는 매각으로 소멸</span>
+            </Row>
+          )}
+          {spec?.hasSuperficies != null && (
+            <Row label="지상권">
+              {spec.hasSuperficies ? (
+                <b className="font-semibold text-rose-700">있음 — 인수 여부 확인</b>
+              ) : (
+                <span className="text-slate-700">없음</span>
+              )}
+            </Row>
+          )}
+          {spec?.nonExtinguishedRights && (
+            <div className="rounded border border-rose-200 bg-rose-50/70 px-1.5 py-1">
+              <p className="text-[9.5px] font-bold text-rose-800">매각으로 소멸되지 않는 권리</p>
+              <p className="mt-0.5 whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-rose-900">
+                {spec.nonExtinguishedRights}
+              </p>
+            </div>
+          )}
+          {spec?.extra && (
+            <p className="whitespace-pre-wrap break-words text-[10px] leading-relaxed text-slate-600">{spec.extra}</p>
+          )}
+        </dl>
+      ) : (
+        <p className="mt-0.5 text-[10.5px] leading-relaxed text-slate-500">
+          명세서 <b className="text-slate-700">본문</b>은 PDF 문서라 리디브에 담지 않았습니다. 작성일·최선순위
+          설정·매각으로 소멸되지 않는 권리는 원문에서 확인하세요. 대법원은 명세서를{" "}
+          <b className="text-slate-700">매각기일 1주 전</b>부터 공개합니다.
+        </p>
+      )}
+
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {spec?.viewerUrl ? (
+          <a
+            href={spec.viewerUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 hover:bg-amber-100"
+          >
+            매각물건명세서 열기 ↗
+          </a>
+        ) : null}
+        <CopyButton onCopy={onCopy} caseNo={caseNo} copied={copied} />
+        {!spec?.viewerUrl && <CourtLink href={detailUrl} />}
+      </div>
+    </div>
+  );
+}
+
+/** 임차인현황 — 이름은 법원 마스킹 표기 그대로, 판단은 사람이 하도록 값만 나열한다 */
+function TenantCards({ detail, caseNo, copied, onCopy }: {
+  detail?: AuctionDetail;
+  caseNo: string;
+  copied: string | null;
+  onCopy: (text: string, key: string) => void;
+}) {
+  const tenants = detail?.tenants ?? [];
+  const surveyed = !!detail?.occupancy?.examinedAt;
+  return (
+    <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5" data-testid="auction-tenants">
+      <p className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
+        👤 임차인현황
+        <span className="ml-auto rounded bg-slate-100 px-1 py-[1px] text-[9px] font-semibold text-slate-500">
+          {tenants.length > 0 ? `${tenants.length}명 · 현황조사서` : surveyed ? "0명 · 현황조사서" : "미수집"}
+        </span>
+      </p>
+      {tenants.length === 0 ? (
+        <div className="mt-0.5">
+          {surveyed ? (
+            <p className="text-[10.5px] leading-relaxed text-slate-600">
+              현황조사서에 임차인으로 등재된 사람이 없습니다(임대차관계 0명). 점유 내역은 아래 점유관계에서
+              확인하세요.
+            </p>
+          ) : (
+            <p className="text-[10.5px] leading-relaxed text-slate-500">
+              현황조사서의 임차인 기재가 아직 수집되지 않았습니다. 보증금·전입일·확정일자는 원문에서
+              확인하세요. (현황조사서는 매각기일 2주 전부터 공개)
+            </p>
+          )}
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <CopyButton onCopy={onCopy} caseNo={caseNo} copied={copied} />
+          </div>
+        </div>
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {tenants.map((t, i) => (
+            <li key={`${t.name || "t"}-${i}`} className="rounded border border-slate-200 bg-slate-50/70 px-1.5 py-1">
+              <p className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+                <b className="text-[11px] font-bold text-slate-800">{t.name || "이름 미기재"}</b>
+                {t.type && (
+                  <span className="rounded bg-slate-700 px-1 py-[1px] text-[9px] font-semibold text-white">{t.type}</span>
+                )}
+                {t.part && <span className="min-w-0 break-words text-[10px] text-slate-600">{t.part}</span>}
+              </p>
+              <dl className="mt-0.5 space-y-0.5">
+                {(t.deposit || t.rent) && (
+                  <Row label="보증금·차임">
+                    {t.deposit && <b className="font-semibold text-slate-800">{t.deposit}</b>}
+                    {t.rent && <span className="text-slate-600">{t.deposit ? " / " : ""}{t.rent}</span>}
+                  </Row>
+                )}
+                {(t.movedIn || t.fixedDate) && (
+                  <Row label="전입·확정">
+                    {t.movedIn || "-"}
+                    {t.fixedDate ? <span className="text-slate-500"> · 확정 {t.fixedDate}</span> : null}
+                  </Row>
+                )}
+                {t.usage && <Row label="용도">{t.usage}</Row>}
+                {t.period && <Row label="점유기간">{t.period}</Row>}
+                {t.possession && <Row label="점유내용">{t.possession}</Row>}
+                {t.note && <Row label="비고">{t.note}</Row>}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      )}
+      {tenants.length > 0 && (
+        <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
+          법원 현황조사서 기재 그대로입니다. 대항력 여부는 전입일·확정일자와 말소기준권리를 함께 봐야 정해집니다.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 점유관계 — 조사일시 + 점유 내역 원문 */
+function OccupancyCard({ detail }: { detail?: AuctionDetail }) {
+  const occ = detail?.occupancy;
+  const hasAny = !!(occ && (occ.examinedAt || occ.detail || occ.relation || occ.property));
+  return (
+    <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5" data-testid="auction-occupancy">
+      <p className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
+        🏠 점유관계
+        <span className="ml-auto rounded bg-slate-100 px-1 py-[1px] text-[9px] font-semibold text-slate-500">
+          {hasAny ? "현황조사서" : "미수집"}
+        </span>
+      </p>
+      {!hasAny ? (
+        <p className="mt-0.5 text-[10.5px] leading-relaxed text-slate-500">
+          현황조사서의 점유관계 기재가 아직 수집되지 않았습니다. 지목·건물 용도에 대해 작성되며, 매각기일 2주 전부터
+          공개됩니다.
+        </p>
+      ) : (
+        <div className="mt-0.5 space-y-1">
+          {(occ?.examinedAt || occ?.relation) && (
+            <dl className="space-y-0.5">
+              {occ?.examinedAt && <Row label="조사일시">{occ.examinedAt}</Row>}
+              {occ?.relation && <Row label="점유관계">{occ.relation}</Row>}
+            </dl>
+          )}
+          {occ?.detail && (
+            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded bg-slate-50 px-1.5 py-1 text-[10.5px] leading-relaxed text-slate-700">
+              {occ.detail}
+            </p>
+          )}
+          {occ?.property && (
+            <div>
+              <p className="text-[9.5px] font-semibold text-slate-500">부동산의 현황</p>
+              <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">
+                {occ.property}
+              </p>
+            </div>
+          )}
+          {occ?.etc && (
+            <div>
+              <p className="text-[9.5px] font-semibold text-slate-500">기타(임차내역)</p>
+              <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-600">
+                {occ.etc}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 감정평가요항표 — 표제(1~10)별로 묶어 라벨-값 카드로 접는다.
+ *   · 긴 줄글을 그대로 붙이지 않고, 표제 단위 details 로 접어 모바일에서 세로 길이를 줄인다.
+ *   · 표제·항목 이름은 법원 코드표에서 확인된 값만 쓴다(없으면 번호만).
+ */
+function AppraisalAccordion({
+  items,
+  legacyNote,
+  caseNo,
+  copied,
+  onCopy,
+}: {
+  items?: AuctionAppraisalItem[];
+  legacyNote?: string;
+  caseNo: string;
+  copied: string | null;
+  onCopy: (text: string, key: string) => void;
+}) {
+  const groups = useMemo(() => {
+    const out: { key: string; name?: string; rows: AuctionAppraisalItem[] }[] = [];
+    for (const it of items ?? []) {
+      const key = it.table || "0";
+      const last = out[out.length - 1];
+      if (last && last.key === key) {
+        last.rows.push(it);
+        if (!last.name && it.tableName) last.name = it.tableName;
+      } else {
+        out.push({ key, name: it.tableName, rows: [it] });
+      }
+    }
+    return out;
+  }, [items]);
+
+  if (groups.length === 0) {
+    return (
+      <Section title="감정평가 요항" hint={legacyNote ? "요약" : "미수집"}>
+        {legacyNote ? (
+          <p className="whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">{legacyNote}</p>
+        ) : (
+          <MissingNote what="감정평가요항표" caseNo={caseNo} onCopy={onCopy} copied={copied} />
+        )}
+      </Section>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white" data-testid="auction-appraisal">
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        <span className="text-[10px] font-bold text-slate-700">📊 감정평가요항표</span>
+        <span className="ml-auto text-[9.5px] font-medium text-slate-400">
+          {groups.length}개 항목 · 눌러서 펼치기
+        </span>
+      </div>
+      <div className="border-t border-slate-100 px-1.5 py-1">
+        {groups.map((g, gi) => (
+          <details key={`${g.key}-${gi}`} className="group/border rounded border-b border-slate-100 last:border-b-0">
+            <summary className="flex cursor-pointer list-none items-center gap-1 py-1 [&::-webkit-details-marker]:hidden">
+              <span className="text-[9px] text-slate-400 transition group-open/border:rotate-90">▶</span>
+              <b className="min-w-0 break-words text-[10.5px] font-bold text-slate-700">
+                {gi + 1}. {g.name || "감정평가 요항"}
+              </b>
+              <span className="ml-auto shrink-0 text-[9px] text-slate-400">{g.rows.length}</span>
+            </summary>
+            <dl className="space-y-1 pb-1.5 pl-2.5 pr-1">
+              {g.rows.map((r, ri) => (
+                <div key={ri} className="rounded bg-slate-50/80 px-1.5 py-1">
+                  <dt className="text-[9.5px] font-semibold text-slate-500">
+                    {r.itemName || `항목 ${ri + 1}`}
+                  </dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">
+                    {r.text || "-"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -715,7 +1282,6 @@ function ItemDetail({
   const courtStatus = detail?.itemStatus?.[item.itemNo];
   const specSheetId = detail?.specSheetIds?.[item.itemNo];
   const asOf = meta?.collectedAt ? meta.collectedAt.slice(0, 10) : null;
-  const areaSqm = firstAreaSqm(item.area);
   const bulkKey = auctionSaleKey(item);
   const bulkItems = siblings.filter((s) => auctionSaleKey(s) === bulkKey);
   const isBulk = bulkItems.length > 1;
@@ -731,8 +1297,20 @@ function ItemDetail({
       );
   const chipItems = (isBulk ? bulkItems : sameSpot).slice(0, isBulk ? 24 : 8);
 
+  // 면적 — 수집된 값(물건상세)을 우선하고, 없으면 법원 목록의 면적 문구에서 라벨이 붙은 값만 읽는다
+  const listArea = areaFromText(item.area);
+  const listSqm = firstAreaSqm(item.area);
+  const exclusiveSqm = detail?.area?.exclusiveSqm ?? listArea.exclusive ?? listSqm;
+  const exclusivePy = detail?.area?.exclusivePy ?? sqmToPy(exclusiveSqm);
+  const landSqm = detail?.area?.landSqm ?? listArea.land ?? null;
+  const landPy = detail?.area?.landPy ?? sqmToPy(landSqm);
+  const perPy = landPricePerPy(item.minimum, landSqm);
+
+  const photos = useMemo(() => normalizePhotos(detail?.photos), [detail?.photos]);
+  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
+
   return (
-    <div className="px-2.5 pb-2.5 pt-2">
+    <div className="min-w-0 px-2.5 pb-2.5 pt-2">
       {/* 상단 — 목록으로 + 이웃 물건 */}
       <div className="mb-1.5 flex items-center gap-1.5">
         <button
@@ -794,12 +1372,17 @@ function ItemDetail({
 
       {/* 소재지 */}
       <div className="mt-1.5">
-        <p className="text-[12px] font-semibold leading-snug text-slate-900">{item.address || item.jibun}</p>
-        <p className="mt-[1px] text-[10.5px] leading-snug text-slate-500">
+        <p className="break-words text-[12px] font-semibold leading-snug text-slate-900">
+          {item.address || item.jibun}
+        </p>
+        <p className="mt-[1px] break-words text-[10.5px] leading-snug text-slate-500">
           {[item.jibun, item.building].filter(Boolean).join(" · ")}
           {zoneName ? ` · ${zoneName}` : ""}
         </p>
       </div>
+
+      {/* 권리 안전도 — 이 물건을 볼 때 가장 먼저 알아야 하는 것 */}
+      <RightsBanner detail={detail} />
 
       {/* 가격 — 감정 → 최저 → 보증금 */}
       <div className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5">
@@ -829,6 +1412,35 @@ function ItemDetail({
             </span>
           </span>
         </div>
+
+        {/* 재개발·상가 투자 핵심 수치 — 전용/대지권 평수와 최저가 기준 대지 평단가 */}
+        {(exclusivePy != null || landPy != null) && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-slate-200/70 pt-1 text-[10px] text-slate-600">
+            {exclusivePy != null && (
+              <span className="rounded bg-white px-1 py-[1px] ring-1 ring-slate-200">
+                전용 <b className="font-bold text-slate-800">{exclusivePy}평</b>
+                {exclusiveSqm != null && <span className="text-slate-400"> {exclusiveSqm.toFixed(2)}㎡</span>}
+              </span>
+            )}
+            {landPy != null && (
+              <span className="rounded bg-white px-1 py-[1px] ring-1 ring-slate-200">
+                대지권 <b className="font-bold text-slate-800">{landPy}평</b>
+                {landSqm != null && <span className="text-slate-400"> {landSqm.toFixed(2)}㎡</span>}
+              </span>
+            )}
+            {perPy != null && (
+              <span className="rounded bg-amber-100 px-1 py-[1px] font-bold text-amber-900" data-testid="auction-land-per-py">
+                대지 평단가 {formatWon(perPy)}원/평
+              </span>
+            )}
+          </div>
+        )}
+        {exclusivePy == null && landPy == null && (
+          <p className="mt-1 text-[9.5px] leading-snug text-slate-400">
+            전용·대지권 면적은 아직 수집되지 않았습니다(대법원 물건상세에서 확인).
+          </p>
+        )}
+
         {item.appraised != null && item.minimum != null && item.appraised > item.minimum && (
           <p className="mt-0.5 text-[9.5px] text-slate-500">
             감정가 대비 <b className="font-semibold text-slate-700">{formatWon(item.appraised - item.minimum)}</b> 낮음
@@ -861,6 +1473,9 @@ function ItemDetail({
           <span className="w-full break-words text-[10px] text-amber-900/80">{item.salePlace}</span>
         )}
       </div>
+
+      {/* 현장 사진 — 가로 스크롤 + 확대 */}
+      <PhotoStrip photos={photos} caseNo={caseNo} onOpen={setPhotoIndex} />
 
       {/* 일괄매각 목적물 / 같은 자리 물건 — 눌러서 전환 */}
       {chipItems.length > 0 && (
@@ -936,9 +1551,9 @@ function ItemDetail({
           {item.landCategory ? <span className="text-slate-500"> · {item.landCategory}</span> : null}
         </Row>
         <Row label="면적">
-          {item.area || "-"}
-          {areaSqm != null && (
-            <span className="text-slate-400"> (약 {(areaSqm / 3.3058).toFixed(1)}평)</span>
+          {item.area || (exclusiveSqm != null ? `${exclusiveSqm}㎡` : "-")}
+          {listSqm != null && (
+            <span className="text-slate-400"> (약 {(listSqm / SQM_PER_PY).toFixed(1)}평)</span>
           )}
         </Row>
         <Row label="진행">
@@ -994,174 +1609,128 @@ function ItemDetail({
         )}
       </div>
 
+      {/* 권리 3종 — 매각물건명세서 · 임차인현황 · 점유관계 */}
+      <SpecificationCard detail={detail} caseNo={caseNo} copied={copied} onCopy={onCopy} detailUrl={item.detailUrl} />
+      <TenantCards detail={detail} caseNo={caseNo} copied={copied} onCopy={onCopy} />
+      <OccupancyCard detail={detail} />
+
       {/* 상세 — 수집돼 있으면 항목별로 펼치고, 한 건도 없으면 안내 한 칸으로 묶는다 */}
-      <div className="mt-2 space-y-1.5">
+      <div className="mt-1.5 space-y-1.5">
         {!detail ? (
-          <Section title="대법원 원문 상세" hint="미수집" defaultOpen>
+          <Section title="대법원 물건상세" hint="미수집" defaultOpen>
             <p className="text-[10.5px] leading-relaxed text-slate-600">
               이 물건의 <b>회차별 기일·결과</b>, <b>목적물 면적·대지권</b>, <b>감정평가요항표</b>,
-              <b>사건 사진</b>은 대법원 사건상세 화면에서만 볼 수 있어 아직 수집되지 않았습니다.
+              <b>현장 사진</b>은 대법원 물건상세 화면에서만 볼 수 있어 아직 수집되지 않았습니다.
               사건번호를 복사해 대법원 사건검색에 붙여 넣으면 바로 확인할 수 있습니다.
             </p>
-            <ul className="mt-1 mb-1.5 space-y-0.5 text-[10px] text-slate-500">
+            <ul className="mb-1.5 mt-1 space-y-0.5 text-[10px] text-slate-500">
               <li>· 기일내역 — 회차별 기일·결과·최저가</li>
-              <li>· 면적·대지권 — 토지·건물·전유부 목록</li>
+              <li>· 면적·대지권 — 전유부·대지권 면적</li>
               <li>· 감정평가요항표 — 감정 이유 요약</li>
-              <li>· 사건 사진 — 법원이 촬영한 현장 사진</li>
+              <li>· 현장 사진 — 법원이 촬영한 사진</li>
             </ul>
             <div className="flex flex-wrap gap-1.5">
               <CopyButton onCopy={onCopy} caseNo={caseNo} copied={copied} />
-              <a
-                href={item.detailUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:border-amber-500 hover:bg-amber-50"
-                title="대법원 사건상세는 주소만으로 열리지 않습니다 — 사건검색 화면에서 사건번호를 붙여 넣으세요"
-              >
-                대법원 사건검색 열기 ↗
-              </a>
+              <CourtLink href={item.detailUrl} />
             </div>
           </Section>
         ) : (
           <>
-        <Section
-          title="기일내역"
-          hint={schedule.length ? `${schedule.length}회` : "미수집"}
-        >
-          {schedule.length ? (
-            <table className="w-full text-[10px]">
-              <thead className="text-left text-slate-400">
-                <tr>
-                  <th className="py-0.5 font-medium">기일</th>
-                  <th className="py-0.5 font-medium">종류</th>
-                  <th className="py-0.5 text-right font-medium">결과</th>
-                </tr>
-              </thead>
-              <tbody>
-                {schedule.map((s, i) => (
-                  <tr key={`${s.date}-${i}`} className="border-t border-slate-100">
-                    <td className="py-0.5">
-                      {formatSaleDate(s.date)}
-                      {s.time ? (
-                        <span className="text-slate-400"> {s.time.slice(0, 2)}:{s.time.slice(2)}</span>
-                      ) : null}
-                    </td>
-                    <td className="py-0.5 text-slate-500">{s.kind || "매각기일"}</td>
-                    <td className="py-0.5 text-right font-semibold text-slate-700">{s.result || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <MissingNote what="회차별 기일·결과" caseNo={caseNo} onCopy={onCopy} copied={copied} />
-          )}
-          {schedule.some((s) => s.place) && (
-            <p className="mt-1 break-words text-[9.5px] text-slate-500">
-              장소: {schedule.find((s) => s.place)?.place}
-            </p>
-          )}
-        </Section>
+            <Section title="기일내역" hint={schedule.length ? `${schedule.length}회` : "미수집"}>
+              {schedule.length ? (
+                <table className="w-full text-[10px]">
+                  <thead className="text-left text-slate-400">
+                    <tr>
+                      <th className="py-0.5 font-medium">기일</th>
+                      <th className="py-0.5 font-medium">종류</th>
+                      <th className="py-0.5 text-right font-medium">결과</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schedule.map((s, i) => (
+                      <tr key={`${s.date}-${i}`} className="border-t border-slate-100">
+                        <td className="py-0.5">
+                          {formatSaleDate(s.date)}
+                          {s.time ? (
+                            <span className="text-slate-400"> {s.time.slice(0, 2)}:{s.time.slice(2)}</span>
+                          ) : null}
+                        </td>
+                        <td className="py-0.5 text-slate-500">{s.kind || "매각기일"}</td>
+                        <td className="py-0.5 text-right font-semibold text-slate-700">{s.result || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <MissingNote what="회차별 기일·결과" caseNo={caseNo} onCopy={onCopy} copied={copied} />
+              )}
+              {(() => {
+                // 법원 목록(물건검색)은 지난 기일의 최저가를 들고 있을 때가 있다 — 지금 기일 고시액과 다르면 밝힌다
+                const cur = schedule.find((s) => s.date === item.saleDate && s.minimum != null);
+                if (!cur || cur.minimum == null || item.minimum == null || cur.minimum === item.minimum) return null;
+                return (
+                  <p className="mt-1 rounded bg-amber-50 px-1.5 py-1 text-[9.5px] leading-relaxed text-amber-800">
+                    이 기일 고시 최저가는 <b>{formatWon(cur.minimum)}</b>입니다. 목록의 {formatWon(item.minimum)}는
+                    지난 기일 기준입니다.
+                  </p>
+                );
+              })()}
+              {schedule.some((s) => s.place) && (
+                <p className="mt-1 break-words text-[9.5px] text-slate-500">
+                  장소: {schedule.find((s) => s.place)?.place}
+                </p>
+              )}
+            </Section>
 
-        <Section
-          title="목록·면적"
-          hint={
-            detail?.areas?.length
-              ? `${detail.areas.length}건`
-              : detail?.lists?.length
-                ? `${detail.lists.length}건`
-                : "미수집"
-          }
-        >
-          {detail?.areas?.length ? (
-            <ul className="space-y-0.5 text-[10.5px]">
-              {detail.areas.map((a, i) => (
-                <li key={i} className="flex gap-1.5">
-                  <span className="shrink-0 rounded bg-slate-100 px-1 py-[1px] text-[9.5px] font-semibold text-slate-600">
-                    {a.kind}
-                  </span>
-                  <span className="min-w-0 break-words text-slate-700">{a.detail}</span>
-                </li>
-              ))}
-            </ul>
-          ) : detail?.lists?.length ? (
-            <ul className="space-y-1 text-[10.5px]">
-              {detail.lists.map((l, i) => (
-                <li key={i} className="flex gap-1.5">
-                  <span className="shrink-0 rounded bg-slate-100 px-1 py-[1px] text-[9.5px] font-semibold text-slate-600">
-                    {l.kind}
-                  </span>
-                  <span className="min-w-0 break-words text-slate-700">{l.address}</span>
-                </li>
-              ))}
-              <li className="pt-0.5 text-[9.5px] leading-relaxed text-slate-400">
-                면적(전용·대지권)은 법원 사건상세의 목적물 목록에서만 나옵니다 — 필요하면 원문에서 확인하세요.
-              </li>
-            </ul>
-          ) : (
-            <MissingNote what="목적물 면적·대지권 내역" caseNo={caseNo} onCopy={onCopy} copied={copied} />
-          )}
-        </Section>
+            <Section
+              title="목록·면적"
+              hint={
+                detail?.areas?.length
+                  ? `${detail.areas.length}건`
+                  : detail?.lists?.length
+                    ? `${detail.lists.length}건`
+                    : "미수집"
+              }
+            >
+              {detail?.areas?.length ? (
+                <ul className="space-y-0.5 text-[10.5px]">
+                  {detail.areas.map((a, i) => (
+                    <li key={i} className="flex gap-1.5">
+                      <span className="shrink-0 rounded bg-slate-100 px-1 py-[1px] text-[9.5px] font-semibold text-slate-600">
+                        {a.kind}
+                      </span>
+                      <span className="min-w-0 break-words text-slate-700">{a.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : detail?.lists?.length ? (
+                <ul className="space-y-1 text-[10.5px]">
+                  {detail.lists.map((l, i) => (
+                    <li key={i} className="flex gap-1.5">
+                      <span className="shrink-0 rounded bg-slate-100 px-1 py-[1px] text-[9.5px] font-semibold text-slate-600">
+                        {l.kind}
+                      </span>
+                      <span className="min-w-0 break-words text-slate-700">{l.address}</span>
+                    </li>
+                  ))}
+                  <li className="pt-0.5 text-[9.5px] leading-relaxed text-slate-400">
+                    면적(전용·대지권)은 대법원 물건상세의 목적물 목록에서만 나옵니다 — 필요하면 원문에서 확인하세요.
+                  </li>
+                </ul>
+              ) : (
+                <MissingNote what="목적물 면적·대지권 내역" caseNo={caseNo} onCopy={onCopy} copied={copied} />
+              )}
+            </Section>
 
-        <Section
-          title="감정평가 요항"
-          hint={detail?.appraisalNote ? "원문" : "미수집"}
-        >
-          {detail?.appraisalNote ? (
-            <p className="whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">
-              {detail.appraisalNote}
-            </p>
-          ) : (
-            <MissingNote what="감정평가요항표" caseNo={caseNo} onCopy={onCopy} copied={copied} />
-          )}
-        </Section>
-
-        <Section title="사건 사진" hint={detail?.photos?.length ? `${detail.photos.length}장` : "미수집"}>
-          {detail?.photos?.length ? (
-            <div className="grid grid-cols-2 gap-1">
-              {detail.photos.slice(0, 6).map((src, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={i}
-                  src={src}
-                  alt={`${caseNo} 사건 사진 ${i + 1}`}
-                  className="h-24 w-full rounded border border-slate-200 object-cover"
-                  loading="lazy"
-                />
-              ))}
-            </div>
-          ) : (
-            <MissingNote what="법원 사건 사진" caseNo={caseNo} onCopy={onCopy} copied={copied} />
-          )}
-        </Section>
+            <AppraisalAccordion
+              items={detail?.appraisalSummary}
+              legacyNote={detail?.appraisalNote}
+              caseNo={caseNo}
+              copied={copied}
+              onCopy={onCopy}
+            />
           </>
         )}
-
-        <Section title="임차인·권리분석" hint="매각물건명세서">
-          <p className="text-[10.5px] leading-relaxed text-slate-600">
-            임차인·배당요구·인수되는 권리는 <b>매각물건명세서</b>와 현황조사서에서 확인합니다.
-            대법원은 매각물건명세서를 <b>매각기일 1주 전부터</b>, 현황조사서·감정평가서를 2주 전부터
-            공개합니다. 리디브는 이 문서를 가공하지 않고, 아래 사건번호로 대법원 원문에서 바로
-            찾아볼 수 있게 연결합니다.
-          </p>
-          {specSheetId && (
-            <p className="mt-1 text-[10px] text-slate-500">
-              이 물건은 법원에 <b>매각물건명세서</b>가 등록되어 있습니다. 대법원 사건검색에서
-              사건번호를 열면 「매각물건명세서」 버튼으로 바로 볼 수 있습니다.
-            </p>
-          )}
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <CopyButton onCopy={onCopy} caseNo={caseNo} copied={copied} />
-            <a
-              href={item.detailUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:border-amber-500 hover:bg-amber-50"
-              title="대법원 사건상세는 주소만으로 열리지 않습니다 — 사건검색 화면에서 사건번호를 붙여 넣으세요"
-            >
-              대법원 사건검색 열기 ↗
-            </a>
-          </div>
-        </Section>
       </div>
 
       {/* 동작 */}
@@ -1191,14 +1760,28 @@ function ItemDetail({
             이 구역 경매 {zoneTotal}건 전체 보기 →
           </button>
         )}
+        {specSheetId && (
+          <span className="w-full text-[9px] text-slate-400">
+            법원에 이 물건의 매각물건명세서가 등록되어 있습니다(문서 ID {specSheetId.slice(0, 8)}…).
+          </span>
+        )}
       </div>
 
       <p className="mt-2 text-[9.5px] leading-relaxed text-slate-400">
-        대법원 법원경매정보 원문 기준{asOf ? ` · ${asOf} 수집` : ""}. 사건상세(기일내역·면적·감정평가요항·사진)는
-        대법원 사건상세 조회에서만 나오므로, 수집되지 않은 항목은 원문에서 확인하세요. 매각기일·최저가는
-        변경될 수 있습니다.
+        대법원 법원경매정보 원문 기준{asOf ? ` · ${asOf} 수집` : ""}. 물건상세·현황조사서는 대법원 조회에서만
+        나오므로, 수집되지 않은 항목은 원문에서 확인하세요. 매각기일·최저가는 변경될 수 있습니다.
         {detail?.collectedAt ? ` · 상세 ${detail.collectedAt.slice(0, 10)} 수집` : ""}
       </p>
+
+      {photoIndex != null && photos.length > 0 && (
+        <PhotoLightbox
+          photos={photos}
+          index={Math.min(photoIndex, photos.length - 1)}
+          onIndex={setPhotoIndex}
+          onClose={() => setPhotoIndex(null)}
+          caseNo={caseNo}
+        />
+      )}
     </div>
   );
 }

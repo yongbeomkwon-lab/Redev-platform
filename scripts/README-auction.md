@@ -82,27 +82,43 @@ bbox 선별 → 광선교차(Point-in-Polygon). 한 물건이 여러 구역에 �
 사건 조회에서 받아 `auction-details.json` 에 넣고(아래 ⑤), 면적·감정평가요항표·사건 사진은
 사건상세에서만 나오므로 수집 전이면 “대법원 원문에서 확인”으로 안내한다. 추정값을 만들지 않는다.
 
-## ⑤ 사건 상세 — 사건 하나당 한 번
+## ⑤ 물건 상세·현황조사서 — 화면 하나에서 끝내기
 
-`fetch-auction-details.py` 는 **경매사건검색**(`POST /pgj/pgj15A/selectAuctnCsSrchRslt.on`,
-`{cortOfcCd, csNo}`)을 쓴다. 사건상세(PGJ15BM01)는 물건 하나당 한 번(588회)이지만, 사건검색은
-사건 하나당 한 번으로 그 사건의 **물건·목적물·기일내역·물건상태·청구금액·배당요구종기·목록내역**을
-한꺼번에 준다. 응답의 코드값(기일결과 `002`=유찰 등)은 사이트의 공식 코드표
-(`/pgj/scframe/lib/sccd/list.on`)에서 확인한 이름으로 바꾼다 — 추정하지 않는다.
+카드가 아니라 **경매 패널**에서 감정평가요항표·임차인·점유관계·사진까지 보려면, 물건검색 한 줄로는
+부족하다. `fetch-auction-details.py` 는 법원 화면이 실제로 부르는 세 요청을 그대로 쓴다.
+
+| 무엇 | 화면 | 요청 | 얻는 값 |
+|---|---|---|---|
+| 물건상세 | `PGJ15BM01` | `POST /pgj/pgj15B/selectAuctnCsSrchRslt.on`<br>`{"dma_srchGdsDtlSrch": {csNo, cortOfcCd, dspslGdsSeq, pgmId:"PGJ15BM01", srchInfo:""}}` | 기일이력(회차별 결과·최저가)·물건상태·목적물 면적/대지권·감정평가요항표·사건 사진(base64) |
+| 현황조사서 | `PGJ15BP01` | `POST /pgj/pgj15B/selectCurstExmndc.on`<br>`{"dma_srchCurstExmn": {cortOfcCd, csNo, auctnInfOriginDvsCd:"2", ordTsCnt:""}}` | 조사일시·임차인(보증금·차임·전입일·확정일자)·점유관계·부동산의 현황 |
+| 매각물건명세서 | `PGJ15BM01` | `POST /pgj/pgj15B/insertDspslGdsSpecArtcWdrwInf.on` (`--spec-link`) | 문서 ID·뷰어 주소(encParam)만 — 본문 PDF는 긁지 않는다 |
+
+* 요청 본문은 **dataMap 이름이 최상위 키**다(`{"dma_srchGdsDtlSrch": {…}}`). 평평한 `{cortOfcCd, csNo}`
+  로 보내면 서버가 받지 않는다.
+* 매각물건명세서는 매각기일 **1주 전**부터, 현황조사서·감정평가서는 **2주 전**부터 열린다. 그 밖의
+  물건은 "문서 없음"이 정상이다. 명세서 뷰어(ecfs.scourt.go.kr)는 서버측 클라이언트를 자주 거절하므로
+  `--spec-link` 실패는 오류로 보지 않고, 화면은 "원문에서 확인" 안내를 남긴다.
+* 사진은 `csPicLst[].picFile`(base64)을 `public/data/auction-photos/` 에 저장하고 경로만 JSON에 넣는다.
+  `--photos` 로 사건당 장수, `--max-photo-kb` 로 한 장 상한을 정한다.
 
 ```
-python3 scripts/fetch-auction-details.py --limit 20     # 먼저 20사건만
-python3 scripts/fetch-auction-details.py --status
-python3 scripts/fetch-auction-details.py --rebuild     # raw → auction-details.json
-python3 scripts/fetch-auction-details.py --self-test   # 파싱만 검사(HTTP 없음)
+python scripts/fetch-auction-details.py --limit 3      # 윈도우는 python
+python scripts/fetch-auction-details.py --status
+python scripts/fetch-auction-details.py --rebuild      # raw → auction-details.json
+python scripts/fetch-auction-details.py --self-test    # 파싱만 검사(HTTP 없음)
+python scripts/fetch-auction-details.py --probe B000210:2024타경1997:1
 ```
 
-* 결과는 `{meta, byCase: {"법원코드|사건번호": …}, byId: {물건 id: …}}`.
-  byCase 는 그 사건의 물건·목적물 여러 줄이 함께 쓰고, byId 는 면적·사진 같은 물건별 값이다.
-* **2026-11-27 이 작업 서버의 IP는 차단 상태였다** — 사건 조회가 `data.ipcheck=false`
-  ("비정상적인 접속")로 거절됐다. 그래서 이 경로의 HTTP 수집은 여기서 실제로 돌리지 못했고,
-  파싱·정규화는 한국 네트워크 브라우저로 정상 조회한 사건(서울중앙 2024타경1072)의 응답으로
-  `--self-test` 까지 맞췄다. 차단이 풀린 국내 네트워크에서 `--limit` 을 올려 가며 돌린다.
+* 결과는 `{meta, byCase: {"법원코드|사건번호": …}, byId: {물건 id: …}}`. byCase 키의 사건번호는 화면
+  표기(`2024타경1997`)이고, `auctions.json` 의 `caseNo` 와 같은 값이다.
+* **자동 수집이 막혔을 때**: 서버 IP가 `data.ipcheck=false`("비정상적인 접속")로 차단되면 아무것도
+  받지 못한다. 그때는 브라우저로 대법원 화면을 열어 확인한 값을 `scripts/data/court-auction/manual-details.json`
+  에 적어 두면 `--rebuild` 가 raw 와 함께 합친다(raw 우선). 2026-11-27 차단 당시 서울중앙
+  `2024타경1072`·`2024타경1997` 두 사건을 이 방식으로 넣었다(값은 화면 그대로, 없는 항목은 비움).
+* **2026-11-27 이 작업 서버의 IP는 차단 상태였다** — 그래서 HTTP 수집은 여기서 실제로 돌리지 못했고,
+  파싱은 사이트 화면 정의(`PGJ15BM01.xml`·`PGJ15BP01.xml`)의 필드 이름과 브라우저로 정상 조회한 두
+  사건의 화면 값으로 `--self-test` 까지 맞췄다(물건상세·현황조사서는 구조 fixture, 사건검색은 실제 응답).
+  차단이 풀린 국내 네트워크에서 `--limit 3` 부터 올려 가며 돌린다.
 
 ## 저작권·이용
 

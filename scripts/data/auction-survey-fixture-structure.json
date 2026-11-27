@@ -1,0 +1,40 @@
+{
+ "_note": "구조 검증용 fixture — 실제 사건 값이 아니다. 현황조사서 응답(팝업 PGJ15BP01, POST /pgj/pgj15B/selectCurstExmndc.on)의 필드 이름과 모양만 담아 파서를 검사한다. 이름·금액은 모두 가짜다.",
+ "status": 200,
+ "message": null,
+ "errors": null,
+ "data": {
+  "ipcheck": true,
+  "dma_curstExmnMngInf": {
+   "cortOfcCd": "B000210",
+   "csNo": "20200130012345",
+   "ordTsCnt": "1",
+   "userCsNo": "2020타경123456",
+   "exmnDtDts": "2024년04월14일17시40분^2024년04월15일23시46분",
+   "lesDts": "임차내역 기타 줄1\n임차내역 기타 줄2",
+   "printRltnDts": "부동산 현황 줄1\n부동산 현황 줄2"
+  },
+  "dlt_ordTsRlet": [
+   {
+    "objctSeq": "1",
+    "auctnPossRltnCd": "02",
+    "gdsPossCtt": "1층 전부 점유중\n출입문 잠김"
+   }
+  ],
+  "dlt_ordTsLserLtn": [
+   {
+    "objctSeq": "1",
+    "intrpsNm": "홍OO",
+    "printSt": "서울특별시 ○○구 ○○동 1-1 제1층 제101호",
+    "lesPartCtt": "1층 전부",
+    "lesUsgDts": "주거",
+    "gdsPossCtt": "2021.03.~현재",
+    "lesDposDts": "50,000,000원",
+    "mmrntAmtDts": "월 300,000원",
+    "mvinDtlCtt": "2021.03.02",
+    "rgstryCrtcpCfmtnCtt": "2021.03.05",
+    "lesDtsRmk": ""
+   }
+  ]
+ }
+}

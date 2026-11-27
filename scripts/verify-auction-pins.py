@@ -12,6 +12,8 @@
     4) **오른쪽 구역 패널에는 경매 목록이 다시 그려지지 않는다** — 헤더의 「⚖️ 경매 N건 · 보기」 한 줄뿐
     5) 같은 좌표의 다수 호실(쌍문동 507-1)은 핀 1개 + 패널 안 물건 전환
     6) 기존 레이어 토글이 그대로 있고 콘솔 오류 0건
+    7) DDP 1·2·3구역 물건에서 **권리 안전도 배지·매각물건명세서·임차인현황·점유관계·감정평가요항** 카드가
+       그려지고, 좌우로 넘치지 않는다(데스크톱 380px 패널 / 모바일 390px 시트).
 """
 import os
 import re
@@ -25,6 +27,7 @@ TAG = os.environ.get("SHOT_TAG", "2026-11-27")
 
 SIHEUNG = "11545UQ120PS202603100002"   # 시흥4동 1-1번지 일대 — 경매 4건, 좌표 4곳
 SSANGMUN = "11000UQ120PS202407010398"  # 쌍문동 507-1일원 — 한 좌표에 132사건
+DDP = "junggu-ddp-123"                 # DDP 1·2·3구역 — 상세 수집분(2024타경1997)이 있는 구역
 
 failures: list[str] = []
 errors: list[str] = []
@@ -200,6 +203,83 @@ with sync_playwright() as p:
         check(bool(box) and box["x"] < 20 and box["width"] > 340, "화면 폭을 채운 바닥 시트다")
         check(page.locator("aside").count() == 0, "오른쪽 패널은 함께 열리지 않는다")
         page.screenshot(path=f"{SHOTS}/리디브_경매_모바일시트_{TAG}.png")
+    browser.close()
+
+
+# ── 상세 패널(2026-11-27 UI 고도화) — DDP 1·2·3구역
+def open_ddp_case(page) -> None:
+    page.goto(f"{BASE}/?zone={DDP}", wait_until="domcontentloaded")
+    page.wait_for_selector('[data-testid="auction-pins-toggle"]', timeout=60000)
+    page.wait_for_timeout(3000)
+    page.evaluate("() => document.querySelector('[data-testid=\"auction-pins-toggle\"]').click()")
+    page.wait_for_timeout(1000)
+    page.evaluate("() => document.querySelector('[data-testid=\"panel-auction-badge\"]').click()")
+    page.wait_for_timeout(1200)
+    rows = page.locator('[data-testid="auction-row"]')
+    for i in range(rows.count()):
+        if "누죤" in rows.nth(i).inner_text():
+            rows.nth(i).click()
+            page.wait_for_timeout(1200)
+            return
+    if rows.count():
+        rows.nth(0).click()
+        page.wait_for_timeout(1200)
+
+
+def check_detail_cards(page, where: str) -> None:
+    panel = page.locator('[data-testid="auction-panel"]')
+    check(panel.count() == 1, f"{where}: 경매 패널이 열린다")
+    for tid, name in [("auction-rights-badge", "권리 안전도 배지"),
+                      ("auction-spec", "매각물건명세서"),
+                      ("auction-tenants", "임차인현황"),
+                      ("auction-occupancy", "점유관계"),
+                      ("auction-appraisal", "감정평가요항표")]:
+        check(page.locator(f'[data-testid="{tid}"]').count() >= 1, f"{where}: {name} 카드가 있다")
+    badge = page.locator('[data-testid="auction-rights-badge"]')
+    if badge.count():
+        level = badge.first.get_attribute("data-level")
+        print(f"       · 권리 배지: {level} — {badge.first.inner_text().splitlines()[0][:40]}")
+        check(level in ("risk", "safe", "check", "survey", "none"), f"{where}: 배지 등급이 정해져 있다({level})")
+    page.get_by_text("기일내역", exact=True).first.click()
+    page.wait_for_timeout(400)
+    text = re.sub(r"\s+", " ", panel.first.inner_text())
+    check("매각기일" in text, f"{where}: 기일내역이 펼쳐진다")
+    overflow = page.evaluate(
+        """() => {const el = document.querySelector('[data-testid="auction-panel"] .ui-scroll');
+                  return el ? [el.scrollWidth, el.clientWidth] : null}""")
+    check(bool(overflow) and overflow[0] <= overflow[1] + 1,
+          f"{where}: 가로 넘침 없음 ({overflow})")
+    box = panel.first.bounding_box()
+    print(f"       · 패널 {box}")
+    check(bool(box) and box["width"] <= 420, f"{where}: 좁은 패널 폭을 지킨다 ({box['width'] if box else '?'}px)")
+
+
+errors2: list[str] = []
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": 1440, "height": 950}, device_scale_factor=2)
+    page.on("console", lambda m: errors2.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors2.append(str(e)))
+    print("[10] DDP 1·2·3구역 — 상세 패널(데스크톱 1440)")
+    open_ddp_case(page)
+    check_detail_cards(page, "데스크톱")
+    page.screenshot(path=f"{SHOTS}/리디브_경매_UI고도화_데스크톱_{TAG}.png")
+    page.locator('[data-testid="auction-panel"]').screenshot(path=f"{SHOTS}/리디브_경매_UI고도화_패널_{TAG}.png")
+    real2 = [e for e in errors2 if "favicon" not in e.lower() and not e.startswith("Failed to load resource")
+             and "style property" not in e]
+    check(len(real2) == 0, f"데스크톱 콘솔 오류 {len(real2)}건")
+    if real2:
+        print("       ·", *real2[:3], sep="\n         ")
+    browser.close()
+
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2,
+                            is_mobile=True, has_touch=True)
+    print("[11] DDP 1·2·3구역 — 상세 패널(모바일 390×844)")
+    open_ddp_case(page)
+    check_detail_cards(page, "모바일")
+    page.screenshot(path=f"{SHOTS}/리디브_경매_UI고도화_모바일_{TAG}.png")
     browser.close()
 
 print()
