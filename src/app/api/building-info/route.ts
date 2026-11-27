@@ -65,17 +65,26 @@ function pnuToParams(pnu: string): { sigunguCd: string; bjdongCd: string; platGb
   };
 }
 
-/** 데이터포털 오류 응답(XML·JSON)에서 코드·메시지 */
+/**
+ * 데이터포털 오류 응답(XML·JSON)에서 코드·메시지.
+ *   · 성공 응답은 `resultCode: "00"` 이라 오류가 아니다.
+ *   · 장에 시 데이터포털은 `OpenAPI_ServiceResponse.cmmMsgHeader`(errMsg·returnReasonCode)로
+ *     답하는 경우가 있다 — 이 모양을 놓치면 "대장 없는 필지"로 잘못 읽고 12시간 캐시된다.
+ */
 function parseErrorText(text: string): { code: string; message: string } | null {
   const code =
     /"resultCode"\s*:\s*"([^"]+)"/.exec(text)?.[1] ??
     /<resultCode>([^<]+)<\/resultCode>/.exec(text)?.[1] ??
+    /"returnReasonCode"\s*:\s*"([^"]+)"/.exec(text)?.[1] ??
     /<returnReasonCode>([^<]+)<\/returnReasonCode>/.exec(text)?.[1] ??
     "";
   const message =
     /"resultMsg"\s*:\s*"([^"]+)"/.exec(text)?.[1] ??
     /<resultMsg>([^<]+)<\/resultMsg>/.exec(text)?.[1] ??
+    /"errMsg"\s*:\s*"([^"]+)"/.exec(text)?.[1] ??
+    /"returnAuthMsg"\s*:\s*"([^"]+)"/.exec(text)?.[1] ??
     /<returnAuthMsg>([^<]+)<\/returnAuthMsg>/.exec(text)?.[1] ??
+    /<errMsg>([^<]+)<\/errMsg>/.exec(text)?.[1] ??
     "";
   if (!code && !message) return null;
   if (code === "00" || code === "000") return null;
@@ -87,10 +96,24 @@ function friendly(code: string, message: string): string {
   if (code === "429" || /LIMITED|한도|quota/i.test(m)) {
     return "국토교통부 API 호출 한도에 걸렸습니다 — 잠시 뒤 다시 시도하거나 아래에 직접 입력하세요.";
   }
+  if (/TIMEOUT|SERVICETIMEOUT|서비스 연결실패/i.test(m)) {
+    return "국토교통부 건축물대장 서버가 응답하지 않습니다(일시 장애) — 잠시 뒤 다시 누르거나 아래에 직접 입력하세요.";
+  }
   if (["30", "22", "31", "32"].includes(code) || /UNREGISTERED|NOT_REGISTERED|SERVICE_KEY/i.test(m)) {
     return "건축물대장 서비스 키가 승인되지 않았습니다(데이터포털 활용신청 승인 확인) — 직접 입력하세요.";
   }
   return `건축물대장 조회에 실패했습니다 (${code || "UNKNOWN"}) — 직접 입력하세요.`;
+}
+
+/** 데이터포털 정상 응답 모양(`{"response":{"body":...}}`)인가 — 빈 응답을 '대장 없음'으로 오해하지 않게 */
+function hasBodyEnvelope(text: string): boolean {
+  if (!text.trimStart().startsWith("{")) return false;
+  try {
+    const parsed = JSON.parse(text) as { response?: { body?: unknown } };
+    return !!parsed.response && parsed.response.body !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 function itemsOf(text: string): RawItem[] {
@@ -234,6 +257,18 @@ export async function GET(request: Request) {
 
   const items = itemsOf(first.text);
   const total = totalOf(first.text);
+  // ① 데이터포털이 HTTP 200 으로 오류 봉투(OpenAPI_ServiceResponse 등)를 주는 경우
+  // ② 정상 봉투가 아닌 응답(프록시 오류 페이지 등) — 이 둘을 '대장 없는 필지'로 오해해 캐시하지 않는다
+  if (!hasBodyEnvelope(first.text)) {
+    return fail(
+      "MOLIT_BAD_RESPONSE",
+      502,
+      "국토교통부 건축물대장 응답을 읽지 못했습니다 — 잠시 뒤 다시 시도하거나 아래에 직접 입력하세요."
+    );
+  }
+  if (items.length === 0 && total > 0) {
+    return fail("MOLIT_EMPTY_ITEMS", 502, "건축물대장 응답에 항목이 비어 있습니다 — 잠시 뒤 다시 시도하세요.");
+  }
   if (total > items.length && items.length > 0) {
     // 한 필지에 표제부가 여러 동(예: 주건축물 + 부속건축물)일 때만 2페이지를 더 본다
     const next = await fetchPage(params, key, 2).catch(() => null);

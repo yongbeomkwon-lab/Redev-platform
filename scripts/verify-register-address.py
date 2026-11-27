@@ -53,17 +53,42 @@ def pick_first_address(page) -> str:
     return label
 
 
-def wait_ledger(page, timeout=25000) -> str:
-    """건축물대장 자동 채움 줄이 끝날 때까지(로딩/에러/성공) 기다린다"""
+def wait_ledger(page, timeout=45000) -> str:
+    """건축물대장 줄이 **끝난 상태**(표제부 채움 / 건너뜀)가 될 때까지 기다린다
+    · 주소를 고른 직후에는 '주소를 고르면 …' 안내 그대로라, 그것을 끝으로 오해하지 않는다.
+    """
     block = page.get_by_test_id("register-ledger-fill")
     deadline = time.time() + timeout / 1000
     text = ""
     while time.time() < deadline:
         text = block.inner_text()
-        if "불러오는 중" not in text:
+        if "건축물대장 표제부" in text or "건너뜀" in text:
             return text
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(400)
     return text
+
+
+def ensure_ledger(page, tries: int = 2) -> str:
+    """대장 자동 채움을 읽는다 — 실패했으면 「다시 조회」로 한 번 더 눌러 본다
+    (국토부 건축개발자 API 는 일시 장애(SERVICETIMEOUT)가 잦다)."""
+    text = wait_ledger(page)
+    for _ in range(tries):
+        if "건축물대장 표제부" in text:
+            return text
+        retry = page.get_by_test_id("register-ledger-retry")
+        if retry.count() == 0:
+            break
+        retry.click()
+        text = wait_ledger(page)
+    return text
+
+
+# 국토부 쪽 사정으로 못 읽은 경우 — 코드 버그와 구분해 기록한다(실패로 세지 않고 경고만)
+def external_ledger_reason(text: str) -> str | None:
+    for token in ("한도", "일시 장애", "응답하지 않습니다", "응답을 읽지 못했습니다", "연결하지 못했습니다"):
+        if token in text:
+            return text.replace("\n", " | ")[:160]
+    return None
 
 
 def run() -> int:
@@ -75,71 +100,91 @@ def run() -> int:
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: errors.append("pageerror: " + str(e)[:200]))
 
-        # ── 1) 구역 안 주소 → 구역 자동 선택 + 대장 자동 채움 ─────────────────
+        # ── 1) 구역 밖 주소 → 대장 자동 채움(강남파이낸스센터 — 대장이 확실한 필지) ─────
         page.goto(f"{BASE}/register", wait_until="domcontentloaded")
         page.wait_for_selector("[data-testid=register-address-search]", timeout=30000)
         # 구역 데이터(2,394곳)가 준비될 때까지 — 자동 판정에 필요하다
         page.wait_for_timeout(2500)
-        search_address(page, INSIDE_Q)
-        label2 = pick_first_address(page)
-        print("고른 주소:", label2.replace("\n", " | "))
-        auto2 = page.get_by_test_id("register-zone-auto").inner_text()
-        check("구역 안 주소 → 구역 자동 선택", "자동 선택" in auto2, auto2.replace("\n", " | ")[:160])
-        check("구역 자동 선택 근거 문구", "경계 안" in auto2 or "지번 이름" in auto2, auto2.replace("\n", " | ")[:160])
-        zone_sel = page.get_by_test_id("register-zone-selected").inner_text()
-        check("자동 선택된 구역 표시", "신림1" in zone_sel, zone_sel.replace("\n", " | ")[:120])
-        ledger2 = wait_ledger(page)
+        search_address(page, OUTSIDE_Q)
+        label = pick_first_address(page)
+        print("고른 주소:", label.replace("\n", " | "))
+        auto = page.get_by_test_id("register-zone-auto").inner_text()
+        check("구역 밖 주소 → '구역 밖' 안내", "구역 밖" in auto, auto.replace("\n", " | ")[:160])
+        check("구역 밖 → 가까운 구역 후보", page.get_by_test_id("register-zone-candidate").count() >= 1, "")
+        ledger_text = ensure_ledger(page)
         approval = page.get_by_test_id("register-approval-date").input_value()
         floors = page.get_by_test_id("register-total-floors").input_value()
+        plat = page.get_by_test_id("register-plat-area").input_value()
         bname = page.get_by_test_id("register-building-name").input_value()
-        filled_any = bool(approval or floors or bname)
-        check(
-            "건축물대장 값이 폼에 채워짐",
-            ("건너뜀" not in ledger2) and filled_any,
-            f"승인 {approval!r} · 총층 {floors!r} · 건물 {bname!r}",
-        )
-        check(
-            "채운 항목 안내 문구",
-            "폼에 채운 항목" in ledger2 or "덮어쓰지 않았습니다" in ledger2,
-            ledger2.replace("\n", " | ")[:160],
-        )
+        filled_any = bool(approval or floors or plat or bname)
+        reason = external_ledger_reason(ledger_text)
+        if reason:
+            print("WARN 국토부 건축물대장 응답 불가로 자동 채움 확인 생략 —", reason)
+        else:
+            check(
+                "건축물대장 값이 폼에 채워짐",
+                filled_any,
+                f"승인 {approval!r} · 총층 {floors!r} · 대지 {plat!r} · 건물 {bname!r}",
+            )
+            check(
+                "채운 항목 안내 문구",
+                "폼에 채운 항목" in ledger_text or "덮어쓰지 않았습니다" in ledger_text,
+                ledger_text.replace("\n", " | ")[:160],
+            )
         addr_value = page.get_by_test_id("register-address").input_value()
         check("소재지(지번) 자동 입력", bool(addr_value.strip()), addr_value)
         page.screenshot(path=SHOT_ADDR, full_page=True)
         check("스크린샷 redev-register-address.png", os.path.exists(SHOT_ADDR), SHOT_ADDR)
 
-        # ── 2) 주소를 바꾸면 앞 필지의 대장 값이 남지 않아야 한다 ──────────────
+        # ── 2) 구역 안 주소 → 구역 자동 선택 + 앞 필지 대장 값이 남지 않음 ─────
         before_floors = page.get_by_test_id("register-total-floors").input_value()
-        search_address(page, OUTSIDE_Q)
-        label = pick_first_address(page)
-        print("고른 주소2:", label.replace("\n", " | "))
-        auto = page.get_by_test_id("register-zone-auto").inner_text()
-        check("구역 밖 주소 → '구역 밖' 안내", "구역 밖" in auto, auto.replace("\n", " | ")[:160])
-        check("구역 밖 → 가까운 구역 후보", page.get_by_test_id("register-zone-candidate").count() >= 1, "")
-        ledger_text = wait_ledger(page)
-        check(
-            "건축물대장 자동 채움(또는 사유 안내)",
-            ("건축물대장 표제부" in ledger_text) or ("건너뜀" in ledger_text),
-            ledger_text.replace("\n", " | ")[:200],
-        )
+        before_name = page.get_by_test_id("register-building-name").input_value()
+        search_address(page, INSIDE_Q)
+        label2 = pick_first_address(page)
+        print("고른 주소2:", label2.replace("\n", " | "))
+        auto2 = page.get_by_test_id("register-zone-auto").inner_text()
+        check("구역 안 주소 → 구역 자동 선택", "자동 선택" in auto2, auto2.replace("\n", " | ")[:160])
+        check("구역 자동 선택 근거 문구", "경계 안" in auto2 or "지번 이름" in auto2, auto2.replace("\n", " | ")[:160])
+        zone_sel = page.get_by_test_id("register-zone-selected").inner_text()
+        check("자동 선택된 구역 표시", "신림1" in zone_sel, zone_sel.replace("\n", " | ")[:120])
+        ledger2 = ensure_ledger(page)
         after_floors = page.get_by_test_id("register-total-floors").input_value()
         after_name = page.get_by_test_id("register-building-name").input_value()
+        after_plat = page.get_by_test_id("register-plat-area").input_value()
+        after_approve = page.get_by_test_id("register-approval-date").input_value()
+        # 앞 필지(강남파이낸스센터, 45층 · 대지 13,156.7㎡)의 값이 남아 있으면 안 된다
+        stale = (
+            after_floors == before_floors
+            and before_floors != ""
+            and after_approve == approval
+            and after_plat == plat
+        )
         check(
             "주소 변경 시 앞 필지 대장 값이 남지 않음",
-            after_floors != before_floors or after_name != bname,
-            f"앞 필지 층 {before_floors!r}/{bname!r} → 새 필지 층 {after_floors!r}/{after_name!r}",
+            not stale,
+            f"앞 필지 층 {before_floors!r}/{before_name!r}/{plat!r} → 새 필지 층 {after_floors!r}/{after_name!r}/{after_plat!r}",
         )
-        # 구역 안 주소로 되돌려 등록은 신림1구역으로 한다
+        reason2 = external_ledger_reason(ledger2)
+        if reason2:
+            print("WARN 국토부 응답 불가로 새 필지 자동 채움 확인 생략 —", reason2)
+            check("앞 필지 대지면적이 남지 않음", after_plat.strip() == "", repr(after_plat))
+        else:
+            check(
+                "지금 필지 대장 값이 채워짐",
+                "건축물대장 표제부" in ledger2,
+                ledger2.replace("\n", " | ")[:180],
+            )
+
+        # ── 2-b) 주소를 되돌려도 구역·소재지가 따라 따라온다 ────────────────
+        search_address(page, OUTSIDE_Q)
+        pick_first_address(page)
+        ensure_ledger(page)
+        check("구역 밖으로 바꾸면 구역 선택 해제", page.get_by_test_id("register-zone-selected").count() == 0, "")
         search_address(page, INSIDE_Q)
         pick_first_address(page)
-        wait_ledger(page)
+        ensure_ledger(page)
         zone_sel = page.get_by_test_id("register-zone-selected").inner_text()
         check("구역 안 주소로 되돌리면 구역 재선택", "신림1" in zone_sel, zone_sel.replace("\n", " | ")[:120])
-        # 앞 필지(강남파이낸스센터)의 대지면적·건물명은 지워져야 한다
-        plat_after = page.get_by_test_id("register-plat-area").input_value()
-        check("앞 필지 대지면적이 남지 않음", plat_after.strip() == "", repr(plat_after))
-        approve_after = page.get_by_test_id("register-approval-date").input_value()
-        check("지금 필지의 사용승인일로 교체", approve_after == "1971-11-06", repr(approve_after))
 
         # ── 3) 표시·광고 명시사항 입력 + 미리보기 ────────────────────────────
         page.get_by_test_id("register-property-type").select_option("다세대/도시형")

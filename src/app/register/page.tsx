@@ -534,10 +534,10 @@ export default function RegisterPage() {
     await loadLedger(nextPnu);
   }
 
-  async function loadLedger(targetPnu: string) {
+  async function loadLedger(targetPnu: string, opts: { fresh?: boolean } = {}) {
     setLedgerState({ status: "loading" });
     try {
-      const res = await fetch(`/api/building-info?pnu=${targetPnu}`, { cache: "no-store" });
+      const res = await fetch(`/api/building-info?pnu=${targetPnu}${opts.fresh ? "&fresh=1" : ""}`, { cache: "no-store" });
       const json = (await res.json()) as BuildingInfoResponse;
       if (json?.ok) {
         if (json.primary) {
@@ -1068,7 +1068,19 @@ export default function RegisterPage() {
                   )}
                 </>
               ) : ledgerState.status === "error" || ledgerState.status === "none" ? (
-                <span className="text-amber-800">건축물대장 자동 채움 건너뜀 — {ledgerState.message}</span>
+                <span className="flex flex-wrap items-center gap-1.5 text-amber-800">
+                  <span>건축물대장 자동 채움 건너뜀 — {ledgerState.message}</span>
+                  {pnu && (
+                    <button
+                      type="button"
+                      data-testid="register-ledger-retry"
+                      onClick={() => void loadLedger(pnu, { fresh: true })}
+                      className="rounded-full border border-amber-400 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-100"
+                    >
+                      다시 조회
+                    </button>
+                  )}
+                </span>
               ) : (
                 <span className="text-slate-400">주소를 고르면 건축물대장(사용승인일·층수·대지면적·주용도)을 채웁니다.</span>
               )}
