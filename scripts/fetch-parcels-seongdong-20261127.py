@@ -108,6 +108,123 @@ ZONES = {
         "seeds": ["15"],
         "max_ring": 7,
     },
+    "haengdang-300-1": {
+        "label": "행당동 300-1 일대(행당8구역)",
+        "dong": "행당동",
+        "center": (37.5559, 127.0290),
+        "radius": 420,
+        "target": 66276.1,
+        "seeds": ["300-1"],
+        "max_ring": 6,
+    },
+    "songjeong-73-735": {
+        "label": "(가)송정동 73-735",
+        "dong": "송정동",
+        "center": (37.550577, 127.066790),
+        "radius": 500,
+        "target": 103865.4,
+        "seeds": ["73-735"],
+        "max_ring": 8,
+    },
+    "jayang-548": {
+        "label": "지주택 자양동 548",
+        "dong": "자양동",
+        "center": (37.537463, 127.067968),
+        "radius": 300,
+        "target": 34373.9,
+        "seeds": ["548"],
+        "max_ring": 5,
+    },
+    "sindang-13": {
+        "label": "신당13구역(신당동 236-67)",
+        "dong": "신당동",
+        "center": (37.5632, 127.0142),
+        "radius": 420,
+        "target": 68916,
+        "seeds": ["236-67"],
+        "max_ring": 6,
+    },
+    "sindang-14": {
+        "label": "신당14구역(신당동 123-1)",
+        "dong": "신당동",
+        "center": (37.5657, 127.0175),
+        "radius": 380,
+        "target": 34121,
+        "seeds": ["123-1"],
+        "max_ring": 5,
+    },
+    "sindang-hyundai": {
+        "label": "신당현대아파트(신당동 840)",
+        "dong": "신당동",
+        "center": (37.5608, 127.0186),
+        "radius": 300,
+        "target": 44338,
+        "seeds": ["840"],
+        "max_ring": 4,
+    },
+    "bangbae-920-1": {
+        "label": "방배동 920-1 일대 모아타운",
+        "dong": "방배동",
+        "center": (37.483059, 126.992787),
+        "radius": 320,
+        "target": 19070.3,
+        "seeds": ["920-1"],
+        "max_ring": 5,
+    },
+    "seocho-1506-6": {
+        "label": "서초동 1506-6 일대 모아타운",
+        "dong": "서초동",
+        "center": (37.488043, 127.005783),
+        "radius": 380,
+        "target": 46697.4,
+        "seeds": ["1506-6"],
+        "max_ring": 6,
+    },
+    "seocho-1487": {
+        "label": "(가)서초동 1487 모아타운",
+        "dong": "서초동",
+        "center": (37.482802, 127.006059),
+        "radius": 380,
+        "target": 49300,
+        "seeds": ["1487"],
+        "max_ring": 6,
+    },
+    "samseong-84": {
+        "label": "삼성동 84 모아타운",
+        "dong": "삼성동",
+        "center": (37.518737, 127.060994),
+        "radius": 300,
+        "target": 34802,
+        "seeds": ["84"],
+        "max_ring": 4,
+    },
+    "dongjak-102-8": {
+        "label": "동작동 102-8 일대 모아타운(사당20구역)",
+        "dong": "동작동",
+        "center": (37.496718, 126.981386),
+        "radius": 320,
+        "target": 21211,
+        "seeds": ["102-8"],
+        "max_ring": 5,
+    },
+    "sangil-300": {
+        "label": "(가)상일동 300",
+        "dong": "상일동",
+        "center": (37.547698, 127.171608),
+        "radius": 420,
+        "target": 59956,
+        "seeds": ["300"],
+        "max_ring": 5,
+    },
+    "myeongil-100": {
+        "label": "(가)명일동 100",
+        "dong": "명일동",
+        "center": (37.548560, 127.154396),
+        "radius": 360,
+        "target": 42210,
+        "seeds": ["100"],
+        "max_ring": 5,
+    },
 }
 
 dLat = lambda m: m / 111132.0
@@ -164,6 +281,11 @@ def collect(features, box):
         if not (minlat <= lat <= maxlat and minlng <= lng <= maxlng):
             continue
         raw = str(p.get("jibun") or "").strip()
+        # 좌표계 방어: crs 파라미터가 무시되면 투영좌표(수십만)로 올 수 있다
+        if abs(ring[0][0]) > 1000 or abs(ring[0][1]) > 1000:
+            from pyproj import CRS, Transformer
+            tr = Transformer.from_crs(CRS.from_epsg(5179), CRS.from_epsg(4326), always_xy=True)
+            ring = [list(tr.transform(x, y)) for x, y in ring]
         m = re.match(r"^(\d+(?:-\d+)?)\s*(.*)$", raw)
         num = m.group(1) if m else raw
         tail = (m.group(2).strip() if m else "") or str(p.get("jimok") or "").strip()
@@ -267,7 +389,7 @@ def assemble(zid: str, parcels: list[dict], z: dict):
         except Exception:
             return 999.0
 
-    max_road_area = float(z.get("max_road_area", 2500.0))
+    max_road_area = float(z.get("max_road_area", 8000.0))
 
     def passable_road(k):
         poly = polys[k][1]

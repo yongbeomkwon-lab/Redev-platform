@@ -20,6 +20,11 @@ SHOT = "/workspace/downloads"
 
 CASES = [
     ("sd-geumnam-market", "금남시장"),
+    ("11000UQ120PS202411014498", "금호21구역"),
+    ("11000UQ120PS202505310983", "금호동4가 1458"),
+    ("sd-eungbong-daerim1", "응봉대림1차아파트"),
+    ("sd-songjeong-73-735", "송정동 73-735"),
+    ("seocho-1487" , "서초동 1487"),
     ("sd-eungbong-geumho-hyundai", "금호현대아파트"),
     ("sd-eungbong-daerim1", "응봉대림1차아파트"),
     ("sd-majang-793-22", "마장동 793-22"),
