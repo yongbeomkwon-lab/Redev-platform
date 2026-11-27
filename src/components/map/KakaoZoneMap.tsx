@@ -4284,7 +4284,9 @@ export default function KakaoZoneMap({
 
                   <div style={{ marginTop: "2px", fontSize: "10px", color: "#475569" }}>
                     {p.areaLabel}
-                    {p.floor ? ` · ${p.floor}층` : ""}
+                    {/* 층 표기 — 숫자만 있으면 '층'을 붙이고, 이미 '401호'·'3 / 20'처럼 적혀 있으면 그대로 둔다
+                        (등록 매물은 상세주소를 그대로 넣어 '401호층'처럼 두 번 붙는 일이 있었다) */}
+                    {p.floor ? ` · ${/^\d+$/.test(p.floor.trim()) ? `${p.floor.trim()}층` : p.floor.trim()}` : ""}
                     {p.zoneName ? ` · ${p.zoneName}` : ""}
                   </div>
 
