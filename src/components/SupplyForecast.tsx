@@ -328,6 +328,8 @@ export default function SupplyForecast() {
                     ? scope.beyondZones.y2032
                     : scope.beyondZones.y2033plus;
                 const hoverTop = [...tips].sort((a, c) => c.households - a.households).slice(0, 3);
+                // 툴팁 첫 줄 — 2033+ 막대는 “2033+년”이 아니라 “2033년 이후”로 읽힌다
+                const barTitle = b.kind === "later" ? (b.key === "2032" ? "2032년" : "2033년 이후") : `${b.label}년`;
                 return (
                   <button
                     key={b.key}
@@ -367,7 +369,7 @@ export default function SupplyForecast() {
                       }
                     >
                       <span className="flex items-baseline justify-between text-[10px] text-white/60">
-                        <span>{b.label}년</span>
+                        <span>{barTitle}</span>
                         <span className="font-semibold text-white">
                           {fmt(b.value)}세대
                           {b.kind === "later" ? " (참고)" : ""}
