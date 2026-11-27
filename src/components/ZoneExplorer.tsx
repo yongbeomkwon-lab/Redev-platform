@@ -539,8 +539,8 @@ export default function ZoneExplorer() {
     setTxPins([]);
     setAuctionFocus(null);
     setAuctionListFocus(null);
-    // 경매 핀 토글도 기본(꺼짐)으로 돌린다 — 구역을 바꿀 때마다 사용자가 켠 상태가 남지 않게
-    setAuctionPinsOn(false);
+    // 경매 핀 토글은 **사용자가 켜 둔 상태를 그대로 둔다** — 한 번 켜고 여러 구역을 보는 흐름이 자연스럽고,
+    //   여기서 꺼 버리면 경매 목록·핀에서 들어올 때 켠 상태(pickZone opts.auction)까지 되돌려진다.
     // 왼쪽 창의 경매 상세는 **그 구역의 물건일 때만** 남긴다(핀을 눌러 들어온 경우)
     setAuctionDetail((d) => (d && d.zoneId === selectedId ? d : null));
   }, [selectedId]);
@@ -1286,8 +1286,8 @@ export default function ZoneExplorer() {
     // → 필터를 풀어 경계를 다시 그린다(검색·주소 판정은 필터와 무관하게 전체를 본다).
     const z = seoulZones.find((s) => s.id === id);
     if (z && typeFilter !== "전체" && z.type !== typeFilter) setTypeFilter("전체");
-    // 경매 목록에서 들어온 경우 경매 핀도 켠다 — 구역을 고르면 선택 초기화 효과가 ‘자동(켜짐)’으로
-    // 돌리지만, 같은 구역에서 핀을 꺼 둔 상태로 목록을 누르는 경우까지 확실히 켜기 위해 명시한다.
+    // 경매 목록에서 들어온 경우 경매 핀도 켠다 — 핀은 첫 화면에서 꺼 두므로, 목록·카드로 경매를
+    // 보러 들어온 사람에게는 위치 핀이 같이 보여야 한다(같은 구역에서 꺼 둔 경우까지 확실히 켠다).
     if (opts?.auction) setAuctionPinsOn(true);
   }
 
