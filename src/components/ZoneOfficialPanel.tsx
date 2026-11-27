@@ -1,20 +1,20 @@
 "use client";
 // ─────────────────────────────────────────────────────────────────────────────
 // ZoneOfficialPanel — 서울시 전수 정비구역 중 '대표 구역'이 아닌 구역의 상세 카드
-//   서울 열린데이터광장 고시 데이터(구역명·사업유형·추진단계·고시면적·기준일)를 그대로 보여준다.
+//   사업 진행단계·구역현황(추정)·매물·경매·국토부 실거래가를 한 카드에 위아래로 쌓아 보여준다.
 //   · 같은 구역의 다른 이름(지번·가칭)은 `alias`로 함께 보여주고, 이름의 출처(동작구청·정보몽땅 등)를 밝힌다.
 //   · 구역계가 아직 고시되지 않은 후보지(geom: "미고시", 예: 사당21구역)는 경계 대신
-//     서울시(정보몽땅) 위치도 링크와 '미고시' 상태를 보여준다 — 지도에도 폴리곤을 그리지 않는다.
-//   실거래·매물·세대수는 대표 구역에만 샘플로 붙어 있어 여기서는 "미등록"으로 안내한다.
+//     '미고시' 배지로 알린다 — 지도에도 폴리곤을 그리지 않는다.
+//   세대수·비례율·시공사 같은 샘플 값은 대표 구역에만 붙어 있다.
 //
 // ▶ 레이아웃: 이 패널은 **400px 오른쪽 드로어 안에서만** 쓰인다. 예전에는 화면 폭 기준
 //   `lg:grid-cols-2` 2단 배치라, 넓은 화면에서 드로어 안이 170px 씩 쪼개져 라벨이
-//   한 글자씩 세로로 쌓이고 고시레코드가 상자를 넘쳤다. 지금은 **항상 1단(위아래로 쌓기)**,
+//   한 글자씩 세로로 쌓이고 값이 상자를 넘쳤다. 지금은 **항상 1단(위아래로 쌓기)**,
 //   라벨은 줄바꿈 금지, 값은 필요할 때만 단어 단위로 감싼다.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { SeoulZonesMeta, SeoulZone } from "@/lib/seoul-zones";
 import type { Listing } from "@/lib/types";
-import { TYPE_COLORS, badgeColor } from "./map/colors";
+import { TYPE_COLORS } from "./map/colors";
 import ZoneTransactions from "./ZoneTransactions";
 import ZoneTalk from "./community/ZoneTalk";
 import { ZoneListingCards } from "./ZoneListingCards";
@@ -26,8 +26,6 @@ import ZoneAuctions from "./ZoneAuctions";
 import StageTimeline from "./StageTimeline";
 import ZoneConsent from "./ZoneConsent";
 import ZoneVitalStats from "./ZoneVitalStats";
-
-const PYEONG = 3.305785;
 
 export default function ZoneOfficialPanel({
   zone,
@@ -46,7 +44,7 @@ export default function ZoneOfficialPanel({
   zone: SeoulZone;
   meta: SeoulZonesMeta;
   onClose: () => void;
-  /** 이 구역의 매물(zoneId 또는 zoneName 매칭) — 있으면 고시 데이터 아래에 카드로 붙는다 */
+  /** 이 구역의 매물(zoneId 또는 zoneName 매칭) — 있으면 구역현황 아래에 카드로 붙는다 */
   listings?: Listing[];
   /** 이 구역 경계 안의 법원경매 물건 — 있으면 「⚖️ 구역 내 진행 경매 N건」 섹션을 그린다 */
   auctions?: AuctionItem[];
@@ -65,13 +63,8 @@ export default function ZoneOfficialPanel({
   onOpenBuilding?: (target: BuildingTradeTarget) => void;
 }) {
   const color = TYPE_COLORS[zone.type] ?? "#64748b";
-  const pyeong = Math.round(zone.area / PYEONG);
   const aliases = (zone.alias ?? []).filter((a) => a !== zone.name);
   const boundaryMissing = !zone.polygon || zone.geom === "미고시" || zone.geom === "고시미반영";
-  // 이미 정비구역 지정·고시가 끝난 구역에 "정비구역 지정 전이라 확정 전"을 붙이면 앞 줄(단계)과 모순된다
-  //   — 고시도면 경계라도 단계가 지정(안) 공람·후보지선정이면 종전 문구를 그대로 쓴다.
-  const districtDesignated =
-    /정비구역\s*지정/.test(zone.stage ?? "") && !/\(안\)|공람|열람|추진중/.test(zone.stage ?? "");
   const sources = [...(zone.sources ?? []), ...(zone.nameSources ?? [])].filter(
     (s, i, arr) => arr.findIndex((x) => x.url === s.url && x.label === s.label) === i
   );
@@ -142,170 +135,7 @@ export default function ZoneOfficialPanel({
         </p>
       )}
 
-      {/* 서울시 고시 데이터 — 1단. 라벨은 줄바꿈 금지, 값은 칸 안에서만 감싼다 */}
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <span className="whitespace-nowrap text-[11px] font-semibold text-emerald-800">서울시 고시 데이터</span>
-          <span className="whitespace-nowrap text-[10px] text-emerald-700/70">{meta.asOf} 기준</span>
-        </div>
-        <dl className="grid grid-cols-[5.2rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs text-emerald-900">
-          <dt className="whitespace-nowrap text-emerald-700/80">구역명</dt>
-          <dd className="min-w-0 break-words font-medium">{zone.name}</dd>
-          {zone.selectedAt && (
-            <>
-              <dt className="whitespace-nowrap text-emerald-700/80">후보지 선정</dt>
-              <dd className="min-w-0 break-words">{zone.selectedAt}</dd>
-            </>
-          )}
-          <dt className="whitespace-nowrap text-emerald-700/80">자치구</dt>
-          <dd className="min-w-0 break-words">{zone.gu}</dd>
-          <dt className="whitespace-nowrap text-emerald-700/80">사업유형</dt>
-          <dd className="min-w-0 break-words">
-            {zone.kind}
-            {zone.badgeType && (
-              <span
-                className="ml-1.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white align-middle"
-                style={{ background: badgeColor(zone.badgeType, zone.type) }}
-                title="사업 방식이 확정되기 전이라 지도 뱃지에 이렇게 표기합니다"
-              >
-                {zone.badgeType}
-              </span>
-            )}
-          </dd>
-          <dt className="whitespace-nowrap text-emerald-700/80">추진단계</dt>
-          <dd className="min-w-0 break-words">{zone.stage}</dd>
-          <dt className="whitespace-nowrap text-emerald-700/80">구역면적</dt>
-          <dd className="min-w-0">
-            {zone.area.toLocaleString()}㎡
-            <span className="ml-1 text-[10px] text-emerald-700/80">
-              ({(zone.area / 10000).toFixed(1)}만㎡ · {pyeong.toLocaleString()}평)
-            </span>
-          </dd>
-          {(zone.owners || zone.householdsNow || zone.householdsPlan || zone.deterioration) && (
-            <>
-              <dt className="whitespace-nowrap text-emerald-700/80">사업 개요</dt>
-              <dd className="min-w-0 text-[11px] leading-relaxed">
-                {[
-                  zone.owners ? `토지등소유자 약 ${zone.owners.toLocaleString()}명` : "",
-                  zone.householdsNow ? `기존 ${zone.householdsNow.toLocaleString()}세대` : "",
-                  zone.householdsPlan ? `계획 ${zone.householdsPlan.toLocaleString()}세대(구상)` : "",
-                  zone.deterioration ? `노후도 ${zone.deterioration}%` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </dd>
-            </>
-          )}
-          <dt className="whitespace-nowrap text-emerald-700/80">경계 도형</dt>
-          <dd className="min-w-0 break-words text-[11px] leading-relaxed">
-            {zone.geom === "UQ181" ? (
-              <>
-                의제처리구역 실경계(필지선 추종)
-                <span className="text-emerald-700/70"> · {meta.asOfDetail} 기준</span>
-              </>
-            ) : zone.geom === "공고도면" ? (
-              <>
-                구청·서울시 공고 도면에서 옮긴 경계
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
-                </span>
-              </>
-            ) : zone.geom === "고시도면" ? (
-              <>
-                구청·서울시 고시 지형도면에서 옮긴 경계
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
-                  {districtDesignated ? " · 고시로 확정된 구역계" : " · 정비구역 지정 전이라 확정 전"}
-                </span>
-              </>
-            ) : zone.geom === "추진위안내도" ? (
-              <>
-                추진위·신탁사 사업설명회 상세구역도에서 옮긴 경계
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 정비구역 지정 전이라 확정 전
-                </span>
-              </>
-            ) : zone.geom === "가상경계" ? (
-              <>
-                검토 중인 가상 경계(확정 전)
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""} · 사업지 선정 전이라 실제 경계와 다를 수 있음
-                </span>
-              </>
-            ) : zone.geom === "참고도" ? (
-              <>
-                검토용 참고도에서 옮긴 경계 — 공식 구역계 아님(공개 전)
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
-                </span>
-              </>
-            ) : zone.geom === "필지정합" ? (
-              <>
-                연속지적도 필지선에 맞춰 다시 조립한 경계
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
-                </span>
-              </>
-            ) : zone.geom === "직접작도" ? (
-              <>
-                지도에서 직접 그린 경계(직접작도) — 고시·공고 도면 참고, 정밀 측량값 아님
-                {zone.boundaryNote && <span className="text-emerald-700/70"> · {zone.boundaryNote}</span>}
-              </>
-            ) : zone.geom === "근사원" ? (
-              <>
-                근사 경계 — 실제 구역계 아님(경계 미고시)
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
-                </span>
-              </>
-            ) : zone.geom === "미고시" ? (
-              <>
-                미고시 — 정비구역 지정 전이라 법정 구역계가 없습니다
-                {zone.centerLabel && <span className="text-emerald-700/70"> · 지도 표시: {zone.centerLabel}</span>}
-              </>
-            ) : zone.geom === "고시미반영" ? (
-              <>
-                정비구역 지정 고시 완료 — 고시 도면 경계는 아직 반영하지 않았습니다
-                {zone.centerLabel && <span className="text-emerald-700/70"> · 지도 표시: {zone.centerLabel}</span>}
-                {zone.boundaryNote && <span className="text-emerald-700/70"> · {zone.boundaryNote}</span>}
-              </>
-            ) : zone.geom === "UQ120보정" ? (
-              <>
-                서울시 고시 경계(일반화 도형)를 인접 구역에 맞춰 보정
-                <span className="text-emerald-700/70">
-                  {zone.boundaryNote ? ` · ${zone.boundaryNote}` : ""}
-                </span>
-              </>
-            ) : (
-              <>
-                도시계획사업 고시 경계
-                {zone.boundaryNote && (
-                  <span className="text-emerald-700/70"> · {zone.boundaryNote}</span>
-                )}
-              </>
-            )}
-          </dd>
-          <dt className="whitespace-nowrap text-emerald-700/80">고시 레코드</dt>
-          <dd className="min-w-0">
-            <span className="block break-all rounded bg-white/70 px-1.5 py-1 font-mono text-[10px] leading-relaxed text-emerald-800/90">
-              {zone.sourceId}
-            </span>
-          </dd>
-        </dl>
-        {zone.areaNote && <p className="mt-2 text-[10px] leading-relaxed text-emerald-700/80">면적 기준: {zone.areaNote}</p>}
-        {zone.locationMap && (
-          <a
-            href={zone.locationMap}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:border-emerald-500"
-          >
-            서울시 위치도 보기 ↗
-          </a>
-        )}
-      </div>
-
-      {/* 구역현황(추정) — 고시 데이터(면적·단계) 바로 아래에 노후도·동수밀도를 붙여
+      {/* 구역현황(추정) — 단계 타임라인 아래에 노후도·동수밀도를 붙여
           '이 구역이 얼마나 오래됐고 얼마나 빽빽한지'를 같은 자리에서 읽게 한다.
           경계 폴리곤이 없는 후보지(미고시)는 계산할 도형이 없어 그리지 않는다. */}
       {zone.polygon && zone.polygon.length >= 3 && (
@@ -330,7 +160,7 @@ export default function ZoneOfficialPanel({
         scrollToken={auctionScrollToken}
       />
 
-      {/* 국토부 실거래가 — 서울시 고시 데이터 바로 아래에 붙여 경계·면적과 시세를 함께 본다 */}
+      {/* 국토부 실거래가 — 경매 물건 아래에 붙여 '법원에 걸린 물건'과 '실제 신고 거래'를 함께 본다 */}
       <ZoneTransactions
         gu={zone.gu}
         names={[zone.name, ...(zone.alias ?? [])]}
@@ -356,8 +186,8 @@ export default function ZoneOfficialPanel({
           노량진1·한남뉴타운·성수전략2·북아현1-1)에 샘플로 붙어 있습니다.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed">
-          이 구역은 서울시 고시 데이터(경계·사업유형·추진단계·면적)와 위의 국토부 실거래가를 함께
-          보여줍니다. 매물은 중개사가 <b>/register</b> 에 등록하면 이 패널과 지도에 바로 표시됩니다.
+          이 구역은 사업 진행단계·구역현황(추정)과 위의 국토부 실거래가를 함께 보여줍니다.
+          매물은 중개사가 <b>/register</b> 에 등록하면 이 패널과 지도에 바로 표시됩니다.
         </p>
         {sources.length > 0 && (
           <div className="mt-3 border-t border-slate-200 pt-2 text-[10px] text-slate-500">

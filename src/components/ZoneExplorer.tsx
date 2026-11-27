@@ -519,7 +519,7 @@ export default function ZoneExplorer() {
   }, []);
 
   const selected = zones.find((z) => z.id === selectedId);
-  // 대표 구역이 아닌 구역 — 서울시 고시 데이터만 있는 구역
+  // 대표 구역이 아닌 구역 — 고시 레코드만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   // 지도 전체 실거래 가격표 — 지도가 뜬 뒤 한 번만 받아 둔다(700KB급, 화면을 막지 않게)
@@ -2601,7 +2601,7 @@ export default function ZoneExplorer() {
               도심복합개발(도공복의 민간판) · 성장거점형·주거중심형을 한 색으로 묶었습니다
             </p>
             <p className="text-[10px] leading-snug text-slate-400">
-              구역을 클릭하면 서울시 고시 데이터가 열립니다 · 지도를 움직여 둘러보세요 ·{" "}
+              구역을 클릭하면 상세 정보가 열립니다 · 지도를 움직여 둘러보세요 ·{" "}
               멀리서 보면 <b>자치구 총 개수 뱃지</b>가 뜨고, 구 뱃지를 누르면 그 구로 확대됩니다
             </p>
           </div>
@@ -2793,42 +2793,9 @@ export default function ZoneExplorer() {
                   </dl>
                 </div>
 
-                {/* 서울시 고시 데이터 (구역 경계·면적·단계의 근거) */}
-                {selected.official && (
-                  <div className="rounded-xl border border-line bg-[#F7F9FB] p-3 text-[11px]">
-                    <div className="mb-1 flex items-center justify-between font-semibold text-ink">
-                      <span>서울시 고시 데이터</span>
-                      <span className="font-normal text-slate-400">{selected.official.asOf} 기준</span>
-                    </div>
-                    <dl className="grid grid-cols-[4.6rem_minmax(0,1fr)] gap-x-2.5 gap-y-0.5 text-slate-700">
-                      <dt className="whitespace-nowrap text-slate-400">고시 명칭</dt>
-                      <dd className="min-w-0 break-words">{selected.official.name}</dd>
-                      <dt className="whitespace-nowrap text-slate-400">사업유형</dt>
-                      <dd className="min-w-0 break-words">{selected.official.kind}</dd>
-                      <dt className="whitespace-nowrap text-slate-400">추진단계</dt>
-                      <dd className="min-w-0 break-words">{selected.official.stage}</dd>
-                      <dt className="whitespace-nowrap text-slate-400">구역면적</dt>
-                      <dd className="min-w-0">
-                        {selected.official.area.toLocaleString()}㎡
-                        <span className="ml-1 whitespace-nowrap">
-                          {(selected.official.area / 3.3058 / 1000).toFixed(1)}천평
-                        </span>
-                      </dd>
-                      {selected.official.geomSource?.startsWith("UQ181") && (
-                        <>
-                          <dt className="whitespace-nowrap text-slate-400">경계 도형</dt>
-                          <dd className="min-w-0 break-words">
-                            의제처리구역 실경계(필지선 추종)
-                            <span className="text-slate-400"> · {selected.official.geomAsOf} 기준</span>
-                          </dd>
-                        </>
-                      )}
-                    </dl>
-                  </div>
-                )}
                 <p className="text-[11px] leading-relaxed text-slate-500">{selected.summary}</p>
 
-                {/* 구역현황(추정) — 대표 구역도 고시 데이터 바로 아래에 노후도·동수밀도를 붙인다 */}
+                {/* 구역현황(추정) — 사업개요 아래에 노후도·동수밀도를 붙인다 */}
                 {selected.polygon && selected.polygon.length >= 3 && (
                   <ZoneVitalStats
                     shape={{ polygon: selected.polygon, parts: selected.parts, holes: selected.holes }}
