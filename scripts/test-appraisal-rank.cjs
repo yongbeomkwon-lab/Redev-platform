@@ -1,5 +1,8 @@
 // 추정 감평 순위 — 순수 계산·응답 파싱 자체 검사 (브이월드 없이 돌릴 수 있는 부분)
-//   실행: node scripts/test-appraisal-rank.cjs   (먼저 tmp/appr-test 로 tsc 컴파일)
+//   실행:
+//     ./node_modules/.bin/tsc --outDir tmp/appr-test --module commonjs --target es2022 \
+//       --moduleResolution node --skipLibCheck --noEmit false src/lib/appraisal-rank.ts src/lib/appraisal-server.ts
+//     node scripts/test-appraisal-rank.cjs
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
