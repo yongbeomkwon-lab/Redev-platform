@@ -128,6 +128,150 @@ FIXTURE_SURVEY = os.path.join(HERE, "data", "auction-survey-fixture-structure.js
 
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
+# ── 개인정보 마스킹 ────────────────────────────────────────────────────────────
+# 현황조사서·감정평가서에는 임차인·채무자(소유자) 실명이 그대로 적혀 오는 경우가 있다.
+# 이 파일로 만든 auction-details.json 은 그대로 웹에 배포되므로, 정규화 단계에서 이름을 가린다.
+# 화면(src/lib/mask-name.ts)도 같은 규칙으로 한 번 더 가리므로 규칙을 바꾸면 양쪽을 함께 고친다.
+#   · 한글 2자 → 김O · 한글 3자 이상 → 서O경(남궁민수 → 남OO수)
+#   · 영문 → Z*** A* · 괄호 표기(ZHENG AI(정애)) → Z*** A*(정O)
+#   · 법인·상호((주)기업건설·주식회사·㈜)는 개인정보가 아니므로 원문 유지
+CORPORATE_RE = re.compile(r"(\(주\)|㈜|주식회사|유한회사|합자회사|합명회사|유한책임회사|재단법인|사단법인|법인)")
+ROLE_WORDS = ("채무자", "소유자", "공유자", "임차인", "세대주", "배우자", "동거인",
+              "학원장", "팀장", "이해관계인", "대표", "명의자")
+NOT_NAMES = {
+    "지분", "란에", "등재", "명의", "점유", "관계", "소유", "기재", "표시", "경우", "당시",
+    "세대", "주택", "건물", "부동산", "토지", "대지", "매각", "경매", "현황", "조사", "본건",
+    "이건", "기타", "제시", "일부", "전부", "해당", "직원", "안내", "동거", "배우", "가족",
+    "세대주", "내용", "사항", "주소", "호수", "면적", "번호", "사람",
+}
+NOT_SHARE = {
+    "매각", "공유", "채무", "소유", "임차", "매수", "매도", "전체", "일부", "해당", "본건",
+    "기타", "제시", "토지", "대지", "건물", "지분", "잔여", "나머지", "위", "채무자", "소유자",
+    "공유자", "임차인", "매수인", "매도인", "각자", "등",
+}
+_MASKED_KOR = re.compile(r"^[가-힣]O+$|^[가-힣]O+[가-힣]$")
+
+
+def mask_person_name(raw) -> str:
+    """사람 이름 하나를 가린다. 법인·상호는 원문 그대로."""
+    name = (raw or "").strip()
+    if not name:
+        return ""
+    if CORPORATE_RE.search(name):
+        return name
+    paren = re.match(r"^(.*?)\s*\(([^()]*)\)\s*$", name)
+    if paren and paren.group(1).strip():
+        return f"{mask_person_name(paren.group(1))}({mask_person_name(paren.group(2))})"
+    return " ".join(_mask_token(t) for t in re.split(r"\s+", name))
+
+
+def _mask_token(token: str) -> str:
+    core = re.sub(r"[.,·]+$", "", token)
+    tail = token[len(core):]
+    if not core:
+        return token
+    if re.fullmatch(r"[가-힣]+", core):            # 한글 이름
+        n = len(core)
+        if n < 2:
+            return token
+        if n == 2:
+            return core[0] + "O" + tail
+        return core[0] + "O" * (n - 2) + core[-1] + tail
+    if _MASKED_KOR.match(core):                    # 이미 가린 표기(서O경·김O)
+        return token
+    if re.fullmatch(r"[A-Za-z]+", core):           # 영문 이름
+        if len(core) < 2:
+            return token
+        return core[0] + ("*" if len(core) == 2 else "***") + tail
+    return token
+
+
+def is_masked_name(name: str) -> bool:
+    core = re.sub(r"[.,·]+$", "", (name or "").strip())
+    if not core:
+        return True
+    return bool(_MASKED_KOR.match(core) or "*" in core)
+
+
+_ROLE_RE = re.compile(
+    r"(?P<lead>^|[^가-힣])(?P<kw>(?:" + "|".join(ROLE_WORDS) + r")"
+    r"(?:\s*겸\s*(?:" + "|".join(ROLE_WORDS) + r"))?\s+)"
+    r"(?P<name>[가-힣]{2,4}?)"
+    r"(?=\s*(?:의|를|가|은|는|이(?:라는|며|고|\s)|으로|으로부터|로부터|라고|와|과|[,.()]|$))"
+)
+_LISTED_RE = re.compile(r"(기재된|등재된|기재한|등재한)(\s+)([가-힣]{2,4}?)"
+                        r"(?=\s*(?:의|은|는|이|를|가|[,.()]|$))")
+_SHARE_RE = re.compile(r"(?P<lead>^|[^가-힣])(?P<name>[가-힣]{2,4})(?P<gap>\s*)지분")
+
+
+def mask_names_in_text(text, names=()) -> str:
+    """점유관계·현황조사서 본문 같은 자유 문장 안의 사람 이름을 가린다.
+
+    ① 역할어(채무자 겸 소유자 …)·`기재된`·`지분` 문맥으로 이름 후보를 모으고
+    ② 그 이름이 나오는 자리를 **원문에서 한 번에** 찾아 가린다(한 번 가린 글자를 다시 훑지 않는다).
+    """
+    src = text or ""
+    if not src:
+        return src
+    found = set()
+    for m in _ROLE_RE.finditer(src):
+        if m.group("name") not in NOT_NAMES:
+            found.add(m.group("name"))
+    for m in _LISTED_RE.finditer(src):
+        if m.group(3) not in NOT_NAMES:
+            found.add(m.group(3))
+    for m in _SHARE_RE.finditer(src):
+        if m.group("name") not in NOT_SHARE:
+            found.add(m.group("name"))
+    for raw in names:
+        n = (raw or "").strip()
+        if len(n) >= 2 and not CORPORATE_RE.search(n) and not is_masked_name(n):
+            found.add(n)
+    marks = []
+    for name in sorted(found, key=len, reverse=True):
+        for m in re.finditer(r"(?<![가-힣])" + re.escape(name), src):
+            marks.append((m.start(), m.start() + len(name), mask_person_name(name)))
+    marks.sort(key=lambda x: (-x[0], -x[1]))
+    out = src
+    left = len(src) + 1
+    for start, end, rep in marks:
+        if end > left:      # 이미 가린 자리와 겹친다
+            continue
+        out = out[:start] + rep + out[end:]
+        left = start
+    return out
+
+
+def sanitize_record(rec: dict) -> dict:
+    """한 레코드(사건·물건) 안의 이름을 가린다 — 임차인 이름 + 점유관계·면적·감정 본문."""
+    tenants = rec.get("tenants") or []
+    names = [t.get("name") for t in tenants if isinstance(t, dict) and t.get("name")]
+    for t in tenants:
+        if isinstance(t, dict) and t.get("name"):
+            t["name"] = mask_person_name(t["name"])
+    occ = rec.get("occupancy")
+    if isinstance(occ, dict):
+        for k in ("detail", "property", "etc"):
+            if occ.get(k):
+                occ[k] = mask_names_in_text(occ[k], names)
+    for a in rec.get("areas") or []:
+        if isinstance(a, dict) and a.get("detail"):
+            a["detail"] = mask_names_in_text(a["detail"], names)
+    for item in rec.get("appraisalSummary") or []:
+        if isinstance(item, dict) and item.get("text"):
+            item["text"] = mask_names_in_text(item["text"], names)
+    return rec
+
+
+def sanitize_payload(payload: dict) -> dict:
+    """byCase·byId 전체에 마스킹을 적용한다(배포 직전 마지막 관문)."""
+    for rec in (payload.get("byCase") or {}).values():
+        sanitize_record(rec)
+    for rec in (payload.get("byId") or {}).values():
+        sanitize_record(rec)
+    return payload
+
+
 def curl(args: list[str], timeout: int = 90) -> bytes:
     os.makedirs(DATA_DIR, exist_ok=True)
     p = subprocess.run(
@@ -858,6 +1002,7 @@ def rebuild() -> dict:
         "byCase": by_case,
         "byId": by_id,
     }
+    sanitize_payload(payload)   # 배포 파일에는 사람 이름을 남기지 않는다
     json.dump(payload, open(OUT, "w", encoding="utf-8"), ensure_ascii=False)
     print(f"사건 {len(by_case)} · 물건 {len(by_id)} · 목록 {item_count} → {OUT}")
     if errors:
@@ -964,7 +1109,30 @@ def self_test() -> None:
     # ④ 코드표 변환
     if POSS_RLTN.get("09") != "미상":
         raise SystemExit("✗ 점유관계 코드표")
-    print("✓ self-test OK — 사건검색·물건상세·현황조사서 파싱, 면적/감정요항/임차인/점유관계 확인")
+
+    # ⑤ 개인정보 마스킹 — 화면(src/lib/mask-name.ts)과 같은 규칙이어야 한다
+    mask_checks = [
+        ("서미경", "서O경"), ("김철", "김O"), ("남궁민수", "남OO수"),
+        ("ZHENG AI(정애)", "Z*** A*(정O)"), ("(주)기업건설", "(주)기업건설"),
+        ("김O애", "김O애"), ("서O경", "서O경"),
+    ]
+    for raw_name, want in mask_checks:
+        got = mask_person_name(raw_name)
+        if got != want:
+            raise SystemExit(f"✗ 마스킹 {raw_name!r}: {got!r} != {want!r}")
+    text_checks = [
+        ("채무자 겸 소유자 심배관의 배우자", "채무자 겸 소유자 심O관의 배우자"),
+        ("기재된 심배관의 동거인", "기재된 심O관의 동거인"),
+        ("이해관계인 폐문부재로", "이해관계인 폐문부재로"),
+        ("다세대주택으로 이용중", "다세대주택으로 이용중"),
+        ("공유자 지분 중 고근수 지분", "공유자 지분 중 고O수 지분"),
+        ("임차인으로 보고함", "임차인으로 보고함"),
+    ]
+    for raw_text, want in text_checks:
+        got = mask_names_in_text(raw_text)
+        if got != want:
+            raise SystemExit(f"✗ 본문 마스킹 {raw_text!r}: {got!r} != {want!r}")
+    print("✓ self-test OK — 사건검색·물건상세·현황조사서 파싱, 면적/감정요항/임차인/점유관계, 개인정보 마스킹")
 
 
 def main() -> None:

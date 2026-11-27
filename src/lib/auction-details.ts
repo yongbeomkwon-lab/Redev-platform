@@ -85,7 +85,9 @@ export type AuctionSpecification = {
 
 /**
  * 임차인현황 한 줄 — 현황조사서의 `dlt_ordTsLserLtn`
- *   · 이름은 법원이 마스킹한 표기를 그대로 쓴다(가공하지 않는다).
+ *   · 이름은 **개인정보 보호를 위해 가려진 표기**다(`서O경`·`김O`·`Z*** A*`).
+ *     수집 정규화(`scripts/fetch-auction-details.py`)와 화면(`src/lib/mask-name.ts`)이
+ *     같은 규칙으로 가리므로, 데이터에 실명이 섞여 와도 화면에는 실명이 뜨지 않는다.
  */
 export type AuctionTenant = {
   /** 이해관계인명(법원 표기) */

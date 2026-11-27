@@ -51,6 +51,7 @@ import {
   type AuctionDetailsData,
   type AuctionPhoto,
 } from "@/lib/auction-details";
+import { maskNamesInText, maskPersonName, tenantNamesOf } from "@/lib/mask-name";
 
 export const AUCTION_ACCENT = "#b45309";
 
@@ -1033,7 +1034,7 @@ function SpecificationCard({
   );
 }
 
-/** 임차인현황 — 이름은 법원 마스킹 표기 그대로, 판단은 사람이 하도록 값만 나열한다 */
+/** 임차인현황 — 사람 이름은 가려서 보여 주고(`maskPersonName`), 판단은 사람이 하도록 값만 나열한다 */
 function TenantCards({ detail, caseNo, copied, onCopy }: {
   detail?: AuctionDetail;
   caseNo: string;
@@ -1041,6 +1042,7 @@ function TenantCards({ detail, caseNo, copied, onCopy }: {
   onCopy: (text: string, key: string) => void;
 }) {
   const tenants = detail?.tenants ?? [];
+  const names = tenantNamesOf(tenants);
   const surveyed = !!detail?.occupancy?.examinedAt;
   return (
     <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5" data-testid="auction-tenants">
@@ -1072,7 +1074,7 @@ function TenantCards({ detail, caseNo, copied, onCopy }: {
           {tenants.map((t, i) => (
             <li key={`${t.name || "t"}-${i}`} className="rounded border border-slate-200 bg-slate-50/70 px-1.5 py-1">
               <p className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
-                <b className="text-[11px] font-bold text-slate-800">{t.name || "이름 미기재"}</b>
+                <b className="text-[11px] font-bold text-slate-800">{maskPersonName(t.name) || "이름 미기재"}</b>
                 {t.type && (
                   <span className="rounded bg-slate-700 px-1 py-[1px] text-[9px] font-semibold text-white">{t.type}</span>
                 )}
@@ -1093,8 +1095,8 @@ function TenantCards({ detail, caseNo, copied, onCopy }: {
                 )}
                 {t.usage && <Row label="용도">{t.usage}</Row>}
                 {t.period && <Row label="점유기간">{t.period}</Row>}
-                {t.possession && <Row label="점유내용">{t.possession}</Row>}
-                {t.note && <Row label="비고">{t.note}</Row>}
+                {t.possession && <Row label="점유내용">{maskNamesInText(t.possession, names)}</Row>}
+                {t.note && <Row label="비고">{maskNamesInText(t.note, names)}</Row>}
               </dl>
             </li>
           ))}
@@ -1102,16 +1104,18 @@ function TenantCards({ detail, caseNo, copied, onCopy }: {
       )}
       {tenants.length > 0 && (
         <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
-          법원 현황조사서 기재 그대로입니다. 대항력 여부는 전입일·확정일자와 말소기준권리를 함께 봐야 정해집니다.
+          법원 현황조사서 기재입니다. 사람 이름은 개인정보 보호를 위해 가렸습니다(서O경·김O). 대항력 여부는
+          전입일·확정일자와 말소기준권리를 함께 봐야 정해집니다.
         </p>
       )}
     </div>
   );
 }
 
-/** 점유관계 — 조사일시 + 점유 내역 원문 */
+/** 점유관계 — 조사일시 + 점유 내역 원문(사람 이름은 `maskNamesInText` 로 가려서 보여 준다) */
 function OccupancyCard({ detail }: { detail?: AuctionDetail }) {
   const occ = detail?.occupancy;
+  const names = tenantNamesOf(detail?.tenants);
   const hasAny = !!(occ && (occ.examinedAt || occ.detail || occ.relation || occ.property));
   return (
     <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5" data-testid="auction-occupancy">
@@ -1136,14 +1140,14 @@ function OccupancyCard({ detail }: { detail?: AuctionDetail }) {
           )}
           {occ?.detail && (
             <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded bg-slate-50 px-1.5 py-1 text-[10.5px] leading-relaxed text-slate-700">
-              {occ.detail}
+              {maskNamesInText(occ.detail, names)}
             </p>
           )}
           {occ?.property && (
             <div>
               <p className="text-[9.5px] font-semibold text-slate-500">부동산의 현황</p>
               <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">
-                {occ.property}
+                {maskNamesInText(occ.property, names)}
               </p>
             </div>
           )}
@@ -1151,7 +1155,7 @@ function OccupancyCard({ detail }: { detail?: AuctionDetail }) {
             <div>
               <p className="text-[9.5px] font-semibold text-slate-500">기타(임차내역)</p>
               <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-600">
-                {occ.etc}
+                {maskNamesInText(occ.etc, names)}
               </p>
             </div>
           )}
@@ -1172,12 +1176,15 @@ function AppraisalAccordion({
   caseNo,
   copied,
   onCopy,
+  names = [],
 }: {
   items?: AuctionAppraisalItem[];
   legacyNote?: string;
   caseNo: string;
   copied: string | null;
   onCopy: (text: string, key: string) => void;
+  /** 본문에 섞여 들어온 사람 이름을 가리는 데 쓰는 이름 목록(임차인) */
+  names?: string[];
 }) {
   const groups = useMemo(() => {
     const out: { key: string; name?: string; rows: AuctionAppraisalItem[] }[] = [];
@@ -1198,7 +1205,7 @@ function AppraisalAccordion({
     return (
       <Section title="감정평가 요항" hint={legacyNote ? "요약" : "미수집"}>
         {legacyNote ? (
-          <p className="whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">{legacyNote}</p>
+          <p className="whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">{maskNamesInText(legacyNote, names)}</p>
         ) : (
           <MissingNote what="감정평가요항표" caseNo={caseNo} onCopy={onCopy} copied={copied} />
         )}
@@ -1231,7 +1238,7 @@ function AppraisalAccordion({
                     {r.itemName || `항목 ${ri + 1}`}
                   </dt>
                   <dd className="mt-0.5 whitespace-pre-wrap break-words text-[10.5px] leading-relaxed text-slate-700">
-                    {r.text || "-"}
+                    {maskNamesInText(r.text, names) || "-"}
                   </dd>
                 </div>
               ))}
@@ -1706,7 +1713,9 @@ function ItemDetail({
                       <span className="shrink-0 rounded bg-slate-100 px-1 py-[1px] text-[9.5px] font-semibold text-slate-600">
                         {a.kind}
                       </span>
-                      <span className="min-w-0 break-words text-slate-700">{a.detail}</span>
+                      <span className="min-w-0 break-words text-slate-700">
+                        {maskNamesInText(a.detail, tenantNamesOf(detail?.tenants))}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -1735,6 +1744,7 @@ function ItemDetail({
               caseNo={caseNo}
               copied={copied}
               onCopy={onCopy}
+              names={tenantNamesOf(detail?.tenants)}
             />
           </>
         )}
