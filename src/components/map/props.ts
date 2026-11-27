@@ -149,11 +149,6 @@ export type ZoneMapProps = {
   fitSeoulRequest?: number;
   /** 이 매물 핀을 펼쳐 보라는 요청(/?my=<id> 로 들어왔을 때) */
   myFocusId?: string | null;
-  /** 🔥 개발압력 오버레이 ON/OFF — 상태는 ZoneExplorer 가 갖는다(첫 화면 패널에서도 켠다) */
-  devPressureOn?: boolean;
-  onToggleDevPressure?: () => void;
-  /** 핫스팟으로 지도를 옮기고 그 카드를 열라는 요청 — token 이 바뀔 때마다 처리한다 */
-  devPressureFocus?: { id: string; lat: number; lng: number; token: number } | null;
   /**
    * ✏️ 구역 그려서 분석 — 일반 방문자가 지도에서 직접 꼭짓점을 찍어 만든 링.
    *   · 관리자 그리기(`admin`)와 완전히 별개다: 저장하지 않고 화면 상태로만 그린다.

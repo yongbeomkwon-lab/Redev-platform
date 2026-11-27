@@ -8,7 +8,7 @@ import "./globals.css";
 const SITE_URL = "https://redev-platform-iota.vercel.app";
 const SHARE_TITLE = "리디브 · 서울 정비사업 실거래·경매·매물 지도";
 const SHARE_DESCRIPTION =
-  "서울 2,400여 개 재개발·재건축 구역경계, 5년 실거래, 법원경매, 개발압력 분석까지 한눈에";
+  "서울 2,400여 개 재개발·재건축 구역경계, 5년 실거래, 법원경매, 구역 그려서 분석까지 한눈에";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

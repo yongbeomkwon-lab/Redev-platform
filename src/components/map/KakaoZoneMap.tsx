@@ -39,7 +39,6 @@ import { addressPinHtml, parcelBubbleHtml, stationPinHtml, PIN_LAYER_STYLE } fro
 import { SEOUL_BOUNDS, txPinKey, type AdminMapConfig, type DistrictStat, type JibunPin, type KakaoZoneMapProps, type MyListingPin, type TxMapPin, type ZoneDrawState } from "./props";
 import type { AuctionMapPin } from "@/lib/auction-pins";
 import JibunPinCard from "./JibunPinCard";
-import DevPressureLayer from "./DevPressureLayer";
 import { formatArea, ringAreaSqm, ringBounds, ringCentroid, ringContainsLatLng } from "@/lib/custom-zones";
 import type {
   KakaoLatLng,
@@ -341,7 +340,7 @@ const TAG_MAX_MOBILE = 16;
 //   지도를 덮는다. 사용자는 이 화면에서 **구 단위로 어디에 몇 곳이 있는지**를 먼저 본다.
 //   → 광역(레벨 7 이상)에서는 그것들을 모두 걷어 내고 `구 이름 + 총 개수` 2단 카드만 깐다.
 //   · 7 이상: 구 뱃지 화면 · 6 이하: 기존처럼 구역 경계·이름표·경매 핀
-//   · 노후도·개발압력 오버레이, 「내 매물만 보기」 는 구역 하나하나가 주인공인 화면이라
+//   · 노후도 오버레이, 「내 매물만 보기」 는 구역 하나하나가 주인공인 화면이라
 //     구 뱃지 화면을 켜지 않는다(기존 동작 그대로).
 //   · 검색·클릭으로 구역을 골랐으면 그 구역 경계와 이름표는 그대로 보인다(선택은 늘 우선).
 const DISTRICT_LEVEL_MIN = 7;
@@ -529,9 +528,6 @@ export default function KakaoZoneMap({
   onToggleMyPins,
   fitSeoulRequest,
   myFocusId,
-  devPressureOn = false,
-  onToggleDevPressure,
-  devPressureFocus,
   zoneDraw,
   onToggleZoneDraw,
   admin,
@@ -597,8 +593,6 @@ export default function KakaoZoneMap({
   /** 이번 프레임이 구 뱃지 화면인가 — 지도 클릭·호버 핸들러도 이 값을 본다 */
   const districtModeRef = useRef(false);
   /** draw 가 읽는 최신 prop 값(그리기는 ref 로만 본다 — draw 는 클로저를 만들지 않는다) */
-  const devPressureRef = useRef(false);
-  devPressureRef.current = !!devPressureOn;
   const myPinsOnRef = useRef(false);
   myPinsOnRef.current = !!myPinsOn;
   /** 매물 배지 레이어 + 배지 요소(구역 id → 버튼) — draw 가 매 프레임 좌표를 맞춘다 */
@@ -770,8 +764,6 @@ export default function KakaoZoneMap({
   const [district, setDistrict] = useState(false);
   /** 노후도(건물 연식) 오버레이 — 지도 아래 툴바의 `노후도` 토글 */
   const [aging, setAging] = useState(false);
-  /** 카카오 지도 인스턴스가 준비됐는지 — 개발압력 레이어가 지도 객체를 받아야 한다 */
-  const [mapReady, setMapReady] = useState(false);
   /** 노후도 범례에 보여 줄 상태(받은 건물 수·구간별 수·확대 안내·불러오는 타일 수) */
   const [ageStats, setAgeStats] = useState<AgeStats>({ buildings: 0, counts: [], tooFar: false, loading: 0 });
   const [ready, setReady] = useState(false);
@@ -815,13 +807,12 @@ export default function KakaoZoneMap({
     const wideOut = mapLevel >= 7;
     /**
      * 구 뱃지 화면인가 — 초기 서울 전체(레벨 8)에서 구역 대신 `구 이름 + 총 개수` 카드만 깐다.
-     *   · 노후도·개발압력 오버레이, 「내 매물만 보기」 는 구역 하나하나를 보는 화면이라 기존 그대로 둔다.
+     *   · 노후도 오버레이, 「내 매물만 보기」 는 구역 하나하나를 보는 화면이라 기존 그대로 둔다.
      *   · 관리자 모드(경계 그리기·수정)도 기존 그림이 필요하다 — 켜 두지 않는다.
      */
     const districtMode =
       mapLevel >= DISTRICT_LEVEL_MIN &&
       !agingRef.current &&
-      !devPressureRef.current &&
       !myPinsOnRef.current &&
       !adminRef.current &&
       // ✏️ 구역을 그리는 중에는 구 뱃지 화면을 끈다 — 경계가 보여야 어느 블록을 집는지 안다
@@ -2343,7 +2334,6 @@ export default function KakaoZoneMap({
       return;
     }
     mapRef.current = map;
-    setMapReady(true);
     map.setMinLevel(1);
     map.setMaxLevel(MAX_LEVEL);
 
@@ -2960,17 +2950,16 @@ export default function KakaoZoneMap({
 
   // ── 자치구 뱃지 통계·특수 오버레이 변경 → 다시 그리기 ────────────────────────
   //   · 필터나 ‘준공 포함’ 이 바뀌면 구별 개수가 즉시 바뀌어야 한다(범례 합계와 일치).
-  //   · 노후도·개발압력·내 매물만 보기가 켜지면 구 뱃지 화면을 끄고 기존 화면으로 돌아간다.
+  //   · 노후도·내 매물만 보기가 켜지면 구 뱃지 화면을 끄고 기존 화면으로 돌아간다.
   useEffect(() => {
     districtStatsRef.current = districtStats ?? [];
     draw();
   }, [districtStats, draw]);
 
   useEffect(() => {
-    devPressureRef.current = !!devPressureOn;
     myPinsOnRef.current = !!myPinsOn;
     draw();
-  }, [devPressureOn, myPinsOn, draw]);
+  }, [myPinsOn, draw]);
 
   useEffect(() => {
     selectedRef.current = selectedZoneId;
@@ -4410,18 +4399,6 @@ export default function KakaoZoneMap({
         </div>
       )}
 
-      {/* ── 🔥 개발압력 레이어 — 주변이 정비구역·아파트로 둘러싸인 노후 저층지(z 98) ── */}
-      {devPressureOn && mapReady && sdkRef.current && mapRef.current && (
-        <DevPressureLayer
-          sdk={sdkRef.current}
-          map={mapRef.current}
-          focus={devPressureFocus ?? null}
-          onOpenZone={onSelectZone}
-          onPickJibun={onPickJibun}
-          onCloseLayer={onToggleDevPressure}
-        />
-      )}
-
       {/* 지도 위 토글 — 확대/축소 · 스카이뷰 · 지적편집도 · 준공 포함 */}
       {/* 지도 위 도구 — 데스크톱은 왼쪽 아래(범례 위), 모바일은 오른쪽 가운데(검색·시트를 피해서) */}
       <div className="absolute right-2 top-1/2 z-[600] flex -translate-y-1/2 flex-col items-end gap-1.5 md:bottom-2 md:left-2 md:right-auto md:top-auto md:translate-y-0 md:flex-row md:items-center">
@@ -4508,21 +4485,6 @@ export default function KakaoZoneMap({
         >
           <Icon name="building" size={13} />
           <span className="hidden md:inline">노후도</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onToggleDevPressure?.()}
-          aria-pressed={!!devPressureOn}
-          data-testid="dev-pressure-toggle"
-          title="개발압력 — 주변이 정비구역·아파트로 둘러싸인 노후 저층지. 켜면 지도에 🔥 핫스팟이 뜹니다"
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
-            devPressureOn
-              ? "border-brand bg-brand text-white"
-              : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
-          }`}
-        >
-          <span aria-hidden className="text-[12px] leading-none">🔥</span>
-          <span className="hidden md:inline">개발압력</span>
         </button>
         {onToggleZoneDraw && (
           <button

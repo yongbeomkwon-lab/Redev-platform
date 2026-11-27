@@ -21,7 +21,7 @@ import {
 import { getProvider } from "@/lib/data-provider";
 import { man } from "@/lib/format";
 import MapPanel from "@/components/map/MapPanel";
-import { DEV_GRADE_COLOR, loadDevPressure, type DevHotspot, type RecentZone } from "@/lib/dev-pressure";
+import type { RecentZone } from "@/lib/dev-pressure";
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT } from "@/components/map/colors";
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
@@ -265,13 +265,6 @@ export default function ZoneExplorer() {
   // ── 「📍 지번 찍기」 ─────────────────────────────────────────────────
   //   · 켜면 지도 클릭이 구역 선택 대신 그 자리의 지번 핀을 꽂는다(아이패드·터치에서 필요).
   //   · 기본 모드에서도 우클릭·구역 밖 클릭은 지번 핀으로 간다.
-  // ── 🔥 개발압력 ─────────────────────────────────────────────────────
-  //   · 지도 위 토글과 첫 화면 패널이 같은 상태를 본다(패널에서 핫스팟을 누르면 자동으로 켜진다).
-  //   · dpFocus 는 '이 핫스팟으로 지도를 옮기고 카드를 열라'는 요청 — token 이 바뀔 때마다 지도가 처리한다.
-  const [devPressureOn, setDevPressureOn] = useState(false);
-  const [dpFocus, setDpFocus] = useState<{ id: string; lat: number; lng: number; token: number } | null>(null);
-  const [dpTop, setDpTop] = useState<DevHotspot[]>([]);
-  //   · 🔥 개발압력과는 같은 자리를 두고 겹치므로 함께 켜지지 않게 한다(켜면 다른 쪽을 끈다).
   // ── ✏️ 구역 그려서 분석 (일반 방문자) ────────────────────────────────────
   //   · 지도에서 꼭짓점을 찍어 만든 링을 /api/zone-stats·/api/zone-stats/precise 로 분석한다.
   //   · 저장하지 않는다 — 화면 메모리 상태뿐이다(관리자 그리기·공용 DB 와 별개).
@@ -314,14 +307,9 @@ export default function ZoneExplorer() {
   const [jibunNote, setJibunNote] = useState<string | null>(null);
   const jibunSeqRef = useRef(0);
 
-  // 첫 화면 패널 데이터 — 개발압력 상위 6곳과 최근 반영 구역 6곳
+  // 첫 화면 패널 데이터 — 최근 반영 구역 6곳
   useEffect(() => {
     let alive = true;
-    loadDevPressure()
-      .then((d) => {
-        if (alive) setDpTop(d.hotspots.slice(0, 6));
-      })
-      .catch(() => {});
     fetch(`/data/recent-zones.json?v=${encodeURIComponent(process.env.NEXT_PUBLIC_BUILD_ID || "dev")}`, {
       cache: "no-store",
     })
@@ -1321,14 +1309,6 @@ export default function ZoneExplorer() {
     if (opts?.auction) setAuctionPinsChoice(true);
   }
 
-  /** 첫 화면 패널의 핫스팟 → 지도를 그 자리로 옮기고 🔥 개발압력 레이어·카드를 연다 */
-  function openDevPressure(h: DevHotspot) {
-    setDevPressureOn(true);
-    setDpFocus({ id: h.id, lat: h.lat, lng: h.lng, token: Date.now() });
-    // 좁은 화면은 패널이 지도 아래를 덮으므로 접어 카드가 보이게 한다
-    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
-  }
-
   // ── ✏️ 구역 그려서 분석 (일반 방문자) ──────────────────────────────────
 
   /** 툴바 「✏️ 구역 그려서 분석」 — 켜면 지도 클릭이 꼭짓점 추가로 간다(누구나 사용) */
@@ -1851,9 +1831,6 @@ export default function ZoneExplorer() {
           activeTxPin={
             buildingTarget ? { umdNm: buildingTarget.dong, jibun: buildingTarget.jibun } : null
           }
-          devPressureOn={devPressureOn}
-          onToggleDevPressure={() => setDevPressureOn((v) => !v)}
-          devPressureFocus={dpFocus}
           zoneDraw={
             zoneDrawOn || zoneDrawDone
               ? {
@@ -2725,7 +2702,7 @@ export default function ZoneExplorer() {
                       : "리디브 대시보드"}
             </b>
             {!selected && !selectedSeoul && !zoneDrawDone && (
-              <span className="text-[11px] text-slate-500">개발압력 TOP · 최근 변동</span>
+              <span className="text-[11px] text-slate-500">경매 · 최근 변동</span>
             )}
             {!selected && !selectedSeoul && zoneDrawDone && (
               <span className="text-[10px] text-violet-700">지도에서 그린 경계 · 임시 분석</span>
@@ -3113,7 +3090,7 @@ export default function ZoneExplorer() {
               />
             )}
 
-                        {/* 3) 아무것도 선택되지 않았을 때: 🔥 개발압력 TOP + ⚡ 최근 변동 구역 */}
+                        {/* 3) 아무것도 선택되지 않았을 때: ⚖️ 경매 물건 있는 구역 + ⚡ 최근 변동 구역 */}
             {!selected && !selectedSeoul && (
               <div className="space-y-3">
                 {/* ✏️ 구역 그려서 분석 — 아무것도 선택되지 않은 화면에서도 바로 시작할 수 있게 */}
@@ -3135,51 +3112,6 @@ export default function ZoneExplorer() {
                     </button>
                   </section>
                 )}
-
-                <section
-                  data-testid="dev-pressure-top"
-                  className="rounded-xl border border-slate-200 bg-white p-2.5"
-                >
-                  <div className="mb-1 flex items-baseline gap-1.5">
-                    <b className="text-[12.5px] font-bold text-slate-900">🔥 개발압력 TOP</b>
-                    <span className="text-[10px] text-slate-500">주변이 정비구역·아파트로 둘러싸인 노후 저층지</span>
-                  </div>
-                  <div className="space-y-0.5">
-                    {dpTop.length === 0 && (
-                      <p className="px-1 py-2 text-[11px] text-slate-400">불러오는 중…</p>
-                    )}
-                    {dpTop.map((h, i) => (
-                      <button
-                        key={h.id}
-                        type="button"
-                        onClick={() => openDevPressure(h)}
-                        data-testid="dev-pressure-top-item"
-                        data-hotspot-id={h.id}
-                        title={`${h.reason} — 누르면 지도에서 이 핫스팟을 엽니다`}
-                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-orange-50/70"
-                      >
-                        <span className="w-3 shrink-0 text-center text-[10px] font-bold text-orange-600">{i + 1}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-baseline gap-1">
-                            <b className="truncate text-[12px] font-bold text-slate-900">
-                              {h.gu} {h.dong}
-                            </b>
-                            {h.hjd && h.hjd !== h.dong && (
-                              <span className="shrink-0 text-[9.5px] text-slate-400">{h.hjd}</span>
-                            )}
-                          </span>
-                          <span className="mt-[1px] block truncate text-[10px] text-slate-500">{dpSummary(h)}</span>
-                        </span>
-                        <span
-                          className="shrink-0 rounded-full px-1.5 py-[2px] text-[10px] font-extrabold text-white"
-                          style={{ backgroundColor: DEV_GRADE_COLOR[h.grade] }}
-                        >
-                          {Math.round(h.score)}점
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
 
                 {auctionTop.length > 0 && (
                   <section data-testid="auction-zone-top" className="rounded-xl border border-slate-200 bg-white p-2.5">
@@ -3273,13 +3205,6 @@ export default function ZoneExplorer() {
       )}
     </div>
   );
-}
-
-/** 핫스팟 한 줄 요약 — 근거 문구 앞 두 토막(포위·아파트)만 쓴다 */
-function dpSummary(h: DevHotspot): string {
-  const bits = h.reason.split(" · ");
-  const head = bits.slice(0, 2).join(" · ");
-  return `${h.types[0] ?? ""} · ${head}`;
 }
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
