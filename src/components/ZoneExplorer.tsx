@@ -2719,8 +2719,11 @@ export default function ZoneExplorer() {
                       ? "서울시 고시 구역"
                       : "리디브 대시보드"}
             </b>
-            {!selected && !selectedSeoul && (
+            {!selected && !selectedSeoul && !zoneDrawDone && (
               <span className="text-[11px] text-slate-500">개발압력 TOP · 최근 변동</span>
+            )}
+            {!selected && !selectedSeoul && zoneDrawDone && (
+              <span className="text-[10px] text-violet-700">지도에서 그린 경계 · 임시 분석</span>
             )}
             {/* ⚖️ 경매 배지 — 구역 상세의 경매 섹션은 아래쪽이라 놓치기 쉽다.
                 헤더(스크롤과 무관하게 늘 보이는 줄)에서 바로 그 섹션으로 부드럽게 내려간다. */}

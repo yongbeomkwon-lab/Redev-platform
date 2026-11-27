@@ -400,6 +400,24 @@ const PARALLEL = 2;
 const CACHE_PREFIX = "redev-precise:v5:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * 서버 응답을 JSON 으로 읽는다 — 플랫폼 게이트웨이가 JSON 대신 오류 페이지(텍스트)를 주면
+ * `res.json()` 이 "Unexpected token 'A' …" 라는 알 수 없는 문구로 터진다. 그 자리에서
+ * 사람이 읽을 수 있는 문장으로 바꾼다(2026-11-27: 정밀 분석이 504 로 끝날 때 화면에 그 문구가 떴다).
+ */
+async function readJson<T>(res: Response, what: string): Promise<T> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const status = res.status;
+    if (status === 502 || status === 503 || status === 504) {
+      throw new Error(`${what} 응답이 제때 오지 않았습니다(HTTP ${status}) — 필지가 많으면 시간이 더 걸립니다. 잠시 뒤 다시 시도해 주세요.`);
+    }
+    throw new Error(`${what} 서버가 응답을 주지 못했습니다(HTTP ${status}) — 잠시 뒤 다시 시도해 주세요.`);
+  }
+}
+
 type PreciseState =
   | { status: "idle" }
   | { status: "running"; done: number; total: number }
@@ -484,7 +502,7 @@ export default function ZoneVitalStats({
       body: JSON.stringify({ shape, areaSqm: areaSqm ?? null }),
       signal: controller.signal,
     })
-      .then((res) => res.json() as Promise<ZoneStatsResponse>)
+      .then((res) => readJson<ZoneStatsResponse>(res, "구역현황"))
       .then((data) => {
         if (!alive) return;
         if (data.ok) {
@@ -558,7 +576,7 @@ export default function ZoneVitalStats({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shape, areaSqm: areaSqm ?? null }),
       });
-      const data = (await res.json()) as ZoneStatsResponse;
+      const data = await readJson<ZoneStatsResponse>(res, "구역현황");
       if (!data.ok) throw new Error(data.detail || data.error);
       return {
         pnus: data.stats.parcels?.pnus ?? [],
@@ -613,7 +631,7 @@ export default function ZoneVitalStats({
             }),
             signal: controller.signal,
           });
-          const data = (await res.json()) as PreciseChunkResponse;
+          const data = await readJson<PreciseChunkResponse>(res, "정밀 분석");
           if (!data.ok) throw new Error(data.detail || data.error);
           results[index] = data.chunk;
           done += chunks[index].length;
