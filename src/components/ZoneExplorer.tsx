@@ -1364,6 +1364,17 @@ export default function ZoneExplorer() {
     setSelectedId(undefined);
     setStationPick(null);
     setSeoulFitRequest((v) => v + 1);
+    // 주소에 ?zone= · ?my= 가 남아 있으면 새로고침 때 그 구역이 다시 열린다 — 함께 지운다
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("zone") || url.searchParams.has("my")) {
+        url.searchParams.delete("zone");
+        url.searchParams.delete("my");
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch {
+      /* 주소를 못 고쳐도 화면은 이미 서울 전체다 */
+    }
   }
 
   /**
