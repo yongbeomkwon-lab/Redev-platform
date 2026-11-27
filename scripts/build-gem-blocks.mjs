@@ -318,16 +318,32 @@ function clusterPolygon(rowsIdx, rows, c) {
     const gy = Math.floor((y - y0) / S);
     if (gx >= 0 && gx < W && gy >= 0 && gy < H) grid[gy * W + gx] = 1;
   }
-  // 한 칸 부풀리기(3×3) — 건물 외곽·골목을 메워 덩어리로 만든다
-  const pad = new Uint8Array(W * H);
+  // 닫힘(closing) — 3×3 부풀리기 후 다시 깎는다: 골목(10m)은 잇되 바깥으로 넓어지지 않아
+  // 경계가 건물 줄을 따라간다(그냥 부풀리면 130m 격자 사각형에 가까워진다).
+  const grown = new Uint8Array(W * H);
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       if (!grid[y * W + x]) continue;
       for (let dy = -1; dy <= 1; dy++)
         for (let dx = -1; dx <= 1; dx++) {
           const nx = x + dx, ny = y + dy;
-          if (nx >= 0 && nx < W && ny >= 0 && ny < H) pad[ny * W + nx] = 1;
+          if (nx >= 0 && nx < W && ny >= 0 && ny < H) grown[ny * W + nx] = 1;
         }
+    }
+  const pad = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!grown[y * W + x]) continue;
+      let keep = true;
+      for (let dy = -1; dy <= 1 && keep; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < W && ny >= 0 && ny < H && !grown[ny * W + nx]) {
+            keep = false;
+            break;
+          }
+        }
+      if (keep) pad[y * W + x] = 1;
     }
   // 가장 큰 덩어리(4연결)만 쓴다
   const lab = new Int32Array(W * H).fill(-1);
