@@ -602,27 +602,6 @@ export default function ZoneExplorer() {
     });
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
-  // 경매 물건이 있는 구역 상위 목록 — 첫 화면(패널)에서 바로 들어간다
-  //   · count 는 **실제 매각 건수**(일괄매각 목적물 목록은 1건). 쌍문동 507-1일원처럼 호실마다
-  //     사건이 따로면 사건 수만큼(132건) 그대로 센다.
-  //   · units 는 auctions.json 의 줄 수(목적물 수) — 일괄매각이면 count 보다 크다.
-  const auctionTop = useMemo(() => {
-    if (!auctions) return [];
-    return Object.entries(auctions.byZone)
-      .map(([id, list]) => ({
-        id,
-        name: list[0]?.zoneName ?? id,
-        count: countAuctionSales(list),
-        units: list.length,
-        nearest: list[0],
-      }))
-      .sort((a, b) =>
-        b.count - a.count ||
-        (a.nearest?.saleDate || "99999999").localeCompare(b.nearest?.saleDate || "99999999")
-      )
-      .slice(0, 5);
-  }, [auctions]);
-
   // ── 매물 조건 필터 ────────────────────────────────────────────────────────
   //   · 지도 배지 숫자·‘매물 있는 구역’ 필터 모두 **같은 목록**에서 센다 —
   //     임대사업자 승계·토허제 조건을 켜면 그 조건에 맞는 매물만 배지에 잡힌다.
@@ -3090,7 +3069,7 @@ export default function ZoneExplorer() {
               />
             )}
 
-                        {/* 3) 아무것도 선택되지 않았을 때: ⚖️ 경매 물건 있는 구역 + ⚡ 최근 변동 구역 */}
+                        {/* 3) 아무것도 선택되지 않았을 때: ✏️ 구역 그려서 분석 + ⚡ 최근 변동 구역 */}
             {!selected && !selectedSeoul && (
               <div className="space-y-3">
                 {/* ✏️ 구역 그려서 분석 — 아무것도 선택되지 않은 화면에서도 바로 시작할 수 있게 */}
@@ -3110,38 +3089,6 @@ export default function ZoneExplorer() {
                     >
                       지도에서 그리기 시작
                     </button>
-                  </section>
-                )}
-
-                {auctionTop.length > 0 && (
-                  <section data-testid="auction-zone-top" className="rounded-xl border border-slate-200 bg-white p-2.5">
-                    <div className="mb-1 flex items-baseline gap-1.5">
-                      <b className="text-[12.5px] font-bold text-slate-900">⚖️ 경매 물건 있는 구역</b>
-                      <span className="text-[10px] text-slate-500">법원에 공고된 진행 물건</span>
-                    </div>
-                    <div className="space-y-0.5">
-                      {auctionTop.map((z) => (
-                        <button
-                          key={z.id}
-                          type="button"
-                          onClick={() => pickZone(z.id, { auction: true })}
-                          data-testid="auction-zone-item"
-                          data-zone-id={z.id}
-                          title={`${z.name} · 경매 ${z.count}건${z.units > z.count ? `(일괄매각 목적물 ${z.units}개)` : ""} — 누르면 구역 상세가 열립니다`}
-                          className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-slate-100"
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[12px] font-bold text-slate-900">{z.name}</span>
-                            <span className="mt-[1px] block truncate text-[10px] text-slate-500">
-                              {z.nearest ? `${z.nearest.usage || "경매"} · 최저 ${formatWon(z.nearest.minimum)} · ${formatSaleDate(z.nearest.saleDate)}` : ""}
-                            </span>
-                          </span>
-                          <span className="shrink-0 rounded-full bg-slate-800 px-1.5 py-[2px] text-[10px] font-extrabold text-white">
-                            {z.count}건
-                          </span>
-                        </button>
-                      ))}
-                    </div>
                   </section>
                 )}
 
