@@ -64,9 +64,9 @@ def to_int(v) -> int | None:
 
 
 def ymd(v: str) -> str:
-    """2025.02.25 / 2025년03월24일 → 20250225"""
-    m = re.search(r"(\d{4})\D?(\d{2})\D?(\d{2})", v or "")
-    return f"{m.group(1)}{m.group(2)}{m.group(3)}" if m else ""
+    """2025.02.25 / 2025. 8. 4. / 2025년03월24일 → 20250225"""
+    m = re.search(r"(\d{4})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2})", v or "")
+    return f"{m.group(1)}{int(m.group(2)):02d}{int(m.group(3)):02d}" if m else ""
 
 
 def to_py(sqm: float | None) -> float | None:
@@ -761,6 +761,8 @@ def main() -> None:
     ap.add_argument("--survey-stdin", action="store_true")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--rescan", action="store_true", help="이미 처리한 PDF 도 다시 읽는다")
+    ap.add_argument("--spec-scan", action="store_true", help="downloads/ 의 매각물건명세서 PDF 를 붙인다")
+    ap.add_argument("--spec-stdin", action="store_true", help="브라우저 DOM 에서 읽은 명세서(JSON) 저장")
     ap.add_argument("--self-test", default="", help="PDF 경로(들)로 파싱만 검사")
     args = ap.parse_args()
     if args.status:
@@ -768,6 +770,12 @@ def main() -> None:
         return
     if args.survey_stdin:
         survey_stdin()
+        return
+    if args.spec_scan:
+        spec_scan(args.limit)
+        return
+    if args.spec_stdin:
+        spec_stdin()
         return
     if args.self_test:
         for p in args.self_test.split(","):
@@ -786,6 +794,156 @@ def main() -> None:
         scan(args.limit, args.dry_run, args.since)
         return
     ap.print_help()
+
+
+
+# ── 매각물건명세서 (문서뷰어 → 파일저장 PDF) ───────────────────────────────────
+def parse_spec_pdf(path: str) -> dict:
+    """매각물건명세서 PDF → {caseNo, seq, court, specification:{...}}
+
+    · 본문은 항목 제목이 블록으로 놓인 서식이라 **y좌표로 구역을 나눠** 읽는다
+      (제목 사이에 글이 비어 있으면 그 항목은 '없음' 이다).
+    """
+    import pymupdf
+
+    doc = pymupdf.open(path)
+    pg = doc[0]
+    lines = []          # [(y, text)]
+    bucket: dict[int, list] = {}
+    for w in pg.get_text("words"):
+        x0, y0, x1, y1, txt = w[0], w[1], w[2], w[3], w[4]
+        bucket.setdefault(round((y0 + y1) / 2), []).append((x0, txt))
+    for y in sorted(bucket):
+        lines.append((y, " ".join(t for _, t in sorted(bucket[y]))))
+
+    def find_y(needle: str) -> int | None:
+        for y, t in lines:
+            if needle in t:
+                return y
+        return None
+
+    def between(y1: int | None, y2: int | None) -> str:
+        if y1 is None:
+            return ""
+        out = []
+        for y, t in lines:
+            if y <= y1:
+                continue
+            if y2 is not None and y >= y2:
+                break
+            if t.strip():
+                out.append(t.strip())
+        return "\n".join(out)
+
+    head = between(0, 640)
+    m_case = re.search(r"사건\s+(\d{4}타경\d+)", head)
+    case_no = m_case.group(1) if m_case else ""
+    if not case_no:
+        m_case = re.search(r"(\d{4}타경\d+)", os.path.basename(path))
+        case_no = m_case.group(1) if m_case else ""
+    m_seq = re.search(r"매각물건명세서\([^,]*,\s*(\d+)\)", os.path.basename(path))
+    seq = m_seq.group(1) if m_seq else "1"
+
+    court = ""
+    for y, t in lines[:6]:
+        flat = t.replace(" ", "")
+        for name in COURT_BY_NAME:
+            if name in flat:
+                court = name
+                break
+        if court:
+            break
+
+    written = ""
+    line_case = next((t for y, t in lines if "타경" in t), "")
+    m_w = re.match(r".*?타경\d+\s+\S+\s+\d+\s+(\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.)", line_case)
+    if m_w:
+        written = ymd(m_w.group(1))
+
+    earliest = ""
+    m_e = re.search(r"(\d{4}\.\d{2}\.\d{2}\.\s*\S+)\s*배당요구종기", head)
+    if m_e:
+        earliest = re.sub(r"\s+", " ", m_e.group(1)).strip()
+
+    y_r1 = find_y("소멸되지 아니하는 것")
+    y_r2 = find_y("지상권의 개요")
+    y_r3 = find_y("비고란")
+    rights = between(y_r1, y_r2)
+    superficies = between(y_r2, y_r3)
+    note = between(y_r3, find_y("매각목적물에서 제외되는 미등기건물"))
+
+    spec = {
+        "writtenDate": written,
+        "earliestRight": earliest,
+        "nonExtinguishedRights": rights,
+        "hasSuperficies": bool(superficies.strip()) if y_r2 is not None else None,
+        "extra": note,
+        "collectedAt": now_iso(),
+        "source": "매각물건명세서(대법원 문서뷰어 파일저장 PDF)",
+    }
+    if superficies.strip():
+        spec["extra"] = (note + "\n\n[지상권] " + superficies.strip()).strip()
+    return {"caseNo": case_no, "seq": str(seq), "court": court, "specification": spec}
+
+
+def attach_spec(rec: dict) -> str | None:
+    """명세서 레코드 → pdf-records/detail/<법원>-<사건>-<seq>.json 의 item.specification"""
+    court = rec["court"]
+    if court in COURT_BY_NAME:
+        court = COURT_BY_NAME[court]
+    if not court:
+        return None
+    path = os.path.join(REC, "detail", f"{court}-{safe_name(rec['caseNo'])}-{rec['seq']}.json")
+    if not os.path.exists(path):
+        return None
+    d = json.load(open(path, encoding="utf-8"))
+    d.setdefault("item", {})["specification"] = rec["specification"]
+    json.dump(d, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return path
+
+
+def spec_scan(limit: int | None = None) -> None:
+    st = load_state()
+    seen = set(st.get("seenSpec") or [])
+    files = []
+    for name in os.listdir(DL):
+        if "매각물건명세서" not in name or not name.lower().endswith(".pdf"):
+            continue
+        p = os.path.join(DL, name)
+        mt = os.path.getmtime(p)
+        key = f"{name}|{int(mt)}"
+        if key in seen:
+            continue
+        files.append((mt, p, key))
+    files.sort()
+    if limit:
+        files = files[:limit]
+    print(f"새 매각물건명세서 {len(files)}건")
+    for mt, p, key in files:
+        try:
+            rec = parse_spec_pdf(p)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ⚠ {os.path.basename(p)}: {e}")
+            continue
+        out = attach_spec(rec)
+        sp = rec["specification"]
+        print(f"  · {rec['court']} {rec['caseNo']} 물건{rec['seq']} 작성 {sp['writtenDate']} "
+              f"최선순위 {sp['earliestRight']} 소멸안됨 {len(sp['nonExtinguishedRights'])}자 "
+              f"지상권 {sp['hasSuperficies']} → {'OK' if out else '상세레코드 없음'}")
+        st.setdefault("seenSpec", []).append(key)
+    save_state(st)
+
+
+def spec_stdin() -> None:
+    """브라우저 DOM 에서 읽은 명세서({caseNo, court, seq, specification}) 저장."""
+    rec = json.loads(sys.stdin.read())
+    if not rec.get("caseNo"):
+        raise SystemExit("caseNo 없음")
+    rec.setdefault("seq", "1")
+    rec["specification"] = rec.get("specification") or {}
+    rec["specification"].setdefault("collectedAt", now_iso())
+    out = attach_spec(rec)
+    print(f"명세서 {rec.get('court')} {rec['caseNo']} → {out or '상세레코드 없음'}")
 
 
 if __name__ == "__main__":

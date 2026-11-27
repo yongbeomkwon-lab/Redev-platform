@@ -152,7 +152,16 @@
   ],
   "collectedAt": "2026-11-27T22:50:09+09:00",
   "appraised": 368000000,
-  "minimum": 368000000
+  "minimum": 368000000,
+  "specification": {
+   "writtenDate": "20261029",
+   "earliestRight": "2023.03.24. 근저당권",
+   "nonExtinguishedRights": "",
+   "hasSuperficies": false,
+   "extra": "",
+   "collectedAt": "2026-11-27T22:54:15+09:00",
+   "source": "매각물건명세서(대법원 문서뷰어 파일저장 PDF)"
+  }
  },
  "meta": {
   "pages": 2,
