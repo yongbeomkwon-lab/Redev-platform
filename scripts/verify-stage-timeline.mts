@@ -114,7 +114,7 @@ for (const [type, m] of [...byTypeCurrent.entries()].sort((a, b) => a[0].localeC
 
 // 5) 특정 구역 확인 (brief 가 지정한 예시 + 중단 구역)
 console.log("\n── 지정 구역 확인 ────────────────────────────────────────────────");
-const named = ["가리봉2", "홍은15", "사당15", "방배동 467-19", "사당21", "휘경동 295"];
+const named = ["가리봉2", "홍은15", "사당15", "사당17", "방배동 467-19", "사당21", "휘경동 295"];
 for (const n of named) {
   const z = zones.find((x) => x.name.includes(n));
   if (!z) {

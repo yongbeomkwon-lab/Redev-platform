@@ -17,8 +17,9 @@
   · selectedAt 2024-10-21, 동의율·사업 개요(토지등소유자 402·기존 394세대·계획 856세대),
     note·areaNote·sources, 별칭 보강
   · 원천 재수입(import-seoul-zones.py) 때 되돌아가지 않도록
-    scripts/data/official-updates.json(단계·분류 정정)과
     scripts/data/official-supplement.json(별칭·선정일·nameNote)에도 같은 값
+  · scripts/data/official-updates.json(단계·분류 정정)은 사람이 직접 손으로 쓴 파일이라
+    이 스크립트가 건드리지 않는다 — 같은 값이 이미 들어가 있다(2026-11-27 추가).
 
 실행: python3 scripts/apply-sadang17-union-20261127.py [--check]
 """
@@ -138,28 +139,6 @@ def patch_zone(zones: list[dict]) -> dict:
     return {"before": before, "after": {k: zone.get(k) for k in ("type", "stage", "stageCode", "prog", "spec")}}
 
 
-def patch_updates(doc: dict) -> bool:
-    srcs = doc.setdefault("sources", {})
-    for key, src in zip(UPDATE_SOURCE_KEYS, SOURCES):
-        srcs[key] = src
-    entry = {
-        "id": ZID,
-        "name": NAME,
-        "set": {"type": "신통기획", "stage": STAGE},
-        "note": NOTE,
-        "areaNote": AREA_NOTE,
-        "nameNote": NAME_NOTE,
-        "sources": UPDATE_SOURCE_KEYS,
-    }
-    ups = doc.setdefault("updates", [])
-    for i, u in enumerate(ups):
-        if u.get("id") == ZID:
-            ups[i] = entry
-            return False
-    ups.append(entry)
-    return True
-
-
 def patch_supplement(doc: dict) -> bool:
     srcs = doc.setdefault("sources", {})
     for key, src in zip(UPDATE_SOURCE_KEYS, SOURCES):
@@ -179,8 +158,6 @@ def main() -> int:
     check = "--check" in sys.argv
     zones = json.loads(ZONES.read_text(encoding="utf-8"))
     report = patch_zone(zones)
-    upd = json.loads(UPDATES.read_text(encoding="utf-8"))
-    added_upd = patch_updates(upd)
     supp = json.loads(SUPPLEMENT.read_text(encoding="utf-8"))
     changed_supp = patch_supplement(supp)
 
@@ -188,14 +165,16 @@ def main() -> int:
     print(f"  type  {report['before']['type']} → {report['after']['type']}")
     print(f"  stage {report['before']['stage']} → {report['after']['stage']}")
     print(f"  stageCode {report['before']['stageCode']} → {report['after']['stageCode']} · prog {report['after']['prog']}")
-    print(f"  official-updates: {'추가' if added_upd else '갱신'}")
     print(f"  official-supplement: {'갱신' if changed_supp else '같은 값(변경 없음)'}")
+    upd = json.loads(UPDATES.read_text(encoding="utf-8"))
+    has_upd = any(u.get("id") == ZID for u in upd.get("updates", []))
+    print(f"  official-updates: {'반영됨' if has_upd else '없음 — 손으로 추가 필요'}")
 
     if check:
         return 0
-    ZONES.write_text(json.dumps(zones, ensure_ascii=False, indent=None, separators=(", ", ": ")) + "\n", encoding="utf-8")
-    UPDATES.write_text(json.dumps(upd, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    SUPPLEMENT.write_text(json.dumps(supp, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    # 원본과 같은 서식으로 쓴다(seoul-zones.json = 한 줄·콤마 뒤 공백, official-supplement = 2칸 들여쓰기)
+    ZONES.write_text(json.dumps(zones, ensure_ascii=False, indent=None, separators=(", ", ": ")), encoding="utf-8")
+    SUPPLEMENT.write_text(json.dumps(supp, ensure_ascii=False, indent=2), encoding="utf-8")
     print("저장 완료 — 이어서 node scripts/export-geojson.mjs && node scripts/build-zone-index.mjs")
     return 0
 
