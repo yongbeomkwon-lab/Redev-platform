@@ -359,6 +359,35 @@ export type ParcelInput = {
   areaSqm: number | null;
 };
 
+/**
+ * 공공 지목 — 개별 물권이 아니라 감정 대상이 아닌 토지.
+ *   · 연속지적도의 `jibun` 속성에는 지목이 붙어 온다(예: '798-12도' = 도로).
+ *   · 도로·구거·하천 필지는 면적이 커서 그대로 두면 순위 1·2위를 차지해
+ *     “구역에서 제일 비싼 물건”을 도로로 보여 주게 된다 — 목록에서 뺀다.
+ */
+const PUBLIC_JIMOK = "도구천제유공철방수학광";
+
+/** '798-12도' → { jibun: '798-12', jimok: '도' } */
+export function splitJibun(raw: string): { jibun: string; jimok: string | null } {
+  const text = raw.trim();
+  const m = /^(.*\d)\s*([가-힣])$/.exec(text);
+  if (m && PUBLIC_JIMOK.includes(m[2])) return { jibun: m[1].trim(), jimok: m[2] };
+  return { jibun: text, jimok: null };
+}
+
+/** 같은 필지가 같은 응답에 두 번 오는 경우가 있다(연도·지목 중복 행) — 값이 같으면 하나만 */
+function dedupeItems(items: AppraisalItem[]): AppraisalItem[] {
+  const seen = new Set<string>();
+  const out: AppraisalItem[] = [];
+  for (const it of items) {
+    const key = [it.pnu, it.kind, it.dongNm ?? "", it.hoNm ?? "", it.price, it.year].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
 export type ParcelAppraisal = {
   pnu: string;
   items: AppraisalItem[];
@@ -410,10 +439,11 @@ export async function fetchParcelAppraisal(
     };
   }
   if (apart.items.length > 0) {
-    store(cacheKey, apart.items);
+    const items = dedupeItems(apart.items);
+    store(cacheKey, items);
     return {
       pnu: parcel.pnu,
-      items: apart.items,
+      items,
       missing: false,
       error: null,
       forbidden: false,
@@ -436,10 +466,11 @@ export async function fetchParcelAppraisal(
     };
   }
   if (house.items.length > 0) {
-    store(cacheKey, house.items);
+    const items = dedupeItems(house.items);
+    store(cacheKey, items);
     return {
       pnu: parcel.pnu,
-      items: house.items,
+      items,
       missing: false,
       error: null,
       forbidden: false,
@@ -461,11 +492,12 @@ export async function fetchParcelAppraisal(
       truncated: false,
     };
   }
-  if (land.items.length > 0) store(cacheKey, land.items);
+  const landRowItems = dedupeItems(land.items);
+  if (landRowItems.length > 0) store(cacheKey, landRowItems);
   return {
     pnu: parcel.pnu,
-    items: land.items,
-    missing: land.items.length === 0,
+    items: landRowItems,
+    missing: landRowItems.length === 0,
     error: null,
     forbidden: false,
     requests,
@@ -496,6 +528,8 @@ export type PlanResult = {
   parcels: PlanParcel[];
   requests: number;
   truncated: boolean;
+  /** 공공 지목(도로·구거·하천 등)이라 순위에서 뺀 필지 수 */
+  excluded: number;
 };
 
 /** 링([lng,lat,…] 평면 배열)의 면적(㎡) — zone-stats 와 같은 근사식 */
@@ -572,6 +606,7 @@ export async function planZoneParcels(shape: ZoneShapeInput): Promise<PlanResult
 
   const seen = new Set<string>();
   const parcels: PlanParcel[] = [];
+  let excluded = 0;
   for (const raw of fetched.features) {
     const f = raw as { geometry?: { type?: string; coordinates?: unknown } | null; properties?: Record<string, unknown> | null };
     const props = f.properties ?? {};
@@ -595,11 +630,17 @@ export async function planZoneParcels(shape: ZoneShapeInput): Promise<PlanResult
     const bonbun = String(props.bonbun ?? "").trim();
     const bubun = String(props.bubun ?? "").trim();
     const rawJibun = String(props.jibun ?? "").trim();
-    const jibun = bonbun
+    const base = bonbun
       ? bubun && bubun !== "0"
         ? `${bonbun}-${bubun}`
         : bonbun
       : rawJibun || jibunOf(pnu);
+    // 연속지적도 jibun 속성에 붙은 지목(도로·구거 등)은 떼고, 공공 지목 필지는 순위에서 뺀다
+    const { jibun, jimok } = splitJibun(base);
+    if (jimok) {
+      excluded++;
+      continue;
+    }
     const addr = String(props.addr ?? "").trim() || null;
     const label = (addr ?? jibun).replace(/^서울특별시\s+/, "").replace(/^서울\s+/, "") || jibun;
     const area = flatRingArea(ring);
@@ -612,5 +653,5 @@ export async function planZoneParcels(shape: ZoneShapeInput): Promise<PlanResult
     });
   }
   parcels.sort((a, b) => a.jibun.localeCompare(b.jibun, "ko", { numeric: true }));
-  return { parcels, requests: fetched.requests, truncated: fetched.truncated };
+  return { parcels, requests: fetched.requests, truncated: fetched.truncated, excluded };
 }

@@ -49,7 +49,7 @@ export type ZoneAppraisalPlanResponse = {
   mode: "plan";
   parcels: PlanParcel[];
   total: number;
-  meta: { requests: number; truncated: boolean };
+  meta: { requests: number; truncated: boolean; excluded: number };
 };
 
 export type ZoneAppraisalItemsResponse = {
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       mode: "plan",
       parcels: planned.parcels,
       total: planned.parcels.length,
-      meta: { requests: planned.requests, truncated: planned.truncated },
+      meta: { requests: planned.requests, truncated: planned.truncated, excluded: planned.excluded },
     };
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
   }

@@ -34,7 +34,7 @@ const MAX_MULTIPLIER = 2;
 const CHUNK = 25;
 /** 동시에 보내는 청크 수 */
 const PARALLEL = 2;
-const CACHE_PREFIX = "redev-appraisal:v1:";
+const CACHE_PREFIX = "redev-appraisal:v2:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** localStorage 에 담는 항목 수 상한 — 아파트 대단지(수천 호)까지 담되 넘으면 저장하지 않는다 */
 const CACHE_MAX_ITEMS = 8000;
@@ -52,6 +52,8 @@ type RankData = {
   items: AppraisalItem[];
   parcels: number;
   missing: number;
+  /** 도로·구거·하천 등 공공 지목이라 순위에서 뺀 필지 수 */
+  excluded: number;
   errors: string[];
 };
 
@@ -62,7 +64,13 @@ type RankState =
   | { status: "error"; message: string; detail?: string; hint?: string };
 
 type PlanResponse =
-  | { ok: true; mode: "plan"; parcels: PlanParcel[]; total: number; meta: { requests: number; truncated: boolean } }
+  | {
+      ok: true;
+      mode: "plan";
+      parcels: PlanParcel[];
+      total: number;
+      meta: { requests: number; truncated: boolean; excluded: number };
+    }
   | { ok: false; error: string; detail?: string; hint?: string };
 
 type AppraiseResponse =
@@ -294,6 +302,7 @@ export default function ZoneAppraisalRank({
         items,
         parcels: total,
         missing,
+        excluded: plan.meta?.excluded ?? 0,
         errors: errors.slice(0, 3),
       };
       const at = Date.now();
@@ -654,6 +663,8 @@ export default function ZoneAppraisalRank({
           <p className="mt-0.5 break-keep text-[9.5px] leading-snug text-slate-400">
             공동주택은 호별 공시가격, 단독·다가구는 개별주택가격, 나대지·상가는 개별공시지가×토지면적으로 계산했습니다.
             공시가격이 없는 필지(도로·구거·미등록)는 빠지고, 공유지분 필지는 지분과 무관하게 필지 전체로 잡힙니다.
+            {okState && okState.data.excluded > 0 &&
+              ` 도로·구거·하천 등 공공 지목 ${n(okState.data.excluded)}필지는 개별 물권이 아니라 순위에서 뺐습니다.`}
             {okState &&
               ` 저장된 결과 ${new Date(okState.at).getMonth() + 1}월 ${new Date(okState.at).getDate()}일.`}
           </p>
