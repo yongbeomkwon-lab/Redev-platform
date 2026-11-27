@@ -98,6 +98,13 @@ function n(v: number): string {
   return v.toLocaleString("ko-KR");
 }
 
+/** 상위 % 표기 — 1등은 0.0% 로 보이지 않게 '0.1% 미만'으로 쓴다 */
+function pctLabel(p: number): string {
+  if (!Number.isFinite(p) || p <= 0) return "—";
+  if (p < 0.1) return "0.1% 미만";
+  return `${p.toFixed(1)}%`;
+}
+
 /** 요약 한 칸 — 라벨(작게) + 큰 금액 */
 function Stat({
   label,
@@ -596,7 +603,7 @@ export default function ZoneAppraisalRank({
                     </div>
                     <div className="mt-0.5 flex items-baseline justify-between gap-1">
                       <span className="text-[9.5px] text-slate-500">
-                        상위 {m.pctFromTop.toFixed(1)}% · {m.kind === "land" ? "공시지가×면적" : m.kind === "house" ? "개별주택가격" : "호별 공시가격"}{" "}
+                        상위 {pctLabel(m.pctFromTop)} · {m.kind === "land" ? "공시지가×면적" : m.kind === "house" ? "개별주택가격" : "호별 공시가격"}{" "}
                         {wonLabel(m.price)}
                       </span>
                       <span className="text-[10px] font-semibold tabular-nums text-slate-700" title={wonFull(m.estimated)}>
@@ -622,7 +629,7 @@ export default function ZoneAppraisalRank({
                   </span>
                 </div>
                 <p className="mt-0.5 text-[9.5px] text-slate-500">
-                  상위 {amountRank.pctFromTop.toFixed(1)}% · 이 금액보다 높은 물건 {n(amountRank.higher)}건
+                  상위 {pctLabel(amountRank.pctFromTop)} · 이 금액보다 높은 물건 {n(amountRank.higher)}건
                   {amountRank.equal > 0 && ` · 같은 금액 ${n(amountRank.equal)}건`}
                 </p>
               </div>
