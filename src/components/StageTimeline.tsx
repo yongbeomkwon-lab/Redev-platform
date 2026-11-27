@@ -84,6 +84,22 @@ export default function StageTimeline({ zone }: { zone: SeoulZone }) {
         </p>
       </div>
 
+      {/* 권리산정기준일 — 조합원·분양받을 권리를 가르는 날짜라 현재 단계 바로 아래에 둔다 */}
+      {t.rightsDate && (
+        <div
+          data-testid="stage-rights-date"
+          className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 ring-1 ring-amber-200"
+        >
+          <div className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className="text-[10px] font-bold text-amber-900">권리산정기준일</span>
+            <span className="text-[12px] font-bold tabular-nums text-amber-900">{t.rightsDate}</span>
+          </div>
+          <p className="mt-0.5 text-[9px] leading-snug text-amber-800/80">
+            이 날 이후에 취득한 주택은 분양받을 권리 산정에서 빠질 수 있습니다
+          </p>
+        </div>
+      )}
+
       <ol className="mt-2">
         {t.steps.map((s, i) => {
           const done = s.state === "done";
@@ -141,7 +157,9 @@ export default function StageTimeline({ zone }: { zone: SeoulZone }) {
       </ol>
 
       <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
-        날짜는 서울시 고시·공고에 적힌 것만 표시합니다
+        {t.hasStatsDates
+          ? "날짜: 사업장 추진경과에 적힌 값 그대로(서울시 도시정비사업 통계 2026.6월말 · 정비사업 정보몽땅·보도자료)"
+          : "날짜는 서울시 고시·공고에 적힌 것만 표시합니다"}
       </p>
     </div>
   );

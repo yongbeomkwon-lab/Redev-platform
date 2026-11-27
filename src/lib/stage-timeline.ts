@@ -570,6 +570,12 @@ export type StageTimeline = {
   unmapped: boolean;
   /** 구역 단계 정보 기준일(데이터에 있을 때만) */
   asOf?: string;
+  /** 단계별 날짜를 서울시 통계·정보몽땅에서 채웠는지(화면 하단 출처 문구용) */
+  hasStatsDates?: boolean;
+  /** 단계 날짜 기준일 */
+  datesAsOf?: string;
+  /** 권리산정기준일 — 분양받을 권리의 산정 기준일(데이터에 있을 때만) */
+  rightsDate?: string;
 };
 
 /** "2026-10-22" → "2026.10.22", "2026-10" → "2026.10", "11.19~12.21" → 그대로 */
@@ -584,6 +590,9 @@ export function buildStageTimeline(zone: {
   stage: string;
   selectedAt?: string;
   asOf?: string;
+  stageDates?: Partial<Record<string, string>>;
+  rightsDate?: string;
+  datesAsOf?: string;
 }): StageTimeline {
   const family = pickFamily(zone.type, zone.kind, zone.stage);
   const steps = FAMILY_STEPS[family];
@@ -631,6 +640,30 @@ export function buildStageTimeline(zone: {
     if (!ev?.d && !stillSelecting) byStep.set(candidateIndex, { ...(ev ?? { k: "candidate" }), d: zone.selectedAt });
   }
 
+  // ── 서울시 통계·정보몽땅에서 모은 단계별 공식 날짜(2026-11-27) ────────────────
+  //   · 사다리 위치는 stage 문자열이 정한다(공식 현재 단계가 우선) — 날짜가 칸을 밀지 않는다.
+  //   · 현재 단계보다 뒤 칸의 날짜는 붙이지 않는다(단계 순서가 뒤집힌 구역은 날짜를 참고로만 남긴다).
+  //   · 이미 표기 문자열에 날짜가 있는 칸은 그 값을 그대로 둔다.
+  let hasStatsDates = false;
+  const stageDates = zone.stageDates ?? {};
+  // 한 칸에 여러 키가 들어가는 칸(사업시행인가 = implement·design)은 **칸의 첫 키를 우선**한다
+  //   — 건축심의(design) 날짜가 사업시행인가 날짜를 덮어쓰지 않도록.
+  const statsByStep = new Map<number, { rank: number; k: string; d: string }>();
+  for (const [k, d] of Object.entries(stageDates)) {
+    if (!d) continue;
+    const i = steps.findIndex((s) => s.keys.includes(k as StageKey));
+    if (i < 0 || i > currentIndex) continue; // stage 문자열의 현재 단계를 우선 존중
+    const rank = steps[i].keys.indexOf(k as StageKey);
+    const prev = statsByStep.get(i);
+    if (!prev || rank < prev.rank) statsByStep.set(i, { rank, k, d });
+  }
+  for (const [i, { k, d }] of [...statsByStep.entries()].sort((a, b) => a[0] - b[0])) {
+    const ev = byStep.get(i);
+    if (ev?.d) continue; // 표기 문자열에 이미 날짜가 있으면 그 값을 둔다
+    byStep.set(i, { ...(ev ?? { k: k as StageKey }), d });
+    hasStatsDates = true;
+  }
+
   const finished = currentIndex === steps.length - 1 && resolved.some((r) => r.i === steps.length - 1 && !r.e.ip);
 
   const views: StageStepView[] = steps.map((s, i) => {
@@ -661,5 +694,8 @@ export function buildStageTimeline(zone: {
     lastReachedDate: haltedReason && !unmapped ? formatStageDate(byStep.get(currentIndex)?.d) : undefined,
     unmapped,
     asOf: zone.asOf,
+    hasStatsDates,
+    datesAsOf: zone.datesAsOf,
+    rightsDate: formatStageDate(zone.rightsDate),
   };
 }

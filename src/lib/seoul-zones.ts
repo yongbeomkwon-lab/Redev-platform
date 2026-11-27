@@ -91,6 +91,16 @@ export type SeoulZone = {
   householdsPlan?: number;
   /** 노후도 % */
   deterioration?: number;
+  /**
+   * 단계별 공식 날짜 — 서울시 도시정비사업 통계·정비사업 정보몽땅 추진경과·보도자료로 확인한 값만.
+   *   키는 stage-timeline 의 StageKey(district·committee·union·implement·design·disposition·demolish·construct …).
+   *   화면은 `stage` 문자열이 말하는 현재 단계를 우선하고, 이 날짜는 지나온 단계의 날짜로만 붙인다.
+   */
+  stageDates?: Partial<Record<string, string>>;
+  /** 권리산정기준일(YYYY-MM-DD) — 분양받을 권리의 산정 기준일 */
+  rightsDate?: string;
+  /** 단계 날짜 기준일(예: 2026-06-30 서울시 통계 기준) */
+  datesAsOf?: string;
 };
 
 /**
