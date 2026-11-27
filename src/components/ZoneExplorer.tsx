@@ -223,7 +223,9 @@ export default function ZoneExplorer() {
   const [myFocusId, setMyFocusId] = useState<string | null>(null);
   // 지도 위 떠 있는 패널 열림 상태
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [legendOpen, setLegendOpen] = useState(true);
+  // 범례는 첫 접속에 접힌 채로 시작한다 — 지도를 최소한만 가리는 '범례' 바(칩)만 남기고,
+  //   누르면 펼쳐진다(2026-11-27 요청, 데스크톱·모바일 공통).
+  const [legendOpen, setLegendOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   // ── 주소 검색 → 소속 구역 판별 ─────────────────────────────────────────────
   //   입력이 주소 형태면 카카오 주소 검색 결과를 드롭다운에 함께 보여주고,
