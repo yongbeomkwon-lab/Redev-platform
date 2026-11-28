@@ -234,12 +234,6 @@ def _neighbours(polys: dict, dist: float = 0.00002) -> dict:
     return nb
 
 
-def _area(poly) -> float:
-    """도 단위 폴리곤 면적 → ㎡ (중심 위도 기준)."""
-    lat0 = poly.centroid.y
-    return poly.area * (111132.0 ** 2) * math.cos(math.radians(lat0))
-
-
 def _finish(zid: str, polys: dict, chosen: set, seeds: list, target: float, z: dict) -> dict:
     from shapely.geometry import Polygon
     from shapely.ops import unary_union
@@ -264,7 +258,8 @@ def _finish(zid: str, polys: dict, chosen: set, seeds: list, target: float, z: d
         if poly_area_m2(hp) >= 100:  # 필지 사이 미세 틈은 구멍으로 남기지 않는다
             holes.append([[round(y, 7), round(x, 7)] for x, y in hp.exterior.coords])
 
-    total = _area(geom) + sum(_area(g) for g in parts_geom)
+    total = poly_area_m2(geom) + sum(poly_area_m2(g) for g in parts_geom)
+    # (도로 필지는 구역계에 포함해 조립한다 — 빼면 면적이 크게 줄어 목표 면적과 어긋난다)
     return {
         "zid": zid,
         "areaShape": round(total, 1),
