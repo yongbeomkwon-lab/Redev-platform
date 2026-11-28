@@ -20,6 +20,7 @@ import {
   type BuildingTradeTarget,
   type MolitTransaction,
 } from "@/lib/molit";
+import TradeCardButton from "@/components/TradeCardButton";
 
 /** 첫 호출 — 최근 2년. 두 번째 호출로 나머지 3년을 채운다 */
 const FIRST_CHUNK = 24;
@@ -497,7 +498,7 @@ export default function BuildingTradeHistory({
                           </div>
                           <ul className="divide-y divide-line/70">
                             {items.map((t) => (
-                              <HistoryRow key={t.id} t={t} />
+                              <HistoryRow key={t.id} t={t} peers={rows} />
                             ))}
                           </ul>
                         </div>
@@ -586,8 +587,8 @@ function Stat({
   );
 }
 
-/** 거래 1건 — 계약일 · 전용면적(㎡/평) · 층 · 대지권(연립) · 거래금액 · 평당가 */
-function HistoryRow({ t }: { t: MolitTransaction }) {
+/** 거래 1건 — 계약일 · 전용면적(㎡/평) · 층 · 대지권(연립) · 거래금액 · 평당가 (+ 카톡 공유 카드) */
+function HistoryRow({ t, peers }: { t: MolitTransaction; peers: MolitTransaction[] }) {
   const area = t.areaSqm ? `${t.areaSqm.toFixed(t.areaSqm >= 100 ? 0 : 1)}㎡` : null;
   const pyeong = t.areaSqm ? toPyeong(t.areaSqm) : null;
   const landSqm = t.plottageSqm && t.plottageSqm > 0 ? t.plottageSqm : null;
@@ -595,7 +596,7 @@ function HistoryRow({ t }: { t: MolitTransaction }) {
   return (
     <li
       className={
-        "grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-x-2.5 px-3 py-1.5 " +
+        "grid grid-cols-[46px_minmax(0,1fr)_auto_auto] items-center gap-x-2.5 px-3 py-1.5 " +
         (t.canceled ? "bg-rose-50/40" : "bg-white")
       }
     >
@@ -641,6 +642,10 @@ function HistoryRow({ t }: { t: MolitTransaction }) {
         <div className="text-[10px] tabular-nums text-slate-500">
           {t.pyeongPrice ? `평당 ${t.pyeongPrice.toLocaleString()}만` : "-"}
         </div>
+      </div>
+      {/* 📋 카톡 공유 카드 — 이 건을 그대로 이미지로 만든다(5년 이력이 통계 근거) */}
+      <div className="justify-self-end">
+        <TradeCardButton tx={t} peers={peers} compact />
       </div>
     </li>
   );

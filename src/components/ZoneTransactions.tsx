@@ -32,6 +32,8 @@ import {
 import { geocodeJibun, legalDongAtPoint, type GeoPoint } from "@/lib/kakao-address";
 import { hasShape, pointInZone, sampleZonePoints, type ZoneShape } from "@/lib/zone-geo";
 import type { TxMapPin } from "@/components/map/props";
+import TradeCardButton from "@/components/TradeCardButton";
+import { RTMS_PUBLIC_URL } from "@/lib/molit-error";
 
 /** 지도에 찍는 핀 상한 — 구역 안 거래가 많아도 지도가 뭉개지지 않게(최신 거래부터) */
 const PIN_CAP = 60;
@@ -75,10 +77,13 @@ export default function ZoneTransactions({
   polygon,
   parts,
   holes,
+  zoneName,
   onTxPins,
   onOpenBuilding,
 }: {
   gu: string;
+  /** 구역 이름 — 실거래 공유 카드의 부제에 넣는다 */
+  zoneName?: string;
   /** 구역 이름·별칭 — 법정동·지번을 찾는 근거 */
   names: string[];
   /** 구역 중심 좌표(있으면 역지오코딩 대비책으로 쓴다) */
@@ -474,11 +479,40 @@ export default function ZoneTransactions({
       {state === "loading" && <p className="py-4 text-center text-[11px] text-slate-500">국토부 실거래를 불러오는 중…</p>}
 
       {state === "error" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] leading-relaxed text-amber-900">
+        <div
+          data-testid="tx-error"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] leading-relaxed text-amber-900"
+        >
           {data?.reason === "key_missing" ? (
             <>
               서버에 국토부 API 키(<code className="rounded bg-white/70 px-1">MOLIT_API_KEY</code>)가 아직 없습니다.
               Vercel 환경변수에 넣으면 이 구역부터 바로 실거래가 표시됩니다.
+            </>
+          ) : data?.reason === "upstream_outage" ? (
+            <>
+              <p className="font-bold">국토부 실거래 오픈API 연계 장애 (외부 문제)</p>
+              <p className="mt-0.5">{data.message}</p>
+              <p className="mt-1 text-[10px] text-amber-900/80">
+                확인: 같은 인증키로 건축물대장 API는 정상 응답(코드 00)이고, 실거래(RTMS) 계열만 전 자치구·전월에서
+                코드 04가 돌아옵니다 — 우리 키·요청 형식 문제가 아닙니다.
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <a
+                  href={RTMS_PUBLIC_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border border-amber-400 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                >
+                  실거래가 공개시스템에서 보기 ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((v) => v + 1)}
+                  className="rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                >
+                  다시 시도
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -621,6 +655,8 @@ export default function ZoneTransactions({
                 <TxRow
                   key={t.id}
                   t={t}
+                  peers={rows}
+                  zoneName={zoneName}
                   inside={isInside(t)}
                   showBadge={mode === "dong"}
                   onOpen={
@@ -666,6 +702,10 @@ export default function ZoneTransactions({
             {(data?.notices ?? []).map((n) => (
               <li key={n}>· {n}</li>
             ))}
+            <li>
+              · 📋 <b className="font-semibold text-slate-600">카드</b>를 누르면 이 거래를 카톡에 바로 붙여넣을 수 있는
+              이미지(평형최고·최고가대비·추이 포함)로 만들어 클립보드에 복사합니다.
+            </li>
             <li>
               · 출처:{" "}
               <a
@@ -778,11 +818,16 @@ function EmptyState({
 
 function TxRow({
   t,
+  peers,
+  zoneName,
   inside,
   showBadge,
   onOpen,
 }: {
   t: MolitTransaction;
+  /** 공유 카드의 평형최고·최고가대비를 계산할 후보 거래(같은 구역·법정동 목록) */
+  peers: MolitTransaction[];
+  zoneName?: string;
   inside: boolean;
   showBadge: boolean;
   /** 있으면 행 전체가 버튼 — 이 단지·건물의 5년 이력이 열린다 */
@@ -865,29 +910,43 @@ function TxRow({
     </>
   );
 
+  // 행 오른쪽 버튼 묶음 — 5년 이력(누를 수 있는 행)·카드 복사.
+  //   · 카드 버튼은 행 버튼 안에 넣을 수 없다(버튼 중첩 금지) → 행 본문과 형제로 둔다.
+  const actions = (
+    <div className="flex shrink-0 flex-col items-end gap-1 self-center">
+      <TradeCardButton tx={t} peers={peers} zoneName={zoneName} compact />
+      {onOpen && (
+        <span
+          aria-hidden
+          className="rounded-full border border-line bg-white px-1.5 py-[1px] text-[9px] font-bold text-brand"
+        >
+          5년 ↗
+        </span>
+      )}
+    </div>
+  );
+
   // 아파트·연립다세대 행은 누를 수 있다 — 그 단지·건물의 최근 5년 이력이 열린다
   if (onOpen) {
     return (
-      <li className={t.canceled ? "bg-rose-50/50" : ""}>
+      <li className={"flex items-stretch " + (t.canceled ? "bg-rose-50/50" : "")}>
         <button
           type="button"
           onClick={onOpen}
           data-testid="tx-row-open"
           title={`${t.name} · ${t.umdNm} ${t.jibun} — 최근 5년 실거래 이력 보기`}
-          className="flex w-full items-start gap-2 px-2.5 py-1.5 text-left transition hover:bg-brand-tint/70"
+          className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-1.5 text-left transition hover:bg-brand-tint/70"
         >
           {body}
-          <span
-            aria-hidden
-            className="shrink-0 self-center rounded-full border border-line bg-white px-1.5 py-[1px] text-[9px] font-bold text-brand"
-          >
-            5년 ↗
-          </span>
         </button>
+        <div className="flex items-center pr-2">{actions}</div>
       </li>
     );
   }
   return (
-    <li className={"flex items-start gap-2 px-2.5 py-1.5 " + (t.canceled ? "bg-rose-50/50" : "")}>{body}</li>
+    <li className={"flex items-start gap-2 px-2.5 py-1.5 " + (t.canceled ? "bg-rose-50/50" : "")}>
+      {body}
+      <div className="flex items-center">{actions}</div>
+    </li>
   );
 }

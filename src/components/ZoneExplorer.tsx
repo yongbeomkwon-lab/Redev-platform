@@ -32,6 +32,7 @@ import ZoneVitalStats from "@/components/ZoneVitalStats";
 import StageTimeline from "@/components/StageTimeline";
 import { featuredStageInput } from "@/lib/featured-stage";
 import ZoneTransactions from "@/components/ZoneTransactions";
+import ZoneRedevelopmentCheck from "@/components/ZoneRedevelopmentCheck";
 import LandPermitNotice from "@/components/LandPermitNotice";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
 import { looksLikeAddress, searchAddresses, type AddressCandidate } from "@/lib/kakao-address";
@@ -3233,6 +3234,17 @@ export default function ZoneExplorer() {
                     (없는 날짜는 비워 둔다). 샘플 값(세대수·비례율·시공사)과 달리 이 카드는 공식 값이다. */}
                 <StageTimeline zone={featuredStageInput(selected, selectedOfficial)} />
 
+                {/* 🛡️ 5년 재당첨 제한 · 입주권 자가진단 — 단계 타임라인 바로 아래.
+                    구역 유형·단계·자치구는 자동으로 읽고, 선행 분양 이력만 넣으면 판정된다. */}
+                <ZoneRedevelopmentCheck
+                  zoneName={selected.name}
+                  type={selectedOfficial?.type ?? selected.type}
+                  stage={selectedStage}
+                  gu={selected.district}
+                  kind={selectedOfficial?.kind}
+                  stageDates={selectedOfficial?.stageDates}
+                />
+
                 <div>
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">사업개요</h3>
                   <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-xl border border-slate-200 p-3 text-xs">
@@ -3272,6 +3284,7 @@ export default function ZoneExplorer() {
                 <ZoneTransactions
                   gu={selected.district}
                   names={[selected.name]}
+                  zoneName={selected.name}
                   center={selected.center}
                   polygon={selected.polygon}
                   parts={selected.parts}

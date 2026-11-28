@@ -125,7 +125,12 @@ export type MolitSummary = {
 
 export type MolitResponse = {
   ok: boolean;
-  reason?: "gu_not_found" | "key_missing" | "upstream_failed" | "bad_request";
+  /**
+   * `upstream_outage` = 국토부 오픈API 연계 자체가 끊긴 상태(게이트웨이 코드 04 등).
+   *   · 우리 키·요청 형식 문제가 아니라 **공공데이터포털 ↔ 국토부(RTMS) 연계 장애**다.
+   *     화면은 이 경우 '우리 설정을 고치라'고 안내하지 않고, 실거래가 공개시스템 링크를 준다.
+   */
+  reason?: "gu_not_found" | "key_missing" | "upstream_failed" | "upstream_outage" | "bad_request";
   message?: string;
   query?: MolitQuery;
   coverage?: MolitCoverage[];
@@ -188,7 +193,7 @@ export type BuildingHistorySummary = {
 
 export type BuildingHistoryResponse = {
   ok: boolean;
-  reason?: "gu_not_found" | "key_missing" | "upstream_failed" | "bad_request";
+  reason?: "gu_not_found" | "key_missing" | "upstream_failed" | "upstream_outage" | "bad_request";
   message?: string;
   query?: BuildingHistoryQuery;
   coverage?: MolitCoverage;

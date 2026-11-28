@@ -25,6 +25,7 @@ import {
   type MolitTransaction,
 } from "@/lib/molit";
 import { loadBuildingTransactions, recentMonths } from "@/lib/molit-server";
+import { molitFailMessage } from "@/lib/molit-error";
 
 export const dynamic = "force-dynamic";
 /** 60개월을 한 번에 불러도 Vercel 서버리스 한도를 넘지 않게 — 실제로는 24+36으로 나눠 부른다 */
@@ -109,12 +110,8 @@ export async function GET(req: Request) {
   });
 
   if (!data.coverage.ok && data.monthsOk === 0) {
-    return fail(
-      "upstream_failed",
-      `국토부 실거래 API가 응답하지 않았습니다${
-        data.coverage.code ? ` (${data.coverage.code} ${data.coverage.message ?? ""})` : ""
-      }. 잠시 뒤 다시 시도해 주세요.`
-    );
+    const { reason, message } = molitFailMessage(data.coverage);
+    return fail(reason, message);
   }
 
   const rows: MolitTransaction[] = data.transactions;

@@ -19,6 +19,7 @@ import {
   type MolitTransaction,
 } from "@/lib/molit";
 import { loadGuTransactions, recentMonths } from "@/lib/molit-server";
+import { molitFailMessage } from "@/lib/molit-error";
 
 export const dynamic = "force-dynamic";
 
@@ -74,10 +75,8 @@ export async function GET(req: Request) {
 
   if (!data.anyOk) {
     const firstFail = data.coverage.find((c) => !c.ok);
-    return fail(
-      "upstream_failed",
-      `국토부 실거래 API가 응답하지 않았습니다${firstFail?.code ? ` (${firstFail.code} ${firstFail.message ?? ""})` : ""}. 잠시 뒤 다시 시도해 주세요.`
-    );
+    const { reason, message } = molitFailMessage(firstFail);
+    return fail(reason, message);
   }
 
   const want = new Set(dongs);

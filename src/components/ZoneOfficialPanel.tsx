@@ -22,6 +22,7 @@ import LandPermitNotice from "./LandPermitNotice";
 import type { TxMapPin } from "./map/props";
 import type { BuildingTradeTarget } from "@/lib/molit";
 import StageTimeline from "./StageTimeline";
+import ZoneRedevelopmentCheck from "./ZoneRedevelopmentCheck";
 import ZonePlanSummary from "./ZonePlanSummary";
 import ZoneConsent from "./ZoneConsent";
 import ZoneVitalStats from "./ZoneVitalStats";
@@ -111,6 +112,16 @@ export default function ZoneOfficialPanel({
           별칭·지번 목록보다 위에 둔다(지번이 많은 구역에서도 스크롤 없이 바로 보이도록) */}
       <StageTimeline zone={zone} />
 
+      {/* 🛡️ 5년 재당첨 제한 · 입주권 자가진단 — 유형·단계·자치구 자동, 이력만 입력하면 판정 */}
+      <ZoneRedevelopmentCheck
+        zoneName={zone.name}
+        type={zone.type}
+        stage={zone.stage}
+        gu={zone.gu}
+        kind={zone.kind}
+        stageDates={zone.stageDates}
+      />
+
       {aliases.length > 0 && (
         <p className="text-[11px] leading-relaxed text-slate-500">
           <span className="font-semibold text-slate-600">별칭·지번</span>{" "}
@@ -149,6 +160,7 @@ export default function ZoneOfficialPanel({
       <ZoneTransactions
         gu={zone.gu}
         names={[zone.name, ...(zone.alias ?? [])]}
+        zoneName={zone.name}
         center={zone.center}
         polygon={zone.polygon}
         parts={zone.parts}
