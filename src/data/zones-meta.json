@@ -477,5 +477,95 @@
  "cheonhoA1_20261127": {
   "asOf": "2026-11-27",
   "note": "천호A1-1 공공재개발·시공사선정(2026-05-16 대우건설)·권리산정기준일 2020-09-21, 천호A1-2 신통기획 1차 후보지로 유형 정정"
+ },
+ "parcelRings_20261128": {
+  "asOf": "2026-11-28",
+  "note": "연속지적도 필지 조립으로 채운 구역들(성동·광진·중구·서초·강남·동작·강동)",
+  "zones": {
+   "sd-eungbong-geumho-hyundai": {
+    "areaShape": 30357.6
+   },
+   "sd-majang-793-22": {
+    "areaShape": 8000.5
+   },
+   "sy-yongdap1": {
+    "areaShape": 43683.8
+   },
+   "yongdap-2": {
+    "areaShape": 99812.3
+   },
+   "rest17gu-jayang4b": {
+    "areaShape": 54815.0
+   },
+   "jayang-548": {
+    "areaShape": 31482.6
+   },
+   "sd-songjeong-73-735": {
+    "areaShape": 102901.7
+   },
+   "haengdang-300-1": {
+    "areaShape": 65524.6
+   },
+   "rest17gu-jg-신당13": {
+    "areaShape": 65390.3
+   },
+   "rest17gu-jg-신당14": {
+    "areaShape": 32620.9
+   },
+   "junggu-sindang-hyundai": {
+    "areaShape": 44265.3
+   },
+   "junggu-sindang-403-20": {
+    "areaShape": 4701.4
+   },
+   "bangbae-920-1": {
+    "areaShape": 18309.6
+   },
+   "seocho-1506-6": {
+    "areaShape": 43898.0
+   },
+   "seocho-1487": {
+    "areaShape": 49409.3
+   },
+   "gangnam4gu-samseong-84": {
+    "areaShape": 34829.6
+   },
+   "dongjak-102-8": {
+    "areaShape": 21040.6
+   },
+   "rest17gu-gd-상일동-300": {
+    "areaShape": 57769.1
+   },
+   "rest17gu-myeongil-100": {
+    "areaShape": 41965.7
+   },
+   "gwangjin-junggok-b4": {
+    "areaShape": 67128.6
+   },
+   "gwangjin-junggok-b5": {
+    "areaShape": 40904.3
+   },
+   "gwangjin-junggok-c3": {
+    "areaShape": 58148.0
+   },
+   "gwangjin-junggok-c4": {
+    "areaShape": 33855.7
+   },
+   "rest17gu-junggok-37-17": {
+    "areaShape": 54841.9
+   },
+   "rest17gu-junggok-d2": {
+    "areaShape": 89321.6
+   },
+   "rest17gu-junggok-d4": {
+    "areaShape": 54439.9
+   },
+   "rest17gu-junggok-e6f2": {
+    "areaShape": 92710.1
+   },
+   "junggu-ddp-123": {
+    "areaShape": 346662.7
+   }
+  }
  }
 }
