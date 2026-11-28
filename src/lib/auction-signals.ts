@@ -559,7 +559,7 @@ export function buildOpinion(
 
   /* ── 매력 ── */
   const merits: string[] = [];
-  if (rate != null && rate <= 90) {
+  if (rate != null && rate >= 25 && rate <= 90) {
     merits.push(`감정가 대비 최저가 ${rate}% — 감정가보다 ${100 - rate}% 낮은 출발입니다.`);
   }
   if (zone) {
@@ -650,7 +650,7 @@ export function buildOpinion(
     priority.state === "senior"
       ? `임차인 ${priority.count}명이 말소기준권리보다 앞서 전입해 보증금 인수 위험이 있습니다.`
       : priority.state === "absent"
-        ? `임차인 ${tenants.length}명은 모두 경매개시일 이후 전입해 대항력이 없을 것으로 보입니다(점유·인도는 원문 확인).`
+        ? `임차인 ${tenants.length}명은 말소기준권리보다 뒤에 전입해 대항력이 없을 것으로 보입니다(점유·인도는 원문 확인).`
         : priority.state === "unknown"
           ? `임차인 ${tenants.length}명이 기재돼 있으나 말소기준권리 일자가 없어 대항력은 원문으로 확인해야 합니다.`
           : surveyed

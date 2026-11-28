@@ -1112,6 +1112,15 @@ function PremiumCard({
   const priority = tenantPriority(detail);
   const set = (patch: Partial<PremiumAssumptions>) => setAssumptions((a) => ({ ...a, ...patch }));
   const bidMan = Math.round(assumptions.bid / 10000);
+  const entryRate =
+    item.minimumRate ?? (item.appraised && item.minimum ? Math.round((item.minimum / item.appraised) * 100) : null);
+  // 큰 배수는 % 로 적으면 "+4340.9%" 처럼 읽기 어렵다 — 100% 이상은 배수로 적는다
+  const premiumRatioText =
+    est.premiumRatePct == null
+      ? null
+      : Math.abs(est.premiumRatePct) >= 100
+        ? `${(est.premiumRatePct / 100).toFixed(1)}배`
+        : `${est.premiumRatePct}%`;
 
   return (
     <div className="mt-1.5 rounded-lg border border-amber-200 bg-white px-2 py-1.5" data-testid="auction-premium">
@@ -1141,15 +1150,22 @@ function PremiumCard({
 
       <p className="mt-1 text-[9.5px] leading-relaxed text-slate-500">
         낙찰가 {formatWon(assumptions.bid)}
-        {est.premiumRatePct != null && (
+        {premiumRatioText != null && (
           <span className={est.premium >= 0 ? " font-semibold text-emerald-700" : " font-semibold text-rose-700"}>
-            {" "}대비 {est.premiumRatePct > 0 ? "+" : ""}
-            {est.premiumRatePct}%
+            {" "}대비 {est.premium >= 0 ? "+" : "−"}
+            {premiumRatioText}
           </span>
         )}
         {" · "}부대비용 {formatWon(est.cost)}({assumptions.costRatePct}%)
         {assumptions.assumedDeposit > 0 && <> · 인수 보증금 {formatWon(assumptions.assumedDeposit)}</>}
       </p>
+
+      {entryRate != null && entryRate < 30 && (
+        <p className="mt-1 rounded border border-rose-200 bg-rose-50/80 px-1.5 py-1 text-[9.5px] leading-relaxed text-rose-800">
+          낙찰가가 감정가의 <b>{entryRate}%</b>뿐입니다 — 지분·명도·건물 상태처럼 가격이 낮은 이유를 먼저
+          확인하세요. 이 계산은 감정가를 기준으로 한 추정이라 실제 권리가액과 크게 다를 수 있습니다.
+        </p>
+      )}
 
       {est.saleEstimate != null && (
         <p className="mt-0.5 text-[9.5px] leading-relaxed text-slate-500">
