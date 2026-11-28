@@ -105,8 +105,16 @@ export function buildCardData(
   stats.push({ label: "3개월건수", value: recent3 ? `${recent3}건` : "-" });
   stats.push({ label: "평형최고", value: splitEokWon(maxSame).main + (splitEokWon(maxSame).sub ? ` ${splitEokWon(maxSame).sub}` : ""), tone: "violet" });
   stats.push({
-    label: tx.kind === "단독·다가구" ? "대지평당" : "전용평당",
-    value: tx.pyeongPrice ? `${tx.pyeongPrice.toLocaleString()}만` : "-",
+    label:
+      tx.kind === "단독·다가구" ? "대지평당" : tx.kind === "연립·다세대" ? "지분평당" : "전용평당",
+    value:
+      tx.kind === "연립·다세대"
+        ? tx.landPyeongPrice
+          ? `${tx.landPyeongPrice.toLocaleString()}만`
+          : "-"
+        : tx.pyeongPrice
+          ? `${tx.pyeongPrice.toLocaleString()}만`
+          : "-",
   });
 
   const firstYm = series[0]?.t ?? Date.parse(tx.dealDate);

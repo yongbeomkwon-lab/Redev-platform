@@ -69,6 +69,8 @@ export default function ZoneRedevelopmentCheck({
   gu,
   kind,
   stageDates,
+  initialPrior = "",
+  initialDeadline = "",
 }: {
   zoneName: string;
   /** 서울시 사업유형 (모아타운·신통기획·일반재개발·재건축 …) */
@@ -81,11 +83,15 @@ export default function ZoneRedevelopmentCheck({
   kind?: string;
   /** 단계별 공식 날짜 — 조합설립인가(union)·관리처분인가(disposition) 를 자동으로 채운다 */
   stageDates?: Partial<Record<string, string>>;
+  /** 선행 분양 이력 날짜를 미리 채운다(상담 재개·검수용) */
+  initialPrior?: string;
+  /** 이 구역 분양신청 마감일을 미리 채운다 */
+  initialDeadline?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [prior, setPrior] = useState("");
+  const [open, setOpen] = useState(Boolean(initialPrior || initialDeadline));
+  const [prior, setPrior] = useState(initialPrior);
   const [noPrior, setNoPrior] = useState(false);
-  const [deadline, setDeadline] = useState("");
+  const [deadline, setDeadline] = useState(initialDeadline);
   const [deadlineUnknown, setDeadlineUnknown] = useState(false);
   const [purchase, setPurchase] = useState<"" | "before" | "after">("");
   const [copied, setCopied] = useState(false);

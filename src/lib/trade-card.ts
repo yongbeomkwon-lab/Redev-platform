@@ -184,7 +184,7 @@ export function drawTradeCard(ctx: CanvasRenderingContext2D, d: TradeCardData) {
   const subEnd = y - 34;
 
   // ── 큰 금액 + 증감 배지 ─────────────────────────────────────────────────
-  const priceTop = subEnd + 68;
+  const priceTop = subEnd + 86;
   const bigSize = 76;
   font(ctx, 800, bigSize);
   const mainW = ctx.measureText(d.price.main).width;

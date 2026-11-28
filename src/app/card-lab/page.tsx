@@ -100,6 +100,12 @@ export default function CardLab() {
   const [zone, setZone] = useState("금호23구역");
   const [aptUrl, setAptUrl] = useState("");
   const [villaUrl, setVillaUrl] = useState("");
+  const [q, setQ] = useState({ prior: "", deadline: "" });
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    setQ({ prior: p.get("prior") ?? "", deadline: p.get("deadline") ?? "" });
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -150,6 +156,8 @@ export default function CardLab() {
           gu="성동구"
           kind="신속통합기획(재개발)"
           stageDates={{ prep: "2026-03-05" }}
+          initialPrior={q.prior}
+          initialDeadline={q.deadline}
         />
       </div>
       <div className="rounded-xl border border-line bg-white p-3">
