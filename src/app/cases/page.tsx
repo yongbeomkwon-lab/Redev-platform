@@ -483,7 +483,14 @@ function CaseTimeline({ t }: { t: NonNullable<CaseCard["timeline"]> }) {
             {t.window.marks.map((m, i) => (
               <span
                 key={`label-${i}`}
-                className="absolute top-[23px] whitespace-nowrap"
+                className={
+                  "absolute top-[23px] " +
+                  (m.pos === "start"
+                    ? "max-w-[40%] text-left"
+                    : m.pos === "mid"
+                      ? "max-w-[44%] text-center"
+                      : "max-w-[40%] text-right")
+                }
                 style={{ left: `${m.pct}%`, transform: shift(m.pos) }}
               >
                 <span className="block text-[10.5px] font-extrabold leading-[1.35] tabular-nums text-ink">
