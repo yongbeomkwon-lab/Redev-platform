@@ -341,17 +341,27 @@ function AuctionPins({
   pins,
   onSelectPin,
   activeId,
+  channel = "court",
 }: {
   pins: AuctionMapPin[];
   onSelectPin?: (pin: AuctionMapPin) => void;
   activeId?: string | null;
+  /** `onbid` 면 공매(🏛️·틸) — 카카오맵 핀과 같은 색 구분 */
+  channel?: "court" | "onbid";
 }) {
   if (pins.length === 0) return null;
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return (
-    <Pane name="redevAuctionPins" style={{ zIndex: 691 }}>
+    <Pane name={channel === "onbid" ? "redevGongmaePins" : "redevAuctionPins"} style={{ zIndex: 691 }}>
       {pins.map((p) => {
         const open = activeId === p.id;
+        const gong = channel === "onbid";
+        const accent = gong ? "#0f766e" : "#b45309";
+        const edge = gong ? "#99f6e4" : "#f3c98b";
+        const fill = gong ? "#f0fdfa" : "#fffbeb";
+        const fillOn = gong ? "#ccfbf1" : "#fff7ed";
+        const ink = gong ? "#134e4a" : "#7c2d12";
+        const sub = gong ? "#0f766e" : "#92400e";
         return (
           <Marker
             key={p.id}
@@ -362,7 +372,7 @@ function AuctionPins({
             }}
             icon={L.divIcon({
               className: "redev-auction-pin",
-              html: `<div data-testid="auction-pin" data-auction-id="${esc(p.id)}" data-active="${open ? "1" : "0"}" style="transform:translate(-50%,-100%);display:block;text-align:center;border:1px solid ${open ? "#b45309" : "#f3c98b"};border-left:3px solid #b45309;background:${open ? "#fff7ed" : "#fffbeb"};border-radius:5px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:#7c2d12;">⚖️ ${esc(p.priceLabel)}</span><span style="display:block;font-size:9px;font-weight:600;color:#92400e;">${esc(p.subLabel)}</span></div>`,
+              html: `<div data-testid="${gong ? "gongmae-pin" : "auction-pin"}" data-channel="${gong ? "onbid" : "court"}" data-auction-id="${esc(p.id)}" data-active="${open ? "1" : "0"}" style="transform:translate(-50%,-100%);display:block;text-align:center;border:1px solid ${open ? accent : edge};border-left:3px solid ${accent};background:${open ? fillOn : fill};border-radius:5px;padding:2px 5px;white-space:nowrap;box-shadow:0 2px 7px rgba(15,23,42,.3);line-height:1.15;"><span style="display:block;font-size:11px;font-weight:800;color:${ink};">${gong ? "🏛️" : "⚖️"} ${esc(p.priceLabel)}</span><span style="display:block;font-size:9px;font-weight:600;color:${sub};">${esc(p.subLabel)}</span></div>`,
               iconSize: [0, 0],
               iconAnchor: [0, 0],
             })}
@@ -810,6 +820,11 @@ export default function LeafletZoneMap({
   onToggleAuctionPins,
   onSelectAuctionPin,
   activeAuctionPinId,
+  onbidPins = [],
+  onbidPinsOn = false,
+  onToggleOnbidPins,
+  onSelectOnbidPin,
+  activeOnbidPinId,
   jibunPickOn = false,
   onToggleJibunPick,
   onPickJibun,
@@ -965,6 +980,13 @@ export default function LeafletZoneMap({
         onSelectPin={onSelectAuctionPin}
         activeId={activeAuctionPinId ?? null}
       />
+      {/* ── 🏛️ 공매(온비드) 핀 — 같은 배치 규칙, 틸 색 ── */}
+      <AuctionPins
+        pins={onbidPinsOn && !districtMode ? onbidPins : []}
+        onSelectPin={onSelectOnbidPin}
+        activeId={activeOnbidPinId ?? null}
+        channel="onbid"
+      />
 
       {/* ── 지번 찍기 — 클릭/우클릭으로 찍은 자리에 오레오 블루 물결 핀
            · 경계를 그리거나 고치는 중에는 on·onPick 을 모두 끊어 클릭이 지번으로 새지 않게 한다 ── */}
@@ -1117,6 +1139,24 @@ export default function LeafletZoneMap({
             <span aria-hidden className="text-[12px] leading-none">⚖️</span>
             경매 핀
             <span className="font-normal text-amber-700/70">{auctionPins.length}</span>
+          </button>
+        )}
+        {onToggleOnbidPins && onbidPins.length > 0 && (
+          <button
+            type="button"
+            onClick={onToggleOnbidPins}
+            aria-pressed={onbidPinsOn}
+            data-testid="onbid-pins-toggle"
+            title="구역 안 온비드 공매 물건을 🏛️ 핀으로 표시"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+              onbidPinsOn
+                ? "border-teal-300 bg-teal-50 text-teal-900"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+            }`}
+          >
+            <span aria-hidden className="text-[12px] leading-none">🏛️</span>
+            공매 핀
+            <span className="font-normal text-teal-700/70">{onbidPins.length}</span>
           </button>
         )}
         {onToggleCompleted && (
