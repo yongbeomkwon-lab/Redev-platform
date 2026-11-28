@@ -52,6 +52,16 @@ const EXTRA = [
   "areaShape", // 도형 계측 면적
   "dividers", // 구역 안을 나누는 점선(사업예정구역 1·2 등) + 이름표 자리
   "households", // 세대수(보도 기준)
+  // 사업개요 — 공개 자료로 확인한 규모·시공사·최신 현황(상세 패널 「사업개요」 카드, 2026-11-28)
+  "householdsSale",
+  "householdsRental",
+  "householdsMember",
+  "householdsGeneral",
+  "contractor",
+  "buildScale",
+  "planNote",
+  "planAsOf",
+  "planSource",
   "rightsDate", // 권리산정기준일
   "rightsBasis", // 권리산정기준일 근거(조례·고시)
   "rightsNote", // 권리산정기준일 부가 설명(병행 적용 기준)

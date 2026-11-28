@@ -95,6 +95,32 @@ export type SeoulZone = {
   /** 노후도 % */
   deterioration?: number;
   /**
+   * 사업개요 — 공개 자료(서울시 보도자료·사업시행인가 고시·정비사업 정보몽땅)로 확인한 값만 넣는다.
+   *   · 상세 패널의 「사업개요」 카드(ZonePlanSummary)가 읽는다. 값이 없는 구역은 카드를 그리지 않는다.
+   *   · households 가 총 세대수, householdsSale·householdsRental 이 그 안의 분양·임대다
+   *     (분양에는 조합원분양이 포함된다 — householdsMember·householdsGeneral 은 추정치일 때만).
+   */
+  /** 총 세대수 */
+  households?: number;
+  /** 분양 세대수(조합원분양 포함) */
+  householdsSale?: number;
+  /** 임대 세대수 */
+  householdsRental?: number;
+  /** 조합원분양 세대수 — 공개 자료가 추정치면 ≈ 로 보여 준다 */
+  householdsMember?: number;
+  /** 일반분양 세대수 — 공개 자료가 추정치면 ≈ 로 보여 준다 */
+  householdsGeneral?: number;
+  /** 시공사(컨소시엄 포함) */
+  contractor?: string;
+  /** 건축 규모 — 예: "지하 4층~지상 40층, 13개동" */
+  buildScale?: string;
+  /** 최신 진행 현황 한두 줄 — 감정평가·분양신청·관리처분 등 다음 절차 중심 */
+  planNote?: string;
+  /** 사업개요 값의 기준일(예: "2026-11-28") */
+  planAsOf?: string;
+  /** 사업개요 값의 출처 한 줄(카드 맨 아래 작은 글씨) */
+  planSource?: string;
+  /**
    * 단계별 공식 날짜 — 서울시 도시정비사업 통계·정비사업 정보몽땅 추진경과·보도자료로 확인한 값만.
    *   키는 stage-timeline 의 StageKey(district·committee·union·implement·design·disposition·demolish·construct …).
    *   화면은 `stage` 문자열이 말하는 현재 단계를 우선하고, 이 날짜는 지나온 단계의 날짜로만 붙인다.

@@ -22,6 +22,7 @@ import LandPermitNotice from "./LandPermitNotice";
 import type { TxMapPin } from "./map/props";
 import type { BuildingTradeTarget } from "@/lib/molit";
 import StageTimeline from "./StageTimeline";
+import ZonePlanSummary from "./ZonePlanSummary";
 import ZoneConsent from "./ZoneConsent";
 import ZoneVitalStats from "./ZoneVitalStats";
 import ZoneBriefingCard from "./ZoneBriefingCard";
@@ -122,6 +123,10 @@ export default function ZoneOfficialPanel({
         </p>
       )}
 
+      {/* 사업개요 — 공개 자료로 확인한 세대수·규모·시공사·최신 진행 현황.
+          값이 없는 구역은 컴포넌트가 스스로 아무것도 그리지 않는다(없는 수치를 지어내지 않음). */}
+      <ZonePlanSummary zone={zone} />
+
       {/* 구역현황(추정) — 단계 타임라인 아래에 노후도·동수밀도를 붙여
           '이 구역이 얼마나 오래됐고 얼마나 빽빽한지'를 같은 자리에서 읽게 한다.
           경계 폴리곤이 없는 후보지(미고시)는 계산할 도형이 없어 그리지 않는다. */}
@@ -167,10 +172,12 @@ export default function ZoneOfficialPanel({
         {zone.nameNote && zone.nameNote !== zone.note && (
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">이름 근거: {zone.nameNote}</p>
         )}
-        <p className="mt-2 text-[11px] leading-relaxed">
-          세대수·비례율·시공사는 앱의 <b>대표 구역 6곳</b>(신림1·반포주공1단지 3주구·
-          노량진1·한남뉴타운·성수전략2·북아현1-1)에 샘플로 붙어 있습니다.
-        </p>
+        {typeof zone.households !== "number" && !zone.contractor && (
+          <p className="mt-2 text-[11px] leading-relaxed">
+            세대수·비례율·시공사는 앱의 <b>대표 구역 6곳</b>(신림1·반포주공1단지 3주구·
+            노량진1·한남뉴타운·성수전략2·북아현1-1)에 샘플로 붙어 있습니다.
+          </p>
+        )}
         <p className="mt-2 text-[11px] leading-relaxed">
           이 구역은 사업 진행단계·구역현황(추정)과 위의 국토부 실거래가를 함께 보여줍니다.
           매물은 중개사가 <b>/register</b> 에 등록하면 이 패널과 지도에 바로 표시됩니다.
