@@ -666,21 +666,21 @@ export default function ZoneExplorer() {
   const selectedAuctions: AuctionItem[] =
     selectedId && auctions ? auctions.byZone[selectedId] ?? [] : [];
   // ── ⚖️ 지도 경매 핀 ──────────────────────────────────────────────────────
-  //   · 구역을 골랐으면 그 구역 안 물건만, 광역이면 매칭된 전체 물건을 **매각단위**로 묶어 지도에 넘긴다.
+  //   · 매칭된 전체 물건을 **매각단위**로 묶어 지도에 넘긴다.
   //   · 일괄매각은 목적물이 여러 필지·호실이어도 핀 하나(중심점)다 — 대선제분 24필지 → `406.3억 · 일괄` 1핀.
   //   · 좌표가 같은 호실(쌍문동 507-1 132건)도 `buildAuctionPins` 가 핀 하나로 묶는다.
-  //   · 표시는 구역 선택 시 기본 ON — 광역에서 보려면 지도 위 「⚖️ 경매 핀」 토글을 켜야 한다.
-  const zoneAuctionPins = useMemo(() => buildAuctionPins(selectedAuctions), [selectedAuctions]);
+  //   · 2026-11-28: 구역을 골랐을 때 그 구역 물건만 넘기면 다른 구역 핀이 전부 사라져
+  //     '경매 핀 1'처럼 보였다 — 지도 핀은 **항상 전체**를 넘기고, 보고 있는 물건만
+  //     activeAuctionPinId 로 강조한다(선택 구역의 목록·건수는 패널·버튼이 따로 보여 준다).
   const allAuctionPins = useMemo(
     () => (auctions ? buildAuctionPins(Object.values(auctions.byZone).flat()) : []),
     [auctions]
   );
-  const mapAuctionPins = selectedId ? zoneAuctionPins : allAuctionPins;
+  const mapAuctionPins = allAuctionPins;
   // ── 🏛️ 지도 공매 핀 ────────────────────────────────────────────────────
   const selectedGongmae: GongmaeItem[] =
     selectedId && gongmae ? gongmae.byZone[selectedId] ?? [] : [];
   const zoneGongItems = useMemo(() => selectedGongmae.map(gongmaeAsAuction), [selectedGongmae]);
-  const zoneGongPins = useMemo(() => buildGongmaePins(zoneGongItems), [zoneGongItems]);
   const allGongPins = useMemo(
     () =>
       gongmae
@@ -688,7 +688,8 @@ export default function ZoneExplorer() {
         : [],
     [gongmae]
   );
-  const mapGongPins = selectedId ? zoneGongPins : allGongPins;
+  // 공매 핀도 같은 이유로 항상 전체 — 강조는 activeGongmaePinId 가 맡는다(2026-11-28)
+  const mapGongPins = allGongPins;
   /** 공매 패널에서 보고 있는 물건의 핀 — 그 핀만 강조한다 */
   const activeGongmaePinId = useMemo(() => {
     const id = auctionPanel?.channel === "onbid" ? auctionPanel.activeId : null;

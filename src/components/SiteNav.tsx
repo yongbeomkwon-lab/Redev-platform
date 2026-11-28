@@ -8,7 +8,9 @@
 //   · 판례 리포트는 매주 월요일 정비사업 판례를 올리는 자리 — 지금은 현금청산 전용
 //     (2026-11-23 개편). 첫 화면에서 바로 들어갈 수 있게 메뉴에 두고, 옆의 점이 업데이트 표시다.
 //   · 지금 있는 화면은 오레오 블루 밑줄로 표시한다.
-//   · 폰에서는 이름을 줄여 한 줄에 담는다(지도·매물·판례·커뮤 / 등록).
+//   · 폰에서는 이름을 줄여 한 줄에 담는다(지도·매물·판례·법령·입주·커뮤 / 등록).
+//     2026-11-28: 항목이 일곱 개가 되면서 360px 폰에서 한 줄이 넘쳤다 — 링크 묶음만
+//     가로 스크롤되고 '등록·로그인'은 밖에 두어 항상 보이게 했고, 폰 글자를 11px 로 줄였다.
 // ─────────────────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -30,41 +32,47 @@ export default function SiteNav() {
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
-    <nav className="flex shrink-0 items-center gap-0 whitespace-nowrap text-[12.5px] font-medium sm:gap-1 sm:text-[13px]">
-      {LINKS.map((l) => {
-        const active = isActive(l.href);
-        return (
-          <Link
-            key={l.href}
-            href={l.href}
-            aria-current={active ? "page" : undefined}
-            className={
-              "relative flex items-center gap-1 rounded-md px-1 py-1.5 transition-colors sm:px-2.5 " +
-              (active
-                ? "text-brand after:absolute after:inset-x-1.5 after:-bottom-[7px] after:h-[2px] after:rounded-full after:bg-brand sm:after:inset-x-2"
-                : "text-slate-600 hover:bg-slate-50 hover:text-ink")
-            }
-          >
-            <span className="sm:hidden">{l.short}</span>
-            <span className="hidden sm:inline">{l.label}</span>
-            {l.note && (
-              <span
-                aria-hidden
-                title="매주 월요일 업데이트"
-                className="hidden h-[5px] w-[5px] rounded-full bg-accent sm:inline-block"
-              />
-            )}
-          </Link>
-        );
-      })}
+    <nav className="flex min-w-0 items-center gap-0 whitespace-nowrap text-[11px] font-medium sm:gap-1 sm:text-[13px]">
+      {/* 링크 묶음 — 폰에서는 이 안만 넘친다(가로 스크롤). '등록'과 로그인 버튼은
+          묶음 밖에 두어 폭이 모자라도 가려지지 않는다. 데스크톱은 sm:contents 로
+          예전과 똑같이 nav 의 직계 자식처럼 배치된다. */}
+      <div className="flex min-w-0 items-center gap-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:contents">
+        {LINKS.map((l) => {
+          const active = isActive(l.href);
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              aria-current={active ? "page" : undefined}
+              className={
+                "relative flex shrink-0 items-center gap-1 rounded-md px-0.5 py-1.5 transition-colors sm:px-2.5 " +
+                (active
+                  ? "text-brand after:absolute after:inset-x-1 after:-bottom-[7px] after:h-[2px] after:rounded-full after:bg-brand sm:after:inset-x-2"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-ink")
+              }
+            >
+              <span className="sm:hidden">{l.short}</span>
+              <span className="hidden sm:inline">{l.label}</span>
+              {l.note && (
+                <span
+                  aria-hidden
+                  title="매주 월요일 업데이트"
+                  className="hidden h-[5px] w-[5px] rounded-full bg-accent sm:inline-block"
+                />
+              )}
+            </Link>
+          );
+        })}
+      </div>
       <Link
         href="/register"
-        className="ml-0.5 rounded-md bg-brand px-1.5 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5 sm:px-2.5"
+        className="ml-0.5 shrink-0 rounded-md bg-brand px-1 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5 sm:px-2.5"
       >
         <span className="sm:hidden">등록</span>
         <span className="hidden sm:inline">중개사 매물 등록</span>
       </Link>
-      <div className="ml-0.5 sm:ml-1">        <HeaderAuth />
+      <div className="ml-0.5 shrink-0 sm:ml-1">
+        <HeaderAuth />
       </div>
     </nav>
   );
