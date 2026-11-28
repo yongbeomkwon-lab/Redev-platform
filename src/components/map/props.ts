@@ -128,6 +128,19 @@ export type ZoneMapProps = {
   /** 왼쪽 창에서 보고 있는 핀 — 지도에서 그 핀을 강조(테두리·그림자)한다 */
   activeAuctionPinId?: string | null;
   /**
+   * 🏛️ 공매(온비드) 물건 핀 — 법원경매 핀과 같은 배치 규칙을 쓰되 색·아이콘으로 갈라 그린다.
+   *   `buildGongmaePins`(lib/gongmae.ts)가 둘째 줄을 `11.30 마감`으로 바꿔 넘긴다.
+   */
+  onbidPins?: AuctionMapPin[];
+  /** 공매 핀 표시 ON/OFF */
+  onbidPinsOn?: boolean;
+  /** 지도 위 「🏛️ 공매 핀」 토글 */
+  onToggleOnbidPins?: () => void;
+  /** 🏛️ 공매 핀을 눌렀을 때 — 경매와 같은 왼쪽 창(패널)에 공매 탭으로 띄운다 */
+  onSelectOnbidPin?: (pin: AuctionMapPin) => void;
+  /** 왼쪽 창에서 보고 있는 공매 핀 */
+  activeOnbidPinId?: string | null;
+  /**
    * 「📍 지번 찍기」 모드 — 켜면 지도 클릭이 구역 선택 대신 **그 자리의 지번 핀**을 꽂는다.
    *   · 아이패드(터치)에서는 이 토글이 있어야 구역 안을 찍을 수 있다.
    *   · 기본 모드에서도 우클릭·구역 밖 클릭은 지번 핀으로 간다(편의).

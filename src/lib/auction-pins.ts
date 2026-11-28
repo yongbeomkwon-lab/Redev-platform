@@ -33,6 +33,11 @@ export type AuctionMapPin = {
   parcels: number;
   /** 핀 하나가 일괄매각 1건(목적물 여러 개를 한꺼번에 매각)인가 */
   bulk: boolean;
+  /**
+   * 매각 채널 — 없으면 법원 경매(⚖️). `onbid` 면 온비드 공매(🏛️) 핀이다.
+   *   같은 레이어·같은 배치 규칙을 쓰되 색·아이콘·클릭 처리를 채널로 가른다(lib/gongmae.ts).
+   */
+  channel?: "court" | "onbid";
 };
 
 /** 원 → 핀에 들어가는 짧은 금액 (`2.0억` · `8,500만`) */

@@ -66,6 +66,14 @@ import AuctionPanel from "@/components/AuctionPanel";
 import { formatWon, formatSaleDate, loadAuctions, countAuctionSales, type AuctionItem, type AuctionsData } from "@/lib/auctions";
 import { buildAuctionPins, type AuctionMapPin } from "@/lib/auction-pins";
 import {
+  buildGongmaePins,
+  gongmaeAsAuction,
+  loadGongmae,
+  type GongmaeAuctionItem,
+  type GongmaeData,
+  type GongmaeItem,
+} from "@/lib/gongmae";
+import {
   LISTINGS_CHANGED_EVENT,
   listingCountsByZoneId,
   listingMatchesZone,
@@ -324,7 +332,11 @@ export default function ZoneExplorer() {
   const [auctionPanel, setAuctionPanel] = useState<{
     zoneId: string;
     items: AuctionItem[];
+    /** 공매 핀에서 들어온 경우 그 핀에 묶인 공매 물건 */
+    gongItems?: GongmaeAuctionItem[];
     activeId: string | null;
+    /** 패널이 처음 열릴 탭 — 공매 핀·공매 뱃지에서 들어오면 "onbid" */
+    channel?: "court" | "onbid";
   } | null>(null);
   /**
    * ⚖️ 지도 경매 핀 표시 — **첫 접속에는 꺼진 상태**로 시작한다(2026-11-27 사용자 요청).
@@ -333,6 +345,14 @@ export default function ZoneExplorer() {
    *   · 경매 목록·핀에서 구역으로 들어오면 그때는 명시적으로 켠다(pickZone opts.auction).
    */
   const [auctionPinsOn, setAuctionPinsOn] = useState(false);
+  // ── 🏛️ 구역 내 온비드 공매 물건 (public/data/gongmae.json) ─────────────
+  //   · 공공데이터포털 온비드 API 로 받아 지번 좌표로 구역 경계와 매칭해 둔 서울 공매 물건.
+  //   · 경매와 **같은 패널·같은 지도 레이어**를 쓰고, 탭·핀 색(틸)·아이콘(🏛️)만 갈린다.
+  const [gongmae, setGongmae] = useState<GongmaeData | null>(null);
+  /** 🏛️ 지도 공매 핀 표시 — 경매 핀과 같이 첫 화면에는 꺼 둔다 */
+  const [gongmaePinsOn, setGongmaePinsOn] = useState(false);
+  /** 공매 물건의 지도 위치 강조(「📍 지도 위치」) */
+  const [gongmaeFocus, setGongmaeFocus] = useState<GongmaeItem | null>(null);
   const [jibunPickOn, setJibunPickOn] = useState(false);
   const [jibunPin, setJibunPin] = useState<JibunPin | null>(null);
   const [jibunProbing, setJibunProbing] = useState(false);
@@ -574,6 +594,17 @@ export default function ZoneExplorer() {
     };
   }, []);
 
+  // 공매(온비드) 데이터 — 같은 방식으로 한 번만. 없으면 공매 탭·핀을 그리지 않는다
+  useEffect(() => {
+    let alive = true;
+    loadGongmae().then((d) => {
+      if (alive) setGongmae(d);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const selected = zones.find((z) => z.id === selectedId);
   // 대표 구역이 아닌 구역 — 고시 레코드만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
@@ -633,6 +664,26 @@ export default function ZoneExplorer() {
     [auctions]
   );
   const mapAuctionPins = selectedId ? zoneAuctionPins : allAuctionPins;
+  // ── 🏛️ 지도 공매 핀 ────────────────────────────────────────────────────
+  const selectedGongmae: GongmaeItem[] =
+    selectedId && gongmae ? gongmae.byZone[selectedId] ?? [] : [];
+  const zoneGongItems = useMemo(() => selectedGongmae.map(gongmaeAsAuction), [selectedGongmae]);
+  const zoneGongPins = useMemo(() => buildGongmaePins(zoneGongItems), [zoneGongItems]);
+  const allGongPins = useMemo(
+    () =>
+      gongmae
+        ? buildGongmaePins(Object.values(gongmae.byZone).flat().map(gongmaeAsAuction))
+        : [],
+    [gongmae]
+  );
+  const mapGongPins = selectedId ? zoneGongPins : allGongPins;
+  /** 공매 패널에서 보고 있는 물건의 핀 — 그 핀만 강조한다 */
+  const activeGongmaePinId = useMemo(() => {
+    const id = auctionPanel?.channel === "onbid" ? auctionPanel.activeId : null;
+    if (!id) return null;
+    return mapGongPins.find((p) => p.items.some((x) => x.id === id))?.id ?? null;
+  }, [auctionPanel, mapGongPins]);
+
   /** 경매 패널에서 보고 있는 물건의 지도 핀 — 그 핀만 강조한다(목록 화면에서는 없음) */
   const activeAuctionPinId = useMemo(() => {
     const id = auctionPanel?.activeId;
@@ -646,7 +697,7 @@ export default function ZoneExplorer() {
    */
   function openAuctionPin(pin: AuctionMapPin) {
     const zoneId = pin.lead.zoneId;
-    setAuctionPanel({ zoneId, items: pin.items, activeId: pin.lead.id });
+    setAuctionPanel({ zoneId, items: pin.items, activeId: pin.lead.id, channel: "court" });
     setAuctionFocus(null);
     if (zoneId && zoneId !== selectedId) pickZone(zoneId, { auction: true });
     else if (zoneId) setPanelOpen(true);
@@ -661,8 +712,36 @@ export default function ZoneExplorer() {
   function openAuctionZone(zoneId: string) {
     const items = auctions?.byZone[zoneId] ?? [];
     if (items.length === 0) return;
-    setAuctionPanel({ zoneId, items, activeId: null });
+    setAuctionPanel({ zoneId, items, activeId: null, channel: "court" });
     if (zoneId !== selectedId) pickZone(zoneId, { auction: true });
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
+  /**
+   * 🏛️ 지도 공매 핀 클릭 — 그 핀의 공매 물건을 같은 패널의 **공매 탭**으로 펼친다.
+   */
+  function openGongmaePin(pin: AuctionMapPin) {
+    const zoneId = pin.lead.zoneId;
+    setAuctionPanel({
+      zoneId,
+      items: [],
+      gongItems: pin.items as GongmaeAuctionItem[],
+      activeId: pin.lead.id,
+      channel: "onbid",
+    });
+    setGongmaeFocus(null);
+    if (zoneId && zoneId !== selectedId) pickZone(zoneId, { auction: true, gongmae: true });
+    else if (zoneId) setPanelOpen(true);
+    if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
+  }
+
+  /**
+   * 오른쪽 패널 「🏛️ 공매 N건」 — 그 구역의 공매 목록을 연다(상세가 아니라 목록부터).
+   */
+  function openGongmaeZone(zoneId: string) {
+    const list = gongmae?.byZone[zoneId] ?? [];
+    if (list.length === 0) return;
+    setAuctionPanel({ zoneId, items: [], gongItems: list.map(gongmaeAsAuction), activeId: null, channel: "onbid" });
+    if (zoneId !== selectedId) pickZone(zoneId, { auction: true, gongmae: true });
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }
   // ── 매물 조건 필터 ────────────────────────────────────────────────────────
@@ -1407,7 +1486,7 @@ export default function ZoneExplorer() {
   /**
    * 구역 선택. `opts.auction` 은 경매 목록·경매 핀에서 들어온 경우 — 경매 핀이 지도에 보이도록 켠다.
    */
-  function pickZone(id: string, opts?: { auction?: boolean }) {
+  function pickZone(id: string, opts?: { auction?: boolean; gongmae?: boolean }) {
     setSelectedId(id);
     // 관리자 구역 선택은 공식 구역 선택과 **함께 살아 있으면 안 된다.**
     //   (예전: 4구역을 고쳐 둔 뒤 5구역을 누르면 상세는 5구역인데 「경계·정보 수정」 버튼은
@@ -1424,6 +1503,7 @@ export default function ZoneExplorer() {
     // 경매 목록에서 들어온 경우 경매 핀도 켠다 — 핀은 첫 화면에서 꺼 두므로, 목록·카드로 경매를
     // 보러 들어온 사람에게는 위치 핀이 같이 보여야 한다(같은 구역에서 꺼 둔 경우까지 확실히 켠다).
     if (opts?.auction) setAuctionPinsOn(true);
+    if (opts?.gongmae) setGongmaePinsOn(true);
   }
 
   // ── ✏️ 구역 그려서 분석 (일반 방문자) ──────────────────────────────────
@@ -1940,6 +2020,11 @@ export default function ZoneExplorer() {
           onToggleAuctionPins={() => setAuctionPinsOn((v) => !v)}
           onSelectAuctionPin={openAuctionPin}
           activeAuctionPinId={activeAuctionPinId}
+          onbidPins={mapGongPins}
+          onbidPinsOn={gongmaePinsOn}
+          onToggleOnbidPins={() => setGongmaePinsOn((v) => !v)}
+          onSelectOnbidPin={openGongmaePin}
+          activeOnbidPinId={activeGongmaePinId}
           onSelectTxPin={(pin) =>
             setBuildingTarget({
               gu: selected?.district ?? selectedSeoul?.gu ?? "",
@@ -2308,6 +2393,15 @@ export default function ZoneExplorer() {
         {auctionPanel && (
           <AuctionPanel
             items={auctionPanel.items}
+            onbidItems={auctionPanel.gongItems ?? zoneGongItems}
+            onbidMeta={gongmae?.meta}
+            onbidZoneTotal={zoneGongItems.length}
+            initialChannel={auctionPanel.channel}
+            onShowOnbidZoneAll={
+              selectedId && zoneGongItems.length > (auctionPanel.gongItems?.length ?? 0)
+                ? () => openGongmaeZone(selectedId)
+                : undefined
+            }
             zoneId={auctionPanel.zoneId}
             zoneName={
               zones.find((z) => z.id === auctionPanel.zoneId)?.name ??
@@ -2833,6 +2927,17 @@ export default function ZoneExplorer() {
             )}
             {/* ⚖️ 경매 요약 버튼 — **오른쪽 패널에는 이 한 줄만** 둔다.
                 누르면 왼쪽 경매 전용 패널이 "구역 전체 목록"으로 열린다(같은 물건을 두 패널에 늘어놓지 않는다). */}
+            {selectedId && selectedGongmae.length > 0 && (
+              <button
+                type="button"
+                data-testid="panel-gongmae-badge"
+                onClick={() => openGongmaeZone(selectedId)}
+                title={`이 구역 공매(온비드) ${selectedGongmae.length}건 — 왼쪽 공매 패널에서 목록·상세를 한 번에 봅니다`}
+                className="shrink-0 whitespace-nowrap rounded-full border border-teal-300 bg-teal-50 px-2 py-[3px] text-[11px] font-bold text-teal-900 hover:border-teal-500 hover:bg-teal-100"
+              >
+                🏛️ 공매 {selectedGongmae.length}건 · 보기
+              </button>
+            )}
             {selectedId && selectedAuctions.length > 0 && (
               <button
                 type="button"

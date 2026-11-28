@@ -8,8 +8,8 @@
 //     한 줄만 남고, 그것을 누르면 이 패널이 구역 전체 목록으로 열린다.
 //   · 안쪽은 두 화면이다: **목록**(사건별로 묶은 구역 전체 물건) ↔ **물건 상세**(감정·최저·보증금·
 //     기일·비고·기일내역·면적·감정평가요항·사진). 뒤로 가면 목록, 앞뒤 화살표로 이웃 물건.
-//   · 공매(온비드)는 2단계에서 붙인다 — 탭 구조(CHANNELS)와 `SaleChannel` 타입을 미리 나눠 두어
-//     목록 컴포넌트를 다시 뜯지 않고 탭 하나를 켜면 되게 했다. 지금은 「공매 · 준비 중」.
+//   · 공매(온비드)는 2026-11-28 붙였다 — 같은 패널의 「공매」 탭에서 목록·상세를 보고,
+//     지도 핀도 🏛️ 틸 색으로 함께 찍힌다(GongmaePanelBody · lib/gongmae.ts).
 //   · 값은 **보유한 것만** 보여 준다. 대법원 물건상세·현황조사서에서만 나오는 항목(회차별 기일결과·
 //     전용/대지권 면적·감정평가요항표·현장 사진·임차인·점유관계)은 `public/data/auction-details.json`
 //     에 수집돼 있으면 펼치고, 없으면 "대법원 원문에서 확인"과 사건번호 복사·원문 열기를 보여 준다.
@@ -52,6 +52,8 @@ import {
   type AuctionPhoto,
 } from "@/lib/auction-details";
 import { maskNamesInText, maskPersonName, tenantNamesOf } from "@/lib/mask-name";
+import { GongmaeDetail, GongmaeList, GONGMAE_ACCENT } from "@/components/GongmaePanelBody";
+import type { GongmaeAuctionItem, GongmaeMeta } from "@/lib/gongmae";
 
 export const AUCTION_ACCENT = "#b45309";
 
@@ -63,7 +65,7 @@ const CHANNELS: {
   hint: string;
 }[] = [
   { id: "court", label: "경매", enabled: true, hint: "대법원 법원경매정보" },
-  { id: "onbid", label: "공매", enabled: false, hint: "온비드(캠코) — 다음 단계에서 연결" },
+  { id: "onbid", label: "공매", enabled: true, hint: "온비드(캠코) 부동산 공매 — 공공데이터포털 API" },
 ];
 
 /** 접었을 때 처음 보여 주는 사건 수 */
@@ -138,6 +140,11 @@ export default function AuctionPanel({
   onLocate,
   onShowZoneAll,
   meta,
+  onbidItems,
+  onbidMeta,
+  onbidZoneTotal,
+  initialChannel,
+  onShowOnbidZoneAll,
   mobileSheet = true,
 }: {
   /** 패널이 보여 줄 물건 — 핀에서 들어오면 그 핀에 묶인 물건, 구역 버튼에서 들어오면 구역 전체 */
@@ -155,10 +162,21 @@ export default function AuctionPanel({
   /** 구역 전체 목록으로 바꾼다(핀에서 들어온 경우) */
   onShowZoneAll?: () => void;
   meta?: AuctionsMeta | null;
+  /** 🏛️ 같은 구역의 온비드 공매 물건 — 있으면 「공매」 탭이 살아난다 */
+  onbidItems?: GongmaeAuctionItem[];
+  onbidMeta?: GongmaeMeta | null;
+  /** 그 구역의 공매 전체 건수 — 핀에서 좁혀 들어왔을 때 「구역 전체 보기」를 띄운다 */
+  onbidZoneTotal?: number;
+  /** 열 때 보여 줄 탭 — 공매 핀·공매 뱃지에서 들어오면 "onbid" */
+  initialChannel?: SaleChannel;
+  /** 공매 탭의 「구역 전체」 (핀에서 좁혀 들어온 경우) */
+  onShowOnbidZoneAll?: () => void;
   /** 좁은 화면에서 바닥 시트로 띄운다 */
   mobileSheet?: boolean;
 }) {
-  const [channel, setChannel] = useState<SaleChannel>("court");
+  const [channel, setChannel] = useState<SaleChannel>(
+    initialChannel ?? (items.length === 0 && (onbidItems?.length ?? 0) > 0 ? "onbid" : "court")
+  );
   const [casesOpen, setCasesOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -190,6 +208,11 @@ export default function AuctionPanel({
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [activeId, channel]);
+
+  // 부모(구역 패널·지도 핀)가 탭을 지정해 패널을 열면 그 탭으로 — 같은 구역에서 경매↔공매를 오갈 때
+  useEffect(() => {
+    if (initialChannel) setChannel(initialChannel);
+  }, [initialChannel, zoneId]);
 
   useEffect(() => {
     return () => {
@@ -230,7 +253,16 @@ export default function AuctionPanel({
   }, [items, query]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
-  const active = useMemo(() => items.find((it) => it.id === activeId) ?? null, [items, activeId]);
+  const isGong = channel === "onbid";
+  const gongItems = useMemo<GongmaeAuctionItem[]>(
+    () => (onbidItems ?? []).filter((it) => it.gongmae),
+    [onbidItems]
+  );
+  const activeFrom = isGong ? gongItems : items;
+  const active = useMemo(
+    () => activeFrom.find((it) => it.id === activeId) ?? null,
+    [activeFrom, activeId]
+  );
   const activeIndex = active ? flat.findIndex((it) => it.id === active.id) : -1;
 
   const salesTotal = countAuctionSales(items);
@@ -247,7 +279,8 @@ export default function AuctionPanel({
     setOpenGroups((prev) => (prev.has(g.key) ? prev : new Set(prev).add(g.key)));
   }, [activeId, groups]);
 
-  if (items.length === 0) return null;
+  // 경매도 공매도 없으면 패널을 그리지 않는다(한쪽만 있어도 그쪽 탭으로 연다)
+  if (items.length === 0 && gongItems.length === 0) return null;
 
   const toggleGroup = (key: string) =>
     setOpenGroups((prev) => {
@@ -272,26 +305,34 @@ export default function AuctionPanel({
       className={wrapper}
     >
       {/* 머리 — 경매 탭 + 구역 + 닫기 */}
-      <div className="shrink-0 border-b border-amber-200 bg-amber-50/95 px-2.5 pb-1.5 pt-2">
+      <div
+        className={`shrink-0 border-b px-2.5 pb-1.5 pt-2 ${
+          isGong ? "border-teal-200 bg-teal-50/95" : "border-amber-200 bg-amber-50/95"
+        }`}
+      >
         <div className="flex items-center gap-1.5">
           <span
             className="rounded px-1.5 py-[1px] text-[10px] font-extrabold text-white"
-            style={{ background: AUCTION_ACCENT }}
+            style={{ background: isGong ? GONGMAE_ACCENT : AUCTION_ACCENT }}
           >
-            ⚖️ 경매
+            {isGong ? "🏛️ 공매" : "⚖️ 경매"}
           </span>
           <b className="min-w-0 truncate text-[12.5px] font-bold text-slate-900" title={zoneName}>
-            {zoneName || "경매 물건"}
+            {zoneName || (isGong ? "공매 물건" : "경매 물건")}
           </b>
-          <span className="shrink-0 rounded bg-white px-1.5 py-[1px] text-[10px] font-bold text-amber-900 ring-1 ring-amber-200">
-            {salesTotal}건
+          <span
+            className={`shrink-0 rounded bg-white px-1.5 py-[1px] text-[10px] font-bold ring-1 ${
+              isGong ? "text-teal-900 ring-teal-200" : "text-amber-900 ring-amber-200"
+            }`}
+          >
+            {isGong ? gongItems.length : salesTotal}건
           </span>
-          {zoneTotal != null && zoneTotal > salesTotal && (
+          {!isGong && zoneTotal != null && zoneTotal > salesTotal && (
             <span className="shrink-0 text-[9.5px] font-semibold text-amber-800/70" title="이 구역 전체 경매 건수">
               / 구역 {zoneTotal}건
             </span>
           )}
-          {items.length > salesTotal && (
+          {!isGong && items.length > salesTotal && (
             <span
               className="shrink-0 text-[9.5px] text-amber-800/70"
               title="일괄매각 목적물(필지·호실) 줄 수 — 매각은 1건입니다"
@@ -301,15 +342,15 @@ export default function AuctionPanel({
           )}
           <button
             type="button"
-            aria-label="경매 패널 닫기"
+            aria-label={isGong ? "공매 패널 닫기" : "경매 패널 닫기"}
             onClick={onClose}
-            className="ml-auto shrink-0 rounded border border-amber-300 bg-white px-1.5 py-[1px] text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+            className={`ml-auto shrink-0 rounded border bg-white px-1.5 py-[1px] text-[11px] font-semibold ${isGong ? "border-teal-300 text-teal-800 hover:bg-teal-50" : "border-amber-300 text-amber-800 hover:bg-amber-100"}`}
           >
             ✕
           </button>
         </div>
 
-        {/* 탭 — 경매 / 공매(준비 중). 2단계에서 공매를 켜면 이 자리에서 바로 전환된다 */}
+        {/* 탭 — 경매(대법원) / 공매(온비드). 같은 구역의 두 채널을 이 자리에서 오간다 */}
         <div className="mt-1.5 flex items-center gap-1" role="tablist" aria-label="매각 구분">
           {CHANNELS.map((c) => {
             const on = channel === c.id;
@@ -319,46 +360,76 @@ export default function AuctionPanel({
                 type="button"
                 role="tab"
                 aria-selected={on}
-                disabled={!c.enabled}
+                disabled={!c.enabled || (c.id === "onbid" && gongItems.length === 0 && channel !== "onbid")}
                 data-testid={`auction-tab-${c.id}`}
                 onClick={() => c.enabled && setChannel(c.id)}
-                title={c.hint}
+                title={
+                  c.id === "onbid" && gongItems.length === 0
+                    ? "이 구역에는 지금 공매 물건이 없습니다"
+                    : c.hint
+                }
                 className={
                   "rounded-full px-2 py-[2px] text-[11px] font-bold transition " +
                   (on
-                    ? "bg-amber-700 text-white"
+                    ? c.id === "onbid"
+                      ? "bg-teal-700 text-white"
+                      : "bg-amber-700 text-white"
                     : c.enabled
-                      ? "border border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                      ? c.id === "onbid"
+                        ? "border border-teal-300 bg-white text-teal-900 hover:bg-teal-50"
+                        : "border border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
                       : "cursor-not-allowed border border-slate-200 bg-slate-50 text-slate-400")
                 }
               >
                 {c.label}
                 {!c.enabled && <span className="ml-1 text-[9px] font-semibold">준비 중</span>}
+                {c.id === "onbid" && gongItems.length > 0 && (
+                  <span className="ml-1 text-[9px] font-semibold opacity-80">{gongItems.length}</span>
+                )}
               </button>
             );
           })}
-          <span className="ml-auto truncate text-[9.5px] text-amber-800/70">
+          <span className={`ml-auto truncate text-[9.5px] ${isGong ? "text-teal-800/70" : "text-amber-800/70"}`}>
             {CHANNELS.find((c) => c.id === channel)?.hint}
           </span>
         </div>
       </div>
 
       <div ref={bodyRef} className="ui-scroll min-h-0 flex-1 overflow-y-auto">
-        {channel !== "court" ? (
-          <div className="px-3 py-6 text-center">
-            <p className="text-[12px] font-semibold text-slate-700">공매(온비드)는 다음 단계에서 연결합니다</p>
-            <p className="mt-1 text-[10.5px] leading-relaxed text-slate-500">
-              지금은 대법원 법원경매정보의 경매 물건만 보여 줍니다. 공매를 붙이면 이 패널의 같은 자리에서
-              경매·공매를 오가며 볼 수 있습니다.
-            </p>
-            <button
-              type="button"
-              onClick={() => setChannel("court")}
-              className="mt-2 rounded-full border border-amber-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-50"
-            >
-              경매로 돌아가기
-            </button>
-          </div>
+        {channel === "onbid" ? (
+          active && (active as GongmaeAuctionItem).gongmae ? (
+            <GongmaeDetail
+              item={active as GongmaeAuctionItem}
+              position={
+                gongItems.findIndex((it) => it.id === active.id) >= 0
+                  ? { index: gongItems.findIndex((it) => it.id === active.id) + 1, total: gongItems.length }
+                  : null
+              }
+              onBack={() => onSelect(null)}
+              onPrev={
+                gongItems.findIndex((it) => it.id === active.id) > 0
+                  ? () => onSelect(gongItems[gongItems.findIndex((it) => it.id === active.id) - 1].id)
+                  : undefined
+              }
+              onNext={
+                gongItems.findIndex((it) => it.id === active.id) >= 0 &&
+                gongItems.findIndex((it) => it.id === active.id) < gongItems.length - 1
+                  ? () => onSelect(gongItems[gongItems.findIndex((it) => it.id === active.id) + 1].id)
+                  : undefined
+              }
+              onLocate={onLocate ? (it) => onLocate(it) : undefined}
+              copied={copied}
+              onCopy={copyText}
+            />
+          ) : (
+            <GongmaeList
+              items={gongItems}
+              meta={onbidMeta}
+              onOpen={(id) => onSelect(id)}
+              onShowZoneAll={onShowOnbidZoneAll}
+              zoneTotal={onbidZoneTotal ?? gongItems.length}
+            />
+          )
         ) : active ? (
           <ItemDetail
             item={active}

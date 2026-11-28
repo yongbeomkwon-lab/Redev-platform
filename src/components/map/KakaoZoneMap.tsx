@@ -125,6 +125,8 @@ const AUCTION_PIN_LAYER_STYLE = {
 
 /** 경매 핀 색 — 경매(⚖️)를 뜻하는 앰버 계열. 실거래 핀의 블루·보라와 갈린다 */
 const AUCTION_PIN_ACCENT = "#b45309";
+/** 공매(온비드) 핀 색 — 틸 계열. 경매 앰버·실거래 블루/보라와 한눈에 갈린다 */
+const GONGMAE_PIN_ACCENT = "#0f766e";
 
 /** 실거래 핀 색 — 유형 구분(아파트=브랜드 블루, 연립·다세대=보라) */
 const TX_PIN_COLORS: Record<string, string> = {
@@ -526,6 +528,11 @@ export default function KakaoZoneMap({
   onToggleAuctionPins,
   onSelectAuctionPin,
   activeAuctionPinId,
+  onbidPins = [],
+  onbidPinsOn = false,
+  onToggleOnbidPins,
+  onSelectOnbidPin,
+  activeOnbidPinId,
   jibunPickOn = false,
   onToggleJibunPick,
   onPickJibun,
@@ -3239,16 +3246,21 @@ export default function KakaoZoneMap({
     draw();
   }, [visibleRecentTx, draw]);
 
-  // ── ⚖️ 경매 물건 핀 ──────────────────────────────────────────────────
+  // ── ⚖️ 경매 · 🏛️ 공매 물건 핀 ──────────────────────────────────────────
   //   · ZoneExplorer 가 고른 구역의 물건(광역이면 매칭된 전체)을 좌표로 묶어 넘긴다.
   //   · 토글이 OFF 면 목록을 비워 핀·카드를 함께 감추고, 토글 자체는 남긴다.
-  const visibleAuctionPins = useMemo(
-    () => (auctionPinsOn ? auctionPins : []),
-    [auctionPins, auctionPinsOn]
-  );
+  //   · 경매(앰버)와 공매(바이올렛)는 **한 레이어**에서 같은 배치 규칙으로 자리를 잡고 색·아이콘만 다르다.
+  const visibleAuctionPins = useMemo(() => {
+    const court = auctionPinsOn ? auctionPins.map((p) => ({ ...p, channel: "court" as const })) : [];
+    const onbid = onbidPinsOn ? onbidPins.map((p) => ({ ...p, channel: "onbid" as const })) : [];
+    if (onbid.length === 0) return court;
+    if (court.length === 0) return onbid;
+    // 마감이 급한 핀이 먼저 자리를 잡는다(겹칠 때 위로 쌓이는 순서)
+    return [...court, ...onbid];
+  }, [auctionPins, auctionPinsOn, onbidPins, onbidPinsOn]);
   auctionAtRef.current = visibleAuctionPins;
   /** 왼쪽 창에서 보고 있는 핀 — 강조 + 맨 앞 배치 */
-  const activeAuctionId = activeAuctionPinId ?? null;
+  const activeAuctionId = activeAuctionPinId ?? activeOnbidPinId ?? null;
   activeAuctionPinRef.current = activeAuctionId;
   useEffect(() => {
     if (!auctionLayerRef.current) return;
@@ -4023,6 +4035,13 @@ export default function KakaoZoneMap({
           const open = activeAuctionId === p.id;
           const lead = p.lead;
           const many = p.items.length > 1;
+          /** 채널 색 — 경매는 앰버, 공매(온비드)는 바이올렛 */
+          const gong = p.channel === "onbid";
+          const accent = gong ? GONGMAE_PIN_ACCENT : AUCTION_PIN_ACCENT;
+          const edge = gong ? (open ? GONGMAE_PIN_ACCENT : "#99f6e4") : open ? AUCTION_PIN_ACCENT : "#f3c98b";
+          const fill = gong ? (open ? "#ccfbf1" : "#f0fdfa") : open ? "#fff7ed" : "#fffbeb";
+          const ink = gong ? "#134e4a" : "#7c2d12";
+          const sub = gong ? "#0f766e" : "#92400e";
           return (
             <div
               key={p.id}
@@ -4035,32 +4054,36 @@ export default function KakaoZoneMap({
               <button
                 type="button"
                 className="auction-pin-btn"
-                data-testid="auction-pin"
+                data-testid={gong ? "gongmae-pin" : "auction-pin"}
+                data-channel={gong ? "onbid" : "court"}
                 data-auction-id={p.id}
                 data-auction-zone={lead.zoneId}
                 data-active={open ? "1" : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                   // 지도 말풍선 대신 **왼쪽 대시보드 창**에 이 핀의 물건들을 띄운다
-                  onSelectAuctionPin?.(p);
+                  if (gong) onSelectOnbidPin?.(p);
+                  else onSelectAuctionPin?.(p);
                 }}
                 title={
-                  p.bulk
-                    ? `${lead.zoneName} · ${lead.caseNoPrint} — 일괄매각 목적물 ${p.parcels}개를 한꺼번에 매각. 누르면 왼쪽 창에 상세가 열립니다`
-                    : many
-                      ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 왼쪽 창에 상세가 열립니다`
-                      : `${lead.caseNoPrint} · ${lead.address} — 누르면 왼쪽 창에 상세가 열립니다`
+                  gong
+                    ? `🏛️ 공매(온비드) · ${lead.zoneName} · ${p.saleUnits > 1 ? `물건 ${p.saleUnits}건` : lead.address} — 누르면 왼쪽 창에 상세가 열립니다`
+                    : p.bulk
+                      ? `${lead.zoneName} · ${lead.caseNoPrint} — 일괄매각 목적물 ${p.parcels}개를 한꺼번에 매각. 누르면 왼쪽 창에 상세가 열립니다`
+                      : many
+                        ? `${lead.zoneName} · 경매 물건 ${p.items.length}건 — 누르면 왼쪽 창에 상세가 열립니다`
+                        : `${lead.caseNoPrint} · ${lead.address} — 누르면 왼쪽 창에 상세가 열립니다`
                 }
                 style={{
                   display: "block",
                   pointerEvents: "auto",
-                  border: `1px solid ${open ? AUCTION_PIN_ACCENT : "#f3c98b"}`,
-                  borderLeft: `3px solid ${AUCTION_PIN_ACCENT}`,
-                  background: open ? "#fff7ed" : "#fffbeb",
+                  border: `1px solid ${edge}`,
+                  borderLeft: `3px solid ${accent}`,
+                  background: fill,
                   borderRadius: "5px",
                   padding: "2px 5px",
                   boxShadow: open
-                    ? "0 0 0 2px rgba(180,83,9,.22), 0 8px 18px -8px rgba(120,53,15,.55)"
+                    ? `0 0 0 2px ${gong ? "rgba(15,118,110,.22)" : "rgba(180,83,9,.22)"}, 0 8px 18px -8px ${gong ? "rgba(19,78,74,.55)" : "rgba(120,53,15,.55)"}`
                     : "0 1px 2px rgba(16,24,40,.10), 0 6px 14px -8px rgba(16,24,40,.35)",
                   cursor: "pointer",
                   textAlign: "center",
@@ -4075,13 +4098,13 @@ export default function KakaoZoneMap({
                       display: "block",
                       fontSize: "11px",
                       fontWeight: 700,
-                      color: "#7c2d12",
+                      color: ink,
                       letterSpacing: "-0.02em",
                     }}
                   >
-                    ⚖️ {p.priceLabel}
+                    {gong ? "🏛️" : "⚖️"} {p.priceLabel}
                   </span>
-                  <span style={{ display: "block", fontSize: "9px", fontWeight: 500, color: "#92400e" }}>
+                  <span style={{ display: "block", fontSize: "9px", fontWeight: 500, color: sub }}>
                     {p.subLabel}
                   </span>
                 </span>
@@ -4700,6 +4723,31 @@ export default function KakaoZoneMap({
             <span className="hidden md:inline">경매 핀</span>
             <span className={`font-normal ${auctionPins.length > 0 ? "text-amber-700/70" : "text-slate-400"}`}>
               {auctionPins.length}
+            </span>
+          </button>
+        )}
+        {/* 🏛️ 공매 핀 — 경매 핀과 같은 자리 규칙. 온비드 데이터가 없어도 버튼은 남긴다(0/…). */}
+        {onToggleOnbidPins && (
+          <button
+            type="button"
+            onClick={onToggleOnbidPins}
+            aria-pressed={onbidPinsOn}
+            data-testid="onbid-pins-toggle"
+            title={
+              onbidPins.length > 0
+                ? `공매(온비드) 물건 ${onbidPins.length}곳을 🏛️ 핀으로 표시 — 끄면 감춥니다`
+                : "이 구역에는 지금 표시할 공매 물건이 없습니다 — 물건이 잡히면 여기서 🏛️ 핀으로 보입니다"
+            }
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_-10px_rgba(16,24,40,.3)] transition ${
+              onbidPinsOn
+                ? "border-teal-300 bg-teal-50 text-teal-900"
+                : "border-line bg-white text-slate-600 hover:bg-slate-50 hover:text-ink"
+            }`}
+          >
+            <span aria-hidden className="text-[12px] leading-none">🏛️</span>
+            <span className="hidden md:inline">공매 핀</span>
+            <span className={`font-normal ${onbidPins.length > 0 ? "text-teal-700/70" : "text-slate-400"}`}>
+              {onbidPins.length}
             </span>
           </button>
         )}

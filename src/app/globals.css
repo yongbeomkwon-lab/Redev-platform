@@ -416,6 +416,13 @@
 .auction-pin-layer .auction-pin-btn[data-active="1"] {
   border-color: #b45309 !important;
 }
+/* 🏛️ 공매(온비드) 핀 — 같은 레이어에서 틸 색으로 갈린다 */
+.auction-pin-btn[data-channel="onbid"] .auction-pin-dot {
+  background: #0f766e;
+}
+.auction-pin-layer .auction-pin-btn[data-channel="onbid"][data-active="1"] {
+  border-color: #0f766e !important;
+}
 
 /* Leaflet 지도가 탭/모달 아래에 깔리지 않도록 z-index 정리 */
 .leaflet-container {
