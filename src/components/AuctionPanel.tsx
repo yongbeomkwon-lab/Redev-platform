@@ -1175,7 +1175,7 @@ function TenantCards({ detail, caseNo, copied, onCopy }: {
       )}
       {tenants.length > 0 && (
         <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
-          법원 현황조사서 기재입니다. 사람 이름은 개인정보 보호를 위해 가렸습니다(서O경·김O). 대항력 여부는
+          법원 현황조사서 기재입니다. 사람 이름은 개인정보 보호를 위해 가렸습니다(김O희·김O). 대항력 여부는
           전입일·확정일자와 말소기준권리를 함께 봐야 정해집니다.
         </p>
       )}

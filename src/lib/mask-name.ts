@@ -5,11 +5,11 @@
 //     화면에 실명이 뜨면 안 되므로 **수집 데이터와 화면 두 곳**에서 같은 규칙으로 가린다
 //     (`scripts/fetch-auction-details.py` 의 `mask_person_name` 과 같은 규칙 — 한쪽을 고치면 함께 고친다).
 //   · 한글 2자        → `김O`            (김철 → 김O)
-//   · 한글 3자 이상    → 첫 글자 + O + 끝 글자 (서미경 → 서O경, 남궁민수 → 남OO수)
+//   · 한글 3자 이상    → 첫 글자 + O + 끝 글자 (김영희 → 김O희, 남궁민수 → 남OO수)
 //   · 영문/외국인명    → 첫 글자 + `***`   (2자 이하는 첫 글자 + `*`: ZHENG AI → Z*** A*)
 //   · 괄호 표기        → 각각 가린다        (ZHENG AI(정애) → Z*** A*(정O))
 //   · 법인·상호        → 원문 유지         ((주)기업건설 · 주식회사 ○○ · ㈜○○)
-//   · 이미 가려진 표기(`서O경`·`김O`·`Z***`)는 다시 가려도 그대로다(멱등).
+//   · 이미 가려진 표기(`김O희`·`김O`·`Z***`)는 다시 가려도 그대로다(멱등).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 법인·상호 표기 — 개인정보가 아니므로 가리지 않는다 */
@@ -97,7 +97,7 @@ function maskToken(token: string): string {
   const tail = token.slice(core.length);
   if (!core) return token;
 
-  // 한글 이름 — 전부 한글로 된 토큰만 (서미경 · 김철 · 남궁민수)
+  // 한글 이름 — 전부 한글로 된 토큰만 (김영희 · 김철 · 남궁민수)
   if (/^[가-힣]+$/.test(core)) {
     const chars = [...core];
     if (chars.length < 2) return token;
@@ -105,7 +105,7 @@ function maskToken(token: string): string {
     return `${chars[0]}${"O".repeat(chars.length - 2)}${chars[chars.length - 1]}${tail}`;
   }
 
-  // 이미 가려진 한글 표기 (서O경 · 김O)
+  // 이미 가려진 한글 표기 (김O희 · 김O)
   if (/^[가-힣]O+$/.test(core) || /^[가-힣]O+[가-힣]$/.test(core)) return token;
 
   // 영문 이름 — 첫 글자 + *** (2자 이하는 첫 글자 + *)
@@ -120,7 +120,7 @@ function maskToken(token: string): string {
 
 /**
  * 사람 이름 하나를 가린다. 법인·상호는 원문 그대로 돌려준다.
- *   `서미경` → `서O경` · `김철` → `김O` · `ZHENG AI(정애)` → `Z*** A*(정O)`
+ *   `김영희` → `김O희` · `김철` → `김O` · `ZHENG AI(정애)` → `Z*** A*(정O)`
  *   `(주)기업건설` → `(주)기업건설`
  */
 export function maskPersonName(raw: string | null | undefined): string {
@@ -158,8 +158,8 @@ function escapeRe(s: string): string {
  *   ① 이름 후보를 먼저 모은다 — 역할어(채무자·소유자·공유자·임차인·세대주·배우자 …) 뒤,
  *      `기재된·등재된` 뒤, `지분` 앞에 오는 한글 이름 + 넘겨받은 이름(임차인 이름).
  *   ② 모은 이름이 나오는 자리를 **원문에서 한 번에** 찾아 가린다
- *      — `채무자 겸 소유자 심배관의 배우자 심수진` → `채무자 겸 소유자 심O관의 배우자 심O진`
- *      한 번 가린 글자를 다시 훑지 않으므로 `심O관` 이 `심OO` 로 망가지지 않는다.
+ *      — `채무자 겸 소유자 이철수의 배우자 박영자` → `채무자 겸 소유자 이O수의 배우자 박O자`
+ *      한 번 가린 글자를 다시 훑지 않으므로 `이O수` 가 `이OO` 로 망가지지 않는다.
  *   이름이 아닌 말(지분·란에·등재·폐문부재 등)은 건드리지 않는다.
  */
 export function maskNamesInText(text: string | null | undefined, names: (string | null | undefined)[] = []): string {

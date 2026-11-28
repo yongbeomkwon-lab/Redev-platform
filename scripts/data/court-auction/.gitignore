@@ -7,6 +7,11 @@
 #   · cookies.txt     사이트 세션 쿠키 — 절대 저장하지 않는다.
 raw/
 case-raw/
+detail-raw/
+survey-raw/
 latest.json
+queue.json
+progress.json
+photo-captions.json
 cookies.txt
 blocks.json

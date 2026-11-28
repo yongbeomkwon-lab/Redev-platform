@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime as dt
+import io
 import json
 import os
 import re
@@ -132,12 +133,12 @@ FIXTURE_SURVEY = os.path.join(HERE, "data", "auction-survey-fixture-structure.js
 # 현황조사서·감정평가서에는 임차인·채무자(소유자) 실명이 그대로 적혀 오는 경우가 있다.
 # 이 파일로 만든 auction-details.json 은 그대로 웹에 배포되므로, 정규화 단계에서 이름을 가린다.
 # 화면(src/lib/mask-name.ts)도 같은 규칙으로 한 번 더 가리므로 규칙을 바꾸면 양쪽을 함께 고친다.
-#   · 한글 2자 → 김O · 한글 3자 이상 → 서O경(남궁민수 → 남OO수)
+#   · 한글 2자 → 김O · 한글 3자 이상 → 김O희(남궁민수 → 남OO수)
 #   · 영문 → Z*** A* · 괄호 표기(ZHENG AI(정애)) → Z*** A*(정O)
 #   · 법인·상호((주)기업건설·주식회사·㈜)는 개인정보가 아니므로 원문 유지
 CORPORATE_RE = re.compile(r"(\(주\)|㈜|주식회사|유한회사|합자회사|합명회사|유한책임회사|재단법인|사단법인|법인)")
 ROLE_WORDS = ("채무자", "소유자", "공유자", "임차인", "세대주", "배우자", "동거인",
-              "학원장", "팀장", "이해관계인", "대표", "명의자")
+              "학원장", "팀장", "이해관계인", "대표", "명의자", "임차권자", "임대인")
 NOT_NAMES = {
     "지분", "란에", "등재", "명의", "점유", "관계", "소유", "기재", "표시", "경우", "당시",
     "세대", "주택", "건물", "부동산", "토지", "대지", "매각", "경매", "현황", "조사", "본건",
@@ -177,7 +178,7 @@ def _mask_token(token: str) -> str:
         if n == 2:
             return core[0] + "O" + tail
         return core[0] + "O" * (n - 2) + core[-1] + tail
-    if _MASKED_KOR.match(core):                    # 이미 가린 표기(서O경·김O)
+    if _MASKED_KOR.match(core):                    # 이미 가린 표기(김O희·김O)
         return token
     if re.fullmatch(r"[A-Za-z]+", core):           # 영문 이름
         if len(core) < 2:
@@ -202,6 +203,12 @@ _ROLE_RE = re.compile(
 _LISTED_RE = re.compile(r"(기재된|등재된|기재한|등재한)(\s+)([가-힣]{2,4}?)"
                         r"(?=\s*(?:의|은|는|이|를|가|[,.()]|$))")
 _SHARE_RE = re.compile(r"(?P<lead>^|[^가-힣])(?P<name>[가-힣]{2,4})(?P<gap>\s*)지분")
+# `임차권자 : 홍길동` 처럼 콜론으로 라벨 뒤에 붙는 이름
+_LABEL_RE = re.compile(r"(?:임차권자|임차인|채무자|소유자|공유자)\s*[:：]\s*([가-힣]{2,4})"
+                       r"(?=\s|$|[,.)])")
+# `임차인 김O원의 부 이몽룡` 처럼 가족 관계어 뒤에 붙는 이름
+_FAMILY_RE = re.compile(r"(?:^|[^가-힣])(?:부|모|배우자|자녀|아들|딸)\s+([가-힣]{2,4})"
+                        r"(?=[을를이가은는의도만\s,.)]|$)")
 
 
 def mask_names_in_text(text, names=()) -> str:
@@ -223,6 +230,12 @@ def mask_names_in_text(text, names=()) -> str:
     for m in _SHARE_RE.finditer(src):
         if m.group("name") not in NOT_SHARE:
             found.add(m.group("name"))
+    for m in _LABEL_RE.finditer(src):
+        if m.group(1) not in NOT_NAMES:
+            found.add(m.group(1))
+    for m in _FAMILY_RE.finditer(src):
+        if m.group(1) not in NOT_NAMES:
+            found.add(m.group(1))
     for raw in names:
         n = (raw or "").strip()
         if len(n) >= 2 and not CORPORATE_RE.search(n) and not is_masked_name(n):
@@ -242,31 +255,55 @@ def mask_names_in_text(text, names=()) -> str:
     return out
 
 
-def sanitize_record(rec: dict) -> dict:
-    """한 레코드(사건·물건) 안의 이름을 가린다 — 임차인 이름 + 점유관계·면적·감정 본문."""
+# 마스킹을 건너뛰는 키 — 이름이 들어갈 수 없는 식별자·날짜·주소 필드
+_MASK_SKIP_KEYS = {
+    "caseNo", "caseNoPrint", "court", "courtCode", "id", "url", "collectedAt",
+    "date", "time", "receiptDate", "commenceDate", "dividendDeadline", "zoneName",
+}
+
+
+def _mask_deep(obj, names, depth: int = 0):
+    """레코드 안의 모든 글자에 이름 마스킹을 적용한다(비고·감정·점유관계 등 필드를 가리지 않고)."""
+    if depth > 8:
+        return obj
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, str):
+                if k in _MASK_SKIP_KEYS or not v:
+                    continue
+                obj[k] = mask_names_in_text(v, names)
+            elif isinstance(v, (dict, list)):
+                _mask_deep(v, names, depth + 1)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            if isinstance(v, str):
+                obj[i] = mask_names_in_text(v, names)
+            elif isinstance(v, (dict, list)):
+                _mask_deep(v, names, depth + 1)
+    return obj
+
+
+def sanitize_record(rec: dict, extra_names=()) -> dict:
+    """한 레코드(사건·물건) 안의 이름을 가린다 — 임차인 이름 + 모든 본문.
+
+    extra_names: 수집 원본(현황조사서·물건상세)에서 확인한 사람 이름.
+    본문에만 등장하고 임차인 목록에는 없는 이름(비고의 승계인·가족 등)을 잡는다.
+    """
     tenants = rec.get("tenants") or []
     names = [t.get("name") for t in tenants if isinstance(t, dict) and t.get("name")]
+    names.extend(extra_names or ())
     for t in tenants:
         if isinstance(t, dict) and t.get("name"):
             t["name"] = mask_person_name(t["name"])
-    occ = rec.get("occupancy")
-    if isinstance(occ, dict):
-        for k in ("detail", "property", "etc"):
-            if occ.get(k):
-                occ[k] = mask_names_in_text(occ[k], names)
-    for a in rec.get("areas") or []:
-        if isinstance(a, dict) and a.get("detail"):
-            a["detail"] = mask_names_in_text(a["detail"], names)
-    for item in rec.get("appraisalSummary") or []:
-        if isinstance(item, dict) and item.get("text"):
-            item["text"] = mask_names_in_text(item["text"], names)
+    _mask_deep(rec, names)
     return rec
 
 
-def sanitize_payload(payload: dict) -> dict:
+def sanitize_payload(payload: dict, names_by_case: dict | None = None) -> dict:
     """byCase·byId 전체에 마스킹을 적용한다(배포 직전 마지막 관문)."""
-    for rec in (payload.get("byCase") or {}).values():
-        sanitize_record(rec)
+    names_by_case = names_by_case or {}
+    for key, rec in (payload.get("byCase") or {}).items():
+        sanitize_record(rec, names_by_case.get(key, ()))
     for rec in (payload.get("byId") or {}).values():
         sanitize_record(rec)
     return payload
@@ -674,13 +711,63 @@ def parse_case_search(res: dict, court_code: str, case_no: str) -> dict:
 
 
 # ── 사진 ──────────────────────────────────────────────────────────────────────
-def save_photos(case_pics, court: str, case_no: str, limit: int, max_kb: int) -> list[dict]:
-    """csPicLst 의 base64(picFile) 를 파일로 저장하고 경로만 남긴다."""
+def _photo_caption_map() -> dict:
+    path = os.path.join(DATA_DIR, "photo-captions.json")
+    if os.path.exists(path):
+        try:
+            return json.load(open(path, encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _save_caption(name: str, caption: str, kind: str) -> None:
+    caps = _photo_caption_map()
+    caps[name] = {"caption": caption, "kind": kind}
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(os.path.join(DATA_DIR, "photo-captions.json"), "w", encoding="utf-8") as f:
+        json.dump(caps, f, ensure_ascii=False)
+
+
+def _shrink_jpeg(blob: bytes, max_kb: int) -> bytes | None:
+    """상한을 넘는 사진은 PIL 이 있으면 줄이고, 없으면 None(저장 포기)."""
+    if len(blob) <= max_kb * 1024:
+        return blob
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        im = Image.open(io.BytesIO(blob)).convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None
+    w, h = im.size
+    scale = min(1.0, 900 / max(w, h))
+    if scale < 1.0:
+        im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
+    q = 78
+    while q >= 45:
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=q, optimize=True, progressive=True)
+        if buf.tell() <= max_kb * 1024:
+            return buf.getvalue()
+        q -= 6
+    return None
+
+
+def save_photos(case_pics, court: str, case_no: str, limit: int, max_kb: int,
+                seq: str = "1") -> list[dict]:
+    """csPicLst 의 base64(picFile) 를 파일로 저장하고 경로만 남긴다.
+
+    파일 이름: `<법원>-<사건번호>-<번호>.jpg` · 물건이 여러 개인 사건은 물건번호를 넣어
+    `<법원>-<사건번호>-<물건번호>-<번호>.jpg` 로 저장해 서로 덮어쓰지 않게 한다.
+    """
     if not case_pics:
         return []
     os.makedirs(PHOTO_DIR, exist_ok=True)
     out = []
     safe_case = re.sub(r"[^0-9A-Za-z가-힣타경]", "", case_no)
+    head = f"{court}-{safe_case}-" + ("" if str(seq) == "1" else f"{seq}-")
     for i, p in enumerate(case_pics[:limit], start=1):
         raw = p.get("picFile") or p.get("picFileUrl") or ""
         if not raw or len(raw) < 200:
@@ -689,16 +776,47 @@ def save_photos(case_pics, court: str, case_no: str, limit: int, max_kb: int) ->
             blob = base64.b64decode(raw, validate=False)
         except Exception:  # noqa: BLE001 — 깨진 사진 한 장이 수집 전체를 멈추지 않게
             continue
-        if len(blob) > max_kb * 1024:
+        blob = _shrink_jpeg(blob, max_kb)
+        if not blob:
             continue
         ext = ".jpg" if blob[:2] == b"\xff\xd8" else ".png" if blob[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
-        name = f"{court}-{safe_case}-{i:02d}{ext}"
+        name = f"{head}{i:02d}{ext}"
         with open(os.path.join(PHOTO_DIR, name), "wb") as f:
             f.write(blob)
+        caption = PIC_DVS.get(s(p.get("cortAuctnPicDvsCd")), "") or s(p.get("picTitlNm")) or f"현장사진 {i}"
+        kind = s(p.get("cortAuctnPicDvsCd"))
+        _save_caption(name, caption, kind)
         out.append({
             "url": f"/data/auction-photos/{name}",
-            "caption": PIC_DVS.get(s(p.get("cortAuctnPicDvsCd")), "") or s(p.get("picTitlNm")),
-            "kind": s(p.get("cortAuctnPicDvsCd")),
+            "caption": caption,
+            "kind": kind,
+        })
+    return out
+
+
+def photos_for(court: str, case_no: str, seq: str = "1") -> list[dict]:
+    """디스크에 저장된 사진 파일로 물건의 사진 목록을 만든다(rebuild 용)."""
+    if not os.path.isdir(PHOTO_DIR):
+        return []
+    safe_case = re.sub(r"[^0-9A-Za-z가-힣타경]", "", case_no)
+    head = f"{court}-{safe_case}-"
+    caps = _photo_caption_map()
+    files = sorted(f for f in os.listdir(PHOTO_DIR) if f.startswith(head) and f.endswith((".jpg", ".png")))
+    picked = []
+    for f in files:
+        rest = f[len(head):]
+        parts = rest.rsplit(".", 1)[0].split("-")
+        if len(parts) == 2 and parts[0] == str(seq):   # <물건번호>-<번호>
+            picked.append(f)
+    if not picked:                                      # 물건번호 없이 저장된 사진
+        picked = [f for f in files if len(f[len(head):].rsplit(".", 1)[0].split("-")) == 1]
+    out = []
+    for f in picked:
+        meta = caps.get(f) or {}
+        out.append({
+            "url": f"/data/auction-photos/{f}",
+            "caption": meta.get("caption") or "현장사진",
+            "kind": meta.get("kind", ""),
         })
     return out
 
@@ -768,10 +886,10 @@ def collect(cases: list[dict], delay: float, limit: int | None,
                 time.sleep(delay)
                 continue
             json.dump(res, open(path, "w", encoding="utf-8"), ensure_ascii=False)
-            # 사진은 사건 단위 목록에서 뽑는다(같은 사건이면 이미 저장돼 있으면 건너뛴다)
+            # 사진은 사건·물건 단위로 저장한다(물건이 여러 개인 사건은 물건번호를 파일명에 넣는다)
             pics = (res.get("data") or {}).get("dma_result", {}).get("csPicLst") or []
-            if pics and not any(f.startswith(f"{court}-") for f in (os.listdir(PHOTO_DIR) if os.path.isdir(PHOTO_DIR) else [])):
-                save_photos(pics, court, case_no, photos, max_kb)
+            if pics:
+                save_photos(pics, court, case_no, photos, max_kb, seq)
             detail_counts[(court, case_no)] = detail_counts.get((court, case_no), 0) + 1
             print(f"  · 물건상세 {c['caseNoPrint']} 물건{seq} ({c['zoneName']})")
             time.sleep(delay)
@@ -844,6 +962,48 @@ def merge_case(dst: dict, src: dict) -> None:
             dst[k] = src[k]
 
 
+def raw_names_by_case() -> dict[str, list[str]]:
+    """수집 원본의 이름 필드에서 사건별 사람 이름을 모은다 — 본문 마스킹의 재료.
+
+    임차인 목록에는 없고 비고·점유관계·감정평가 본문에만 나오는 이름(승계인·가족 등)을 잡는다.
+    """
+    name_keys = {"intrpsNm", "hffcNm", "ownrNm", "lssrNm", "crtrNm", "nm", "name", "dbrNm"}
+    out: dict[str, list[str]] = {}
+
+    def walk(o, found: set):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if isinstance(v, str):
+                    v = v.strip()
+                    if k in name_keys and 2 <= len(v) <= 4 and re.fullmatch(r"[가-힣]+", v) \
+                            and not is_masked_name(v) and not CORPORATE_RE.search(v):
+                        found.add(v)
+                else:
+                    walk(v, found)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, found)
+
+    for folder, is_survey in ((SURVEY_DIR, True), (DETAIL_DIR, False)):
+        if not os.path.isdir(folder):
+            continue
+        for f in os.listdir(folder):
+            if not f.endswith(".json") or f.endswith("-spec.json"):
+                continue
+            try:
+                court, rest = f[:-5].split("-", 1)
+                case_no = rest if is_survey else rest.rsplit("-", 1)[0]
+                found: set[str] = set()
+                walk(json.load(open(os.path.join(folder, f), encoding="utf-8")), found)
+            except Exception:  # noqa: BLE001
+                continue
+            if found:
+                key = f"{court}|{case_no}"
+                out.setdefault(key, [])
+                out[key].extend(sorted(found - set(out[key])))
+    return out
+
+
 def rebuild() -> dict:
     """raw(물건상세·현황조사서·사건검색) + manual-details.json → auction-details.json"""
     idx = item_index()
@@ -876,6 +1036,9 @@ def rebuild() -> dict:
         item_id = (idx.get((court, case_no)) or {}).get(str(seq))
         if item_id:
             by_id[item_id] = {**(by_id.get(item_id) or {}), **item}
+            pics = photos_for(court, case_no, seq)
+            if pics:
+                by_id[item_id]["photos"] = pics
         # 명세서 뷰어 주소
         spec_file = os.path.join(DETAIL_DIR, f"{court}-{case_no}-{seq}-spec.json")
         if os.path.exists(spec_file):
@@ -942,6 +1105,9 @@ def rebuild() -> dict:
         item_id = (idx.get((court, case_no)) or {}).get(seq)
         if item_id:
             by_id[item_id] = {**(by_id.get(item_id) or {}), **item}
+            pics = photos_for(court, case_no, seq)
+            if pics:
+                by_id[item_id]["photos"] = pics
 
     for f in sorted(os.listdir(PDF_SURVEY_DIR)) if os.path.isdir(PDF_SURVEY_DIR) else []:
         if not f.endswith(".json"):
@@ -1002,7 +1168,7 @@ def rebuild() -> dict:
         "byCase": by_case,
         "byId": by_id,
     }
-    sanitize_payload(payload)   # 배포 파일에는 사람 이름을 남기지 않는다
+    sanitize_payload(payload, raw_names_by_case())   # 배포 파일에는 사람 이름을 남기지 않는다
     json.dump(payload, open(OUT, "w", encoding="utf-8"), ensure_ascii=False)
     print(f"사건 {len(by_case)} · 물건 {len(by_id)} · 목록 {item_count} → {OUT}")
     if errors:
@@ -1112,17 +1278,17 @@ def self_test() -> None:
 
     # ⑤ 개인정보 마스킹 — 화면(src/lib/mask-name.ts)과 같은 규칙이어야 한다
     mask_checks = [
-        ("서미경", "서O경"), ("김철", "김O"), ("남궁민수", "남OO수"),
+        ("김영희", "김O희"), ("김철", "김O"), ("남궁민수", "남OO수"),
         ("ZHENG AI(정애)", "Z*** A*(정O)"), ("(주)기업건설", "(주)기업건설"),
-        ("김O애", "김O애"), ("서O경", "서O경"),
+        ("김O애", "김O애"), ("김O희", "김O희"),
     ]
     for raw_name, want in mask_checks:
         got = mask_person_name(raw_name)
         if got != want:
             raise SystemExit(f"✗ 마스킹 {raw_name!r}: {got!r} != {want!r}")
     text_checks = [
-        ("채무자 겸 소유자 심배관의 배우자", "채무자 겸 소유자 심O관의 배우자"),
-        ("기재된 심배관의 동거인", "기재된 심O관의 동거인"),
+        ("채무자 겸 소유자 이철수의 배우자", "채무자 겸 소유자 이O수의 배우자"),
+        ("기재된 이철수의 동거인", "기재된 이O수의 동거인"),
         ("이해관계인 폐문부재로", "이해관계인 폐문부재로"),
         ("다세대주택으로 이용중", "다세대주택으로 이용중"),
         ("공유자 지분 중 고근수 지분", "공유자 지분 중 고O수 지분"),
