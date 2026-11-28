@@ -18,7 +18,9 @@ import { FEATURED_STAGE_SUPPLEMENT } from "@/data/featured-stage-dates";
 
 /** 서울시 원본 레코드에 보강 날짜를 얹은, 카드용 입력값 */
 export function featuredStageInput(selected: Zone, official?: SeoulZone): StageTimelineInput {
-  const extra = FEATURED_STAGE_SUPPLEMENT[selected.id];
+  // 보강값은 서울시 원본 레코드의 빈 칸을 채우는 값이다 — 원본이 아직 없으면(데이터 로딩 전·실패)
+  //   샘플 구역의 단계로 사다리만 그리고 날짜는 비운다. 서로 다른 출처의 단계와 날짜를 섞지 않는다.
+  const extra = official ? FEATURED_STAGE_SUPPLEMENT[selected.id] : undefined;
 
   const base: StageTimelineInput = official
     ? {
