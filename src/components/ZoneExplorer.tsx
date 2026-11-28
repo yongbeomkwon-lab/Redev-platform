@@ -723,7 +723,8 @@ export default function ZoneExplorer() {
     const zoneId = pin.lead.zoneId;
     setAuctionPanel({
       zoneId,
-      items: [],
+      // 경매 탭도 이 구역 목록으로 채워 둔다 — 공매 핀에서 들어와도 탭을 오갈 수 있게
+      items: auctions?.byZone[zoneId] ?? [],
       gongItems: pin.items as GongmaeAuctionItem[],
       activeId: pin.lead.id,
       channel: "onbid",
@@ -740,7 +741,13 @@ export default function ZoneExplorer() {
   function openGongmaeZone(zoneId: string) {
     const list = gongmae?.byZone[zoneId] ?? [];
     if (list.length === 0) return;
-    setAuctionPanel({ zoneId, items: [], gongItems: list.map(gongmaeAsAuction), activeId: null, channel: "onbid" });
+    setAuctionPanel({
+      zoneId,
+      items: auctions?.byZone[zoneId] ?? [],
+      gongItems: list.map(gongmaeAsAuction),
+      activeId: null,
+      channel: "onbid",
+    });
     if (zoneId !== selectedId) pickZone(zoneId, { auction: true, gongmae: true });
     if (typeof window !== "undefined" && window.innerWidth < 768) setPanelOpen(false);
   }

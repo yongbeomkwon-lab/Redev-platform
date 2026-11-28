@@ -184,7 +184,9 @@ export function buildGongmaePins(items: GongmaeAuctionItem[]): AuctionMapPin[] {
       ...p,
       channel: "onbid" as const,
       priceLabel: multi ? `${shortAuctionWon(min)}~` : shortAuctionWon(min),
-      subLabel: multi ? `공매 ${p.saleUnits}건${day ? ` · ${day}` : ""}` : `${day} 마감${fail}`,
+      subLabel: multi
+        ? `${p.saleUnits}건${day ? ` · ${day} 마감` : ""}`
+        : `${day} 마감${fail}`,
     };
   });
 }
