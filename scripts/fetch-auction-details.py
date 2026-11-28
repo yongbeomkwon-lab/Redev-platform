@@ -143,7 +143,7 @@ NOT_NAMES = {
     "지분", "란에", "등재", "명의", "점유", "관계", "소유", "기재", "표시", "경우", "당시",
     "세대", "주택", "건물", "부동산", "토지", "대지", "매각", "경매", "현황", "조사", "본건",
     "이건", "기타", "제시", "일부", "전부", "해당", "직원", "안내", "동거", "배우", "가족",
-    "세대주", "내용", "사항", "주소", "호수", "면적", "번호", "사람",
+    "세대주", "내용", "사항", "주소", "호수", "면적", "번호", "사람", "채무", "점유자",
 }
 NOT_SHARE = {
     "매각", "공유", "채무", "소유", "임차", "매수", "매도", "전체", "일부", "해당", "본건",
@@ -231,31 +231,31 @@ _REP_RE = re.compile(r"대표자\s+([가-힣]{2,4})(?=[\s,.)]|$)")
 _ROLE_ALT = r"(?:채무자|소유자|공유자|임차인|세대주|배우자|동거인|이해관계인|대표자?|명의자|임차권자|임대인)"
 _ROLE_LOOSE_RE = re.compile(
     _ROLE_ALT +
-    # `채무자 겸 소유자 홍길동` · `채무자(소유자) 홍길동` · `채무자 겸 소유자(공유자) 홍길동`
+    # `채무자 겸 소유자 홍길동` · `채무자(소유자) 홍길동`
     r"(?:\s*겸\s*" + _ROLE_ALT + r"|\s*\(\s*" + _ROLE_ALT + r"\s*\))*" +
-    r"\s+([가-힣]{2,4}?)" +
-    r"(?=[을를은는이가의에와과로도만\s,.)]|$)")
+    r"\s+([가-힣]{2,4}?)(?=[을를은는이가의에와과도만\s,.)]|$)")
 
 # `임차인(양형주)` · `임대인은 한광수이고` · `고O숙 및 최O석 등`
 _PAREN_NAME_RE = re.compile(
     r"(?:채무자|소유자|공유자|임차인|배우자|세대주|임대인|임차권자|대표자?)\s*\(([가-힣]{2,4})\)")
 _ROLE_PART_RE = re.compile(
-    r"(?:채 무자|채무자|소유자|공유자|임차인|임대인|임차권자|세대주)(?:은|는|이|가)\s+([가-힣]{2,4}?)"
-    r"(?=[이가을를은는의에와과로도만\s,.)]|$)")
+    r"(?:채무자|소유자|공유자|임차인|임대인|임차권자|세대주)(?:은|는|이|가)\s+([가-힣]{2,4}?)"
+    r"(?=이고|이며|이라는|라고(?:\s|,|\.)|이다)")
 _AND_NAME_RE = re.compile(
-    r"(?:및|와|과)\s+([가-힣]{2,4}?)(?=\s*(?:등|을|를|은|는|이|가|의|,|\.|\s)|$)")
+    r"(?:및|와|과)\s+([가-힣]{2,4}?)(?=\s*(?:등|을|를|은|는|이|가|의|,|\.)|$)")
 
 # `조창자 소유` · `김연수 소유` — 이름 뒤에 소유가 붙는 형태(소유자 실명)
 _OWN_RE = re.compile(r"(?<![가-힣])([가-힣]{2,4})\s+소유(?:한|하|하고|되고|된|되지|권)?(?![가-힣])")
 # 성씨 — 완화된 규칙이 지명·일반명사를 이름으로 오인하지 않도록 거른다
 _SURNAMES = set(
-    "김이박최정강조윤장임한오서신권황안송류유전홍고문양손배백허노하곽성차주우구민진지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예경봉사부가복태목형계피두감음빈동온호범좌팽승간상시갈단견당화창옹기남준만전좌제어피"
+    "김이박최정강조윤장임한오서신권황안송류유전홍고문양손배백허노하곽성차주우구민진지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예경봉사부가복태목형계피두감음빈동온호범좌팽승간상시갈단견당화창옹기남준만전좌제어피심"
 )
 
 
 def _strip_particle(token: str) -> str:
     """`홍영자가` 처럼 뒤에 조사가 붙은 이름에서 조사를 뗀다."""
-    for suf in ("이가", "가는", "는", "가", "를", "을", "와", "과", "의", "이", "도", "만", "에"):
+    for suf in ("이가", "가는", "이나", "으로", "부터", "까지", "에게", "에는", "로는",
+                "는", "가", "를", "을", "와", "과", "의", "이", "도", "만", "에"):
         if len(token) > len(suf) + 1 and token.endswith(suf):
             return token[: -len(suf)]
     return token
@@ -265,9 +265,54 @@ _ROLE_TOKENS = {"채무자", "소유자", "공유자", "임차인", "임대인",
                 "배우자", "동거인", "이해관계인", "대표자", "명의자", "점유자"}
 
 
-def _looks_like_name(token: str) -> bool:
-    return (2 <= len(token) <= 4 and token not in NOT_NAMES and token not in _ROLE_TOKENS
-            and token[0] in _SURNAMES)
+# 이름이 아닌 흔한 단어(성씨로 시작하지만 사람 이름이 아니다) — 넓은 규칙에서 걸러낸다
+_NOT_PERSON = {
+    "지층", "지하", "지상", "지번", "지분", "지역", "지구", "지정", "지붕", "지도", "지적",
+    "여부", "여과", "여기", "여러", "여전", "여타",
+    "주민", "주택", "주변", "주차", "주소", "주거", "주방", "주용", "주상",
+    "등록", "등기", "등본", "등재", "등은", "등의", "등기부",
+    "김치", "김포", "최근", "최저", "최고", "최선", "최종", "최대", "최소", "최초",
+    "박스", "박판", "박리", "신고", "신청", "신축", "신설", "신규", "신탁", "신문",
+    "임차", "임대", "임의", "임야", "임목",
+    "소유", "소규모", "소방", "소화", "소재", "소멸", "소장", "소송",
+    "홍보", "고가", "고저", "고정", "고시", "고지", "고가구",
+    "안전", "안내", "안건", "송달", "송치", "유사", "유리", "유형", "유지", "유무",
+    "전부", "전체", "전용", "전입", "전세", "전기", "전화", "전면", "전후", "전원",
+    "문의", "문서", "문화", "양호", "양도", "양식", "양측", "손해", "배수", "배관",
+    "백색", "허가", "노후", "노선", "하수", "하부", "하단", "하천", "하중",
+    "강당", "강제", "조명", "조사", "조정", "조합", "조치", "조성", "조경",
+    "윤곽", "장식", "장기", "장점", "임대차", "한쪽", "한편", "한도", "차량", "차임",
+    "차이", "차단", "차선", "우선", "우수", "우측", "구조", "구분", "구역", "구간",
+    "민원", "진입", "진행", "진출", "지장", "채광", "채무", "천장", "천정", "탁자",
+    "마감", "마당", "마을", "길이", "연립", "연결", "연면", "연와", "위치", "위반",
+    "표시", "표기", "명도", "명의", "기타", "기준", "기재", "기계", "기존", "기와",
+    "반영", "반경", "반대", "왕복", "금속", "금액", "옥상", "옥탑", "육안",
+    "인근", "인접", "인조", "인테리어", "예정", "경우", "경계", "경사", "경매",
+    "봉사", "사용", "사무", "사진", "사항", "부근", "부지", "부동산", "부엌", "부분",
+    "가구", "가능", "가압", "가스", "가옥", "복도", "태양", "목재", "목조", "형태",
+    "계단", "계약", "계획", "피해", "두께", "감정", "음식", "빈집", "동측", "동일",
+    "온수", "호수", "호실", "범위", "좌측", "평면", "승강", "간선", "상가", "시설",
+    "갈등", "단독", "견적", "당시", "화장", "창고", "창호", "옹벽", "기와집",
+    "공동", "상가", "연립", "다세", "근린", "일반", "주상", "오피", "아파", "빌라",
+    "여부나", "부재로", "기재됨", "전입세", "진행시", "감정인", "등재되", "점유로",
+    "사무", "상업", "주거", "업무", "공용", "판매", "숙박", "위락", "공공",
+}
+
+
+# 이름 끝에 오기 어려운 어미 — 넓은 규칙에서 걸러낸다
+_NOT_NAME_TAIL = ("시", "로", "대", "례", "률", "브", "관", "소", "됨", "한", "할", "하", "여", "서",
+                  "설", "비", "역", "구", "택", "실", "장", "층", "무", "액", "도", "면")
+
+
+def _looks_like_name(token: str, allow_two: bool = False, loose: bool = False) -> bool:
+    if not ((3 if not allow_two else 2) <= len(token) <= 4):
+        return False
+    if loose and token.endswith(_NOT_NAME_TAIL):
+        return False
+    if len(token) >= 4 and (token[:2] in _NOT_PERSON or token[:3] in _NOT_PERSON):
+        return False
+    return (token not in NOT_NAMES and token not in _ROLE_TOKENS
+            and token not in _NOT_PERSON and token[0] in _SURNAMES)
 
 
 def mask_names_in_text(text, names=()) -> str:
@@ -285,11 +330,13 @@ def mask_names_in_text(text, names=()) -> str:
         if _looks_like_name(name):
             found.add(name)
     for m in _LISTED_RE.finditer(src):
-        if m.group(3) not in NOT_NAMES:
-            found.add(m.group(3))
+        name = _strip_particle(m.group(3))
+        if _looks_like_name(name, loose=True):
+            found.add(name)
     for m in _SHARE_RE.finditer(src):
-        if m.group("name") not in NOT_SHARE:
-            found.add(m.group("name"))
+        name = _strip_particle(m.group("name"))
+        if m.group("name") not in NOT_SHARE and _looks_like_name(name, loose=True):
+            found.add(name)
     for m in _LABEL_RE.finditer(src):
         if m.group(1) not in NOT_NAMES:
             found.add(m.group(1))
@@ -304,11 +351,15 @@ def mask_names_in_text(text, names=()) -> str:
             found.add(m.group(1))
     for m in _OWN_RE.finditer(src):
         name = _strip_particle(m.group(1))
-        if _looks_like_name(name):
+        if _looks_like_name(name, loose=True):
             found.add(name)
     for m in _ROLE_LOOSE_RE.finditer(src):
+        name = _strip_particle(m.group(1) or "")
+        if name and _looks_like_name(name, loose=True):
+            found.add(name)
+    for m in _AND_NAME_RE.finditer(src):
         name = _strip_particle(m.group(1))
-        if _looks_like_name(name):
+        if _looks_like_name(name, loose=True):
             found.add(name)
     for m in _PAREN_NAME_RE.finditer(src):
         name = _strip_particle(m.group(1))
@@ -318,13 +369,10 @@ def mask_names_in_text(text, names=()) -> str:
         name = _strip_particle(m.group(1))
         if _looks_like_name(name):
             found.add(name)
-    for m in _AND_NAME_RE.finditer(src):
-        name = _strip_particle(m.group(1))
-        if _looks_like_name(name):
-            found.add(name)
     for raw in names:
         n = (raw or "").strip()
-        if len(n) >= 2 and not CORPORATE_RE.search(n) and not is_masked_name(n):
+        if (len(n) >= 2 and n not in NOT_NAMES and not CORPORATE_RE.search(n)
+                and not is_masked_name(n) and _looks_like_name(n, allow_two=True)):
             found.add(n)
     marks = []
     for name in sorted(found, key=len, reverse=True):
