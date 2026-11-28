@@ -56,9 +56,12 @@ export function buildCardData(
   const prev = before.length ? before[before.length - 1] : null;
   const delta = prev ? tx.price - prev.price : null;
 
-  const threeMonthsAgo = new Date(Date.parse(tx.dealDate) - 3 * MONTH_MS)
-    .toISOString()
-    .slice(0, 10);
+  const threeMonthsAgo = (() => {
+    const d = new Date(`${tx.dealDate}T00:00:00`);
+    d.setMonth(d.getMonth() - 3);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
   const recent3 = same.filter((p) => p.dealDate >= threeMonthsAgo && p.dealDate <= tx.dealDate).length;
 
   const pct = maxSame > 0 ? Math.round((tx.price / maxSame) * 1000) / 10 : null;

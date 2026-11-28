@@ -53,7 +53,9 @@ function addYears(iso: string, years: number): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "";
   d.setFullYear(d.getFullYear() + years);
-  return d.toISOString().slice(0, 10);
+  // toISOString 은 UTC 로 바꾸며 KST 자정이 전날이 된다 — 화면에 쓰는 날짜는 로컬 기준으로 만든다
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 function daysBetween(a: string, b: string): number | null {
   const x = Date.parse(`${a}T00:00:00`);
