@@ -154,11 +154,19 @@ _MASKED_KOR = re.compile(r"^[가-힣]O+$|^[가-힣]O+[가-힣]$")
 
 
 def mask_person_name(raw) -> str:
-    """사람 이름 하나를 가린다. 법인·상호는 원문 그대로."""
+    """사람 이름 하나를 가린다. 법인·상호는 원문 그대로.
+
+    다만 `(주)에이에스피웨딩 한승윤` 처럼 상호 뒤에 사람 이름이 따로 붙은 표기는
+    상호는 남기고 뒤 이름만 가린다(성씨로 이름인지 판단).
+    """
     name = (raw or "").strip()
     if not name:
         return ""
     if CORPORATE_RE.search(name):
+        parts = name.split()
+        if len(parts) >= 2 and 2 <= len(parts[-1]) <= 4 and parts[-1][0] in _SURNAMES \
+                and parts[-1] not in NOT_NAMES:
+            return " ".join(parts[:-1] + [_mask_token(parts[-1])])
         return name
     paren = re.match(r"^(.*?)\s*\(([^()]*)\)\s*$", name)
     if paren and paren.group(1).strip():
@@ -207,8 +215,59 @@ _SHARE_RE = re.compile(r"(?P<lead>^|[^가-힣])(?P<name>[가-힣]{2,4})(?P<gap>\
 _LABEL_RE = re.compile(r"(?:임차권자|임차인|채무자|소유자|공유자)\s*[:：]\s*([가-힣]{2,4})"
                        r"(?=\s|$|[,.)])")
 # `임차인 김O원의 부 이몽룡` 처럼 가족 관계어 뒤에 붙는 이름
-_FAMILY_RE = re.compile(r"(?:^|[^가-힣])(?:부|모|배우자|자녀|아들|딸)\s+([가-힣]{2,4})"
+_FAMILY_RE = re.compile(r"(?:^|[^가-힣])(?:부|모|배우자|자녀|아들|딸)\s+([가-힣]{2,4}?)"
                         r"(?=[을를이가은는의도만\s,.)]|$)")
+
+
+# `조영진(채무자 겸 소유자)` · `조정희(신O식의 배우자)` 처럼 이름 뒤 괄호 안에 역할이 오는 형태
+_PAREN_ROLE_RE = re.compile(
+    r"(?<![가-힣])([가-힣]{2,4})\s*\([^()]{0,20}?(?:^|[\s(])"
+    r"(?:채무자|소유자|공유자|임차인|배우자|세대주|동거인|대표자|명의자)[^()]{0,10}\)")
+# `대표자 홍길동` — 대표자가 붙은 이름
+_REP_RE = re.compile(r"대표자\s+([가-힣]{2,4})(?=[\s,.)]|$)")
+
+
+# 역할어 뒤 이름 — 조사·공백이 붙는 넓은 형태(성씨로 거른다)
+_ROLE_ALT = r"(?:채무자|소유자|공유자|임차인|세대주|배우자|동거인|이해관계인|대표자?|명의자|임차권자|임대인)"
+_ROLE_LOOSE_RE = re.compile(
+    _ROLE_ALT +
+    # `채무자 겸 소유자 홍길동` · `채무자(소유자) 홍길동` · `채무자 겸 소유자(공유자) 홍길동`
+    r"(?:\s*겸\s*" + _ROLE_ALT + r"|\s*\(\s*" + _ROLE_ALT + r"\s*\))*" +
+    r"\s+([가-힣]{2,4}?)" +
+    r"(?=[을를은는이가의에와과로도만\s,.)]|$)")
+
+# `임차인(양형주)` · `임대인은 한광수이고` · `고O숙 및 최O석 등`
+_PAREN_NAME_RE = re.compile(
+    r"(?:채무자|소유자|공유자|임차인|배우자|세대주|임대인|임차권자|대표자?)\s*\(([가-힣]{2,4})\)")
+_ROLE_PART_RE = re.compile(
+    r"(?:채 무자|채무자|소유자|공유자|임차인|임대인|임차권자|세대주)(?:은|는|이|가)\s+([가-힣]{2,4}?)"
+    r"(?=[이가을를은는의에와과로도만\s,.)]|$)")
+_AND_NAME_RE = re.compile(
+    r"(?:및|와|과)\s+([가-힣]{2,4}?)(?=\s*(?:등|을|를|은|는|이|가|의|,|\.|\s)|$)")
+
+# `조창자 소유` · `김연수 소유` — 이름 뒤에 소유가 붙는 형태(소유자 실명)
+_OWN_RE = re.compile(r"(?<![가-힣])([가-힣]{2,4})\s+소유(?:한|하|하고|되고|된|되지|권)?(?![가-힣])")
+# 성씨 — 완화된 규칙이 지명·일반명사를 이름으로 오인하지 않도록 거른다
+_SURNAMES = set(
+    "김이박최정강조윤장임한오서신권황안송류유전홍고문양손배백허노하곽성차주우구민진지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예경봉사부가복태목형계피두감음빈동온호범좌팽승간상시갈단견당화창옹기남준만전좌제어피"
+)
+
+
+def _strip_particle(token: str) -> str:
+    """`홍영자가` 처럼 뒤에 조사가 붙은 이름에서 조사를 뗀다."""
+    for suf in ("이가", "가는", "는", "가", "를", "을", "와", "과", "의", "이", "도", "만", "에"):
+        if len(token) > len(suf) + 1 and token.endswith(suf):
+            return token[: -len(suf)]
+    return token
+
+
+_ROLE_TOKENS = {"채무자", "소유자", "공유자", "임차인", "임대인", "임차권자", "세대주",
+                "배우자", "동거인", "이해관계인", "대표자", "명의자", "점유자"}
+
+
+def _looks_like_name(token: str) -> bool:
+    return (2 <= len(token) <= 4 and token not in NOT_NAMES and token not in _ROLE_TOKENS
+            and token[0] in _SURNAMES)
 
 
 def mask_names_in_text(text, names=()) -> str:
@@ -222,8 +281,9 @@ def mask_names_in_text(text, names=()) -> str:
         return src
     found = set()
     for m in _ROLE_RE.finditer(src):
-        if m.group("name") not in NOT_NAMES:
-            found.add(m.group("name"))
+        name = _strip_particle(m.group("name"))
+        if _looks_like_name(name):
+            found.add(name)
     for m in _LISTED_RE.finditer(src):
         if m.group(3) not in NOT_NAMES:
             found.add(m.group(3))
@@ -236,6 +296,32 @@ def mask_names_in_text(text, names=()) -> str:
     for m in _FAMILY_RE.finditer(src):
         if m.group(1) not in NOT_NAMES:
             found.add(m.group(1))
+    for m in _PAREN_ROLE_RE.finditer(src):
+        if m.group(1) not in NOT_NAMES:
+            found.add(m.group(1))
+    for m in _REP_RE.finditer(src):
+        if m.group(1) not in NOT_NAMES:
+            found.add(m.group(1))
+    for m in _OWN_RE.finditer(src):
+        name = _strip_particle(m.group(1))
+        if _looks_like_name(name):
+            found.add(name)
+    for m in _ROLE_LOOSE_RE.finditer(src):
+        name = _strip_particle(m.group(1))
+        if _looks_like_name(name):
+            found.add(name)
+    for m in _PAREN_NAME_RE.finditer(src):
+        name = _strip_particle(m.group(1))
+        if _looks_like_name(name):
+            found.add(name)
+    for m in _ROLE_PART_RE.finditer(src):
+        name = _strip_particle(m.group(1))
+        if _looks_like_name(name):
+            found.add(name)
+    for m in _AND_NAME_RE.finditer(src):
+        name = _strip_particle(m.group(1))
+        if _looks_like_name(name):
+            found.add(name)
     for raw in names:
         n = (raw or "").strip()
         if len(n) >= 2 and not CORPORATE_RE.search(n) and not is_masked_name(n):
@@ -1324,6 +1410,15 @@ def self_test() -> None:
         ("다세대주택으로 이용중", "다세대주택으로 이용중"),
         ("공유자 지분 중 고근수 지분", "공유자 지분 중 고O수 지분"),
         ("임차인으로 보고함", "임차인으로 보고함"),
+        ("조영진(채무자 겸 소유자) 세대", "조O진(채무자 겸 소유자) 세대"),
+        ("조정희(신O식의 배우자)에 의하면", "조O희(신O식의 배우자)에 의하면"),
+        ("(대표자 신동성)은", "(대표자 신O성)은"),
+        ("임차인 김O원의 부 홍길동을 만나", "임차인 김O원의 부 홍O동을 만나"),
+        ("임차권자 : 홍길동", "임차권자 : 홍O동"),
+        ("건부지(다세대주택)로서", "건부지(다세대주택)로서"),
+        ("조창자 소유, 김연수 소유 라고", "조O자 소유, 김O수 소유 라고"),
+        ("홍영자가 소유한 것", "홍O자가 소유한 것"),
+        ("같이 소유하고 있다", "같이 소유하고 있다"),
     ]
     for raw_text, want in text_checks:
         got = mask_names_in_text(raw_text)

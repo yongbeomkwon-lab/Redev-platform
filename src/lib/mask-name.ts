@@ -29,6 +29,8 @@ const ROLE_WORDS = [
   "이해관계인",
   "대표",
   "명의자",
+  "임차권자",
+  "임대인",
 ];
 
 /** 역할어 뒤에 와도 이름이 아닌 말 — 이 말들은 건드리지 않는다 */
@@ -90,6 +92,45 @@ const LISTED_SRC = String.raw`(기재된|등재된|기재한|등재한)(\s+)([�
 
 /** `고근수 지분` 처럼 지분 표시에 붙은 이름 */
 const SHARE_SRC = String.raw`(^|[^가-힣])([가-힣]{2,4})(\s*)지분`;
+
+/** `임차권자 : 홍길동` 처럼 콜론으로 라벨 뒤에 붙는 이름 */
+const LABEL_SRC = String.raw`(?:임차권자|임차인|채무자|소유자|공유자)\s*[:：]\s*([가-힣]{2,4})(?=\s|$|[,.)])`;
+
+/** `임차인 김O원의 부 홍길동` 처럼 가족 관계어 뒤에 붙는 이름 */
+const FAMILY_SRC = String.raw`(?:^|[^가-힣])(?:부|모|배우자|자녀|아들|딸)\s+([가-힣]{2,4}?)(?=[을를이가은는의도만\s,.)]|$)`;
+
+/** `조영진(채무자 겸 소유자)` · `조정희(신O식의 배우자)` 처럼 이름 뒤 괄호 안에 역할이 오는 형태 */
+const PAREN_ROLE_SRC = String.raw`(?<![가-힣])([가-힣]{2,4})\s*\([^()]{0,20}?(?:^|[\s(])(?:채무자|소유자|공유자|임차인|배우자|세대주|동거인|대표자|명의자)[^()]{0,10}\)`;
+
+/** `대표자 홍길동` — 대표자가 붙은 이름 */
+const REP_SRC = String.raw`대표자\s+([가-힣]{2,4})(?=[\s,.)]|$)`;
+
+/** `조창자 소유` · `김연수 소유` — 이름 뒤에 소유가 붙는 형태(소유자 실명) */
+const OWN_SRC = String.raw`(?<![가-힣])([가-힣]{2,4})\s+소유(?:한|하|하고|되고|된|되지|권)?(?![가-힣])`;
+
+/** `임차인(홍길동)` · `임대인은 홍길동이고` · `홍길동 및 김철 등` */
+const PAREN_NAME_SRC = String.raw`(?:채무자|소유자|공유자|임차인|배우자|세대주|임대인|임차권자|대표자?)\s*\(([가-힣]{2,4})\)`;
+const ROLE_PART_SRC = String.raw`(?:채무자|소유자|공유자|임차인|임대인|임차권자|세대주)(?:은|는|이|가)\s+([가-힣]{2,4}?)(?=[이가을를은는의에와과로도만\s,.)]|$)`;
+const AND_NAME_SRC = String.raw`(?:및|와|과)\s+([가-힣]{2,4}?)(?=\s*(?:등|을|를|은|는|이|가|의|,|\.|\s)|$)`;
+
+/** 역할어 — 이름이 아니라 직위·지위를 뜻하는 말 */
+const ROLE_TOKENS = new Set([
+  "채무자", "소유자", "공유자", "임차인", "임대인", "임차권자", "세대주",
+  "배우자", "동거인", "이해관계인", "대표자", "명의자", "점유자",
+]);
+
+/** 성씨 — 완화된 규칙이 지명·일반명사를 이름으로 오인하지 않도록 거른다 */
+const SURNAMES = new Set(
+  "김이박최댑강조윤장임한오서신권황안송류유전홍고문양손배백허노하곽성차주우구민진지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예경봉사부가복태목형계피두감음빈동온호범좌팽승간상시갈단견당화창옹소기남탁준만전".split(""),
+);
+
+/** `홍영자가` 처럼 뒤에 조사가 붙은 이름에서 조사를 뗀다 */
+function stripParticle(token: string): string {
+  for (const suf of ["이가", "가는", "는", "가", "를", "을", "와", "과", "의", "이", "도", "만", "에"]) {
+    if (token.length > suf.length + 1 && token.endsWith(suf)) return token.slice(0, -suf.length);
+  }
+  return token;
+}
 
 /** 한 토큰(공백으로 나뉜 이름 한 덩어리)을 가린다 — 이미 가려진 표기는 그대로 둔다 */
 function maskToken(token: string): string {
@@ -178,6 +219,33 @@ export function maskNamesInText(text: string | null | undefined, names: (string 
   }
   for (const m of src.matchAll(new RegExp(SHARE_SRC, "g"))) {
     if (!NOT_SHARE.has(m[2])) found.add(m[2]);
+  }
+  for (const m of src.matchAll(new RegExp(LABEL_SRC, "g"))) {
+    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+  }
+  for (const m of src.matchAll(new RegExp(FAMILY_SRC, "g"))) {
+    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+  }
+  for (const m of src.matchAll(new RegExp(PAREN_ROLE_SRC, "g"))) {
+    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+  }
+  for (const m of src.matchAll(new RegExp(REP_SRC, "g"))) {
+    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+  }
+  for (const m of src.matchAll(new RegExp(OWN_SRC, "g"))) {
+    const name = stripParticle(m[1]);
+    if (name.length >= 2 && name.length <= 4 && !NOT_NAMES.has(name) && SURNAMES.has(name[0])) {
+      found.add(name);
+    }
+  }
+  for (const re of [PAREN_NAME_SRC, ROLE_PART_SRC, AND_NAME_SRC]) {
+    for (const m of src.matchAll(new RegExp(re, "g"))) {
+      const name = stripParticle(m[1]);
+      if (name.length >= 2 && name.length <= 4 && !NOT_NAMES.has(name)
+          && !ROLE_TOKENS.has(name) && SURNAMES.has(name[0])) {
+        found.add(name);
+      }
+    }
   }
   for (const raw of names) {
     const n = (raw ?? "").trim();
