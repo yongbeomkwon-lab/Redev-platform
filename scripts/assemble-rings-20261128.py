@@ -271,6 +271,7 @@ def _finish(zid: str, polys: dict, chosen: set, seeds: list, target: float, z: d
         "target": target,
         "seeds": sorted(polys[k][0]["num"] for k in seeds),
         "parcels": sorted(polys[k][0]["num"] for k in chosen),
+        "pkeys": sorted(chosen),
         "ring": ring,
         "parts": parts,
         "holes": holes,
@@ -287,6 +288,12 @@ def _pick_seeds(polys: dict, z: dict) -> list:
              if p["num"] in (z.get("seeds") or []) and (not z.get("dong") or z["dong"] in addr(p))]
     if not seeds:
         seeds = [k for k, (_, poly) in polys.items() if poly.buffer(0.00002).contains(center)]
+    if not seeds:
+        # 중심점이 도로·교차로 위면 가장 가까운 필지를 씨앗으로 (70m 이내)
+        near = sorted((poly.distance(center), k) for k, (_, poly) in polys.items()
+                      if not (polys[k][0]["tail"] or "").startswith("도"))
+        if near and near[0][0] <= 0.0007:
+            seeds = [near[0][1]]
     if not seeds:
         raise RuntimeError("씨앗 없음(지번·중심점 모두 실패)")
     return seeds
@@ -451,7 +458,9 @@ def poly_area_m2(poly) -> float:
     return poly.area * (111132.0 ** 2) * math.cos(math.radians(poly.centroid.y))
 
 
-def _assemble(zid: str, parcels: list[dict], z: dict, mode: str = "parcel") -> dict:
+def _assemble(zid: str, parcels: list[dict], z: dict, mode: str = "parcel", exclude: set | None = None) -> dict:
+    if exclude:
+        parcels = [p for p in parcels if (p["pnu"] or p["jibun"]) not in exclude]
     polys = _build_polys(parcels)
     seeds = _pick_seeds(polys, z)
     if mode == "block":
@@ -463,7 +472,7 @@ def _assemble(zid: str, parcels: list[dict], z: dict, mode: str = "parcel") -> d
     return _finish(zid, polys, chosen, seeds, float(z["target"]), z)
 
 
-def _pick(zid: str, parcels: list[dict], z: dict) -> dict:
+def _pick(zid: str, parcels: list[dict], z: dict, exclude: set | None = None) -> dict:
     """가장 좁은 도로폭으로 목표 ±8%에 드는 조립을 고른다. 없으면 면적 차이가 가장 작은 것."""
     target = float(z["target"])
     cands = []
@@ -472,8 +481,9 @@ def _pick(zid: str, parcels: list[dict], z: dict) -> dict:
             zz = dict(z)
             zz["max_road_width"] = w
             try:
-                r = _assemble(zid, parcels, zz, mode=mode)
-            except Exception:
+                r = _assemble(zid, parcels, zz, mode=mode, exclude=exclude)
+            except Exception as e:
+                print(f"   · {zid} {mode}/w{w} 실패: {e}", flush=True)
                 continue
             d = abs(r["areaShape"] - target) / target if target else 0.0
             r["mode"] = mode
@@ -483,29 +493,39 @@ def _pick(zid: str, parcels: list[dict], z: dict) -> dict:
         raise RuntimeError("조립 실패")
     # 필지선을 따라가는 parcel/block 결과를 우선하고(±12%), 그것으로 목표에 못 미치면
     # 도로를 무시하는 compact 를 쓴다.
-    good = [c for c in cands if c[0] <= 0.12 and c[2] != "compact"]
+    # 한 덩어리(조각 2개 이하)로 이어지는 결과를 우선 — 흩어진 조각은 지도에서 이상하다
+    good = [c for c in cands if c[0] <= 0.12 and len(c[3]["parts"]) <= 2]
     if not good:
-        good = [c for c in cands if c[0] <= 0.08]
+        good = [c for c in cands if c[0] <= 0.15]
     pool = good or cands
-    pool.sort(key=lambda c: (c[1], c[0]))
+    pool.sort(key=lambda c: (len(c[3]["parts"]), c[0], c[1]))
     return pool[0][3]
 
 
 def cmd_rings(only=None):
     cache = json.loads(CACHE.read_text(encoding="utf-8"))
     out = json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {}
-    for zid, z in ZONES.items():
-        if only and zid not in only:
-            continue
-        parcels = cache.get(zid) or []
-        if not parcels:
-            print(f"{zid}: 캐시 없음", flush=True)
-            continue
+    todo = {k: v for k, v in ZONES.items() if (not only or k in only) and cache.get(k)}
+
+    # 1차: 겹침 고려 없이 품질(면적 오차)만 보고 순서를 정한다
+    first = {}
+    for zid, z in todo.items():
         try:
-            r = _pick(zid, parcels, z)
+            first[zid] = _pick(zid, cache[zid], z)
         except Exception as e:
-            print(f"{zid}: 조립 실패 — {e}", flush=True)
-            continue
+            print(f"{zid}: 1차 조립 실패 — {e}", flush=True)
+    order = sorted(first, key=lambda k: abs(first[k]["areaShape"] - first[k]["target"]) / first[k]["target"])
+
+    # 2차: 품질 좋은 구역부터 필지를 차지하고, 뒤 구역은 이미 쓰인 필지를 뺀다(겹침 방지)
+    used: set = set()
+    for zid in order:
+        z = todo[zid]
+        try:
+            r = _pick(zid, cache[zid], z, exclude=used)
+        except Exception as e:
+            r = first[zid]
+            print(f"{zid}: 2차 조립 실패 — {e} (1차 결과 사용)", flush=True)
+        used |= set(r.get("pkeys") or [])
         out[zid] = r
         d = (r["areaShape"] - r["target"]) / r["target"] * 100 if r["target"] else 0.0
         print(f"{zid:18s} {r['areaShape']:10,.1f} / {r['target']:10,.1f} ({d:+6.1f}%) "
@@ -516,6 +536,29 @@ def cmd_rings(only=None):
     print("저장:", OUT)
 
 
+
+
+def cmd_seq(ids):
+    """순서대로 조립하며 앞 구역이 쓴 필지는 뒤 구역에서 뺀다(겹침 방지).
+
+    여러 번에 나눠 돌릴 수 있게 결과(tmp/rings)와 사용 필지(tmp/used.json)를 계속 저장한다.
+    """
+    cache = json.loads(CACHE.read_text(encoding="utf-8"))
+    out = json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {}
+    used_path = ROOT / "tmp" / "used-20261128.json"
+    used = set(json.loads(used_path.read_text(encoding="utf-8"))) if used_path.exists() else set()
+    for zid in ids:
+        z = ZONES[zid]
+        r = _pick(zid, cache[zid], z, exclude=used)
+        out[zid] = r
+        used |= set(r.get("pkeys") or [])
+        OUT.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+        used_path.write_text(json.dumps(sorted(used)), encoding="utf-8")
+        d = (r["areaShape"] - r["target"]) / r["target"] * 100
+        print(f"{zid:18s} {r['areaShape']:10,.1f} ({d:+6.1f}%) {r['mode']}/w{r['maxRoadWidth']} "
+              f"필지 {len(r['parcels']):3d} 조각 {len(r['parts'])}", flush=True)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "rings"
     only = set(sys.argv[2:]) or None
@@ -523,3 +566,5 @@ if __name__ == "__main__":
         cmd_fetch(only)
     elif cmd == "rings":
         cmd_rings(only)
+    elif cmd == "seq":
+        cmd_seq(sys.argv[2:])
