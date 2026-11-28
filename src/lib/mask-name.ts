@@ -124,6 +124,40 @@ const SURNAMES = new Set(
   "김이박최댑강조윤장임한오서신권황안송류유전홍고문양손배백허노하곽성차주우구민진지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예경봉사부가복태목형계피두감음빈동온호범좌팽승간상시갈단견당화창옹소기남탁준만전".split(""),
 );
 
+/** 이름이 아닌 흔한 단어 — 넓은 규칙에서 걸러낸다(수집기와 같은 목록) */
+const NOT_PERSON = new Set([
+  "지층", "지하", "지상", "지번", "지분", "지역", "지구", "지정", "지붕", "지도", "지적",
+  "여부", "여과", "여기", "여러", "여전", "여타", "여부나",
+  "주민", "주택", "주변", "주차", "주소", "주거", "주방", "주용", "주상",
+  "등록", "등기", "등본", "등재", "등은", "등의", "등기부",
+  "최근", "최저", "최고", "최선", "최종", "최대", "최소", "최초",
+  "신고", "신청", "신축", "신설", "신규", "신탁", "신문",
+  "임차", "임대", "임의", "임야", "임목", "소유", "소규모", "소방", "소화", "소재", "소멸",
+  "고가", "고저", "고정", "고시", "고지", "안전", "안내", "안건", "송달", "유사", "유리",
+  "유형", "유지", "유무", "전부", "전체", "전용", "전입", "전세", "전기", "전화", "전면",
+  "문의", "문서", "문화", "양호", "양도", "양식", "양측", "손해", "배수", "배관", "백색",
+  "허가", "노후", "노선", "하수", "하부", "하단", "하천", "하중", "강당", "강제",
+  "조명", "조사", "조정", "조합", "조치", "조성", "조경", "장식", "장기", "차량", "차임",
+  "차이", "차단", "우선", "우수", "우측", "구조", "구분", "구역", "구간", "민원",
+  "진입", "진행", "진출", "채광", "채무", "천장", "천정", "마감", "마당", "마을", "길이",
+  "연립", "연결", "연면", "연와", "위치", "위반", "표시", "표기", "명도", "명의", "기타",
+  "기준", "기재", "기계", "기존", "기와", "반영", "반경", "반대", "왕복", "금속", "금액",
+  "옥상", "옥탑", "육안", "인근", "인접", "인조", "예정", "경우", "경계", "경사", "경매",
+  "사용", "사무", "사진", "사항", "부근", "부지", "부동산", "부재로", "부분", "가구",
+  "가능", "가압", "가스", "가옥", "복도", "태양", "목재", "목조", "형태", "계단", "계약",
+  "계획", "피해", "두께", "감정", "감정인", "음식", "동측", "동일", "온수", "호수", "호실",
+  "범위", "좌측", "평면", "승강", "간선", "상가", "시설", "단독", "견적", "당시", "화장",
+  "창고", "창호", "옹벽", "공동", "연립", "다세", "근린", "일반", "주상", "오피", "아파",
+  "빌라", "상업", "업무", "공용", "판매", "숙박", "위락", "공공", "기재됨", "전입세",
+  "진행시", "등재되", "점유로",
+]);
+
+/** 이름 끝에 오기 어려운 어미 — 넓은 규칙에서 걸러낸다 */
+const NOT_NAME_TAIL = [
+  "시", "로", "대", "례", "률", "브", "관", "소", "됨", "한", "할", "하", "여", "서",
+  "설", "비", "역", "구", "택", "실", "장", "층", "무", "액", "도", "면",
+];
+
 /** `홍영자가` 처럼 뒤에 조사가 붙은 이름에서 조사를 뗀다 */
 function stripParticle(token: string): string {
   for (const suf of ["이가", "가는", "는", "가", "를", "을", "와", "과", "의", "이", "도", "만", "에"]) {
@@ -211,45 +245,62 @@ export function maskNamesInText(text: string | null | undefined, names: (string 
   const role = ROLE_WORDS.map(escapeRe).join("|");
   const roleSrc = String.raw`(^|[^가-힣])((?:${role})(?:\s*겸\s*(?:${role}))?\s+)([가-힣]{2,4}?)(?=\s*(?:의|를|가|은|는|이(?:라는|며|고|\s)|으로|으로부터|로부터|라고|와|과|[,.()]|$))`;
   const found = new Set<string>();
+
+  /** 수집기(scripts/fetch-auction-details.py)와 같은 판정 — 이름 꼴이 아니면 건드리지 않는다 */
+  const looksLikeName = (token: string, opts: { allowTwo?: boolean; loose?: boolean } = {}): boolean => {
+    const min = opts.allowTwo ? 2 : 3;
+    if (token.length < min || token.length > 4) return false;
+    if (opts.loose && NOT_NAME_TAIL.some((t) => token.endsWith(t))) return false;
+    if (token.length >= 4 && (NOT_PERSON.has(token.slice(0, 2)) || NOT_PERSON.has(token.slice(0, 3)))) return false;
+    return !NOT_NAMES.has(token) && !ROLE_TOKENS.has(token) && !NOT_PERSON.has(token)
+      && SURNAMES.has(token[0]);
+  };
+
   for (const m of src.matchAll(new RegExp(roleSrc, "g"))) {
-    if (!NOT_NAMES.has(m[3])) found.add(m[3]);
+    const name = stripParticle(m[3]);
+    if (looksLikeName(name, { allowTwo: true })) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(LISTED_SRC, "g"))) {
-    if (!NOT_NAMES.has(m[3])) found.add(m[3]);
+    const name = stripParticle(m[3]);
+    if (looksLikeName(name, { loose: true })) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(SHARE_SRC, "g"))) {
-    if (!NOT_SHARE.has(m[2])) found.add(m[2]);
+    const name = stripParticle(m[2]);
+    if (!NOT_SHARE.has(m[2]) && looksLikeName(name, { loose: true })) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(LABEL_SRC, "g"))) {
-    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+    const name = stripParticle(m[1]);
+    if (looksLikeName(name, { allowTwo: true })) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(FAMILY_SRC, "g"))) {
-    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+    const name = stripParticle(m[1]);
+    if (looksLikeName(name, { allowTwo: true })) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(PAREN_ROLE_SRC, "g"))) {
-    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+    const name = stripParticle(m[1]);
+    if (looksLikeName(name)) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(REP_SRC, "g"))) {
-    if (!NOT_NAMES.has(m[1])) found.add(m[1]);
+    const name = stripParticle(m[1]);
+    if (looksLikeName(name)) found.add(name);
   }
   for (const m of src.matchAll(new RegExp(OWN_SRC, "g"))) {
     const name = stripParticle(m[1]);
-    if (name.length >= 2 && name.length <= 4 && !NOT_NAMES.has(name) && SURNAMES.has(name[0])) {
-      found.add(name);
-    }
+    if (looksLikeName(name, { loose: true })) found.add(name);
   }
-  for (const re of [PAREN_NAME_SRC, ROLE_PART_SRC, AND_NAME_SRC]) {
-    for (const m of src.matchAll(new RegExp(re, "g"))) {
-      const name = stripParticle(m[1]);
-      if (name.length >= 2 && name.length <= 4 && !NOT_NAMES.has(name)
-          && !ROLE_TOKENS.has(name) && SURNAMES.has(name[0])) {
-        found.add(name);
-      }
-    }
+  for (const m of src.matchAll(new RegExp(PAREN_NAME_SRC, "g"))) {
+    const name = stripParticle(m[1]);
+    if (looksLikeName(name)) found.add(name);
+  }
+  for (const m of src.matchAll(new RegExp(ROLE_PART_SRC, "g"))) {
+    const name = stripParticle(m[1]);
+    if (looksLikeName(name, { loose: true })) found.add(name);
   }
   for (const raw of names) {
     const n = (raw ?? "").trim();
-    if (n.length >= 2 && !CORPORATE.test(n) && !isMaskedName(n)) found.add(n);
+    if (n.length >= 2 && !CORPORATE.test(n) && !isMaskedName(n) && looksLikeName(n, { allowTwo: true })) {
+      found.add(n);
+    }
   }
 
   // ② 원문에서 그 이름들이 나오는 자리를 모두 찾는다 — 낱말 앞이 한글이 아닌 곳만
