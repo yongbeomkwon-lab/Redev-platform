@@ -100,7 +100,7 @@ export default function CardLab() {
   const [zone, setZone] = useState("금호23구역");
   const [aptUrl, setAptUrl] = useState("");
   const [villaUrl, setVillaUrl] = useState("");
-  const [q, setQ] = useState({ prior: "", deadline: "" });
+  const [q, setQ] = useState<{ prior: string; deadline: string } | null>(null);
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -148,18 +148,20 @@ export default function CardLab() {
         )}
       </div>
 
-      <div className="rounded-xl border border-line bg-white p-3">
-        <ZoneRedevelopmentCheck
-          zoneName={zone}
-          type="신통기획"
-          stage="연번부여(2026-03-05)·후보지 신청 전"
-          gu="성동구"
-          kind="신속통합기획(재개발)"
-          stageDates={{ prep: "2026-03-05" }}
-          initialPrior={q.prior}
-          initialDeadline={q.deadline}
-        />
-      </div>
+      {q && (
+        <div className="rounded-xl border border-line bg-white p-3">
+          <ZoneRedevelopmentCheck
+            zoneName={zone}
+            type="신통기획"
+            stage="연번부여(2026-03-05)·후보지 신청 전"
+            gu="성동구"
+            kind="신속통합기획(재개발)"
+            stageDates={{ prep: "2026-03-05" }}
+            initialPrior={q.prior}
+            initialDeadline={q.deadline}
+          />
+        </div>
+      )}
       <div className="rounded-xl border border-line bg-white p-3">
         <ZoneRedevelopmentCheck
           zoneName="신림동 1464 가로주택"
