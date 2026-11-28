@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
-import type { ZoneType } from "@/lib/types";
+import type { MapZoneType } from "@/lib/types";
 import { TYPE_COLORS, TYPE_INK, TYPE_TINT, shortZoneType } from "@/components/map/colors";
 
 /**
  * 사업유형 뱃지 — 지도 폴리곤과 같은 11색 팔레트.
  *   · 흰 패널 위에서는 원색을 그대로 칠하면 글자가 묻힌다 — 바탕은 10% 틴트,
  *     글자는 눌러 쓴 잉크색, 점 하나만 원색으로 두어 지도 색과 바로 이어진다.
+ *   · 타입은 샘플 `ZoneType` 뿐 아니라 서울시 원본 레코드의 `type`(MapZoneType)도 받는다 —
+ *     대표 구역 패널은 원본 레코드 값을 그대로 띄운다(2026-11-28).
  */
-export function TypeBadge({ type }: { type: ZoneType }) {
+export function TypeBadge({ type }: { type: MapZoneType }) {
   const color = TYPE_COLORS[type] ?? "#64748B";
   const ink = TYPE_INK[type] ?? "#334155";
   const tint = TYPE_TINT[type] ?? "#F1F5F9";

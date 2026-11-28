@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Listing, MapZoneType, Transaction, Zone, ZoneStage } from "@/lib/types";
-import { STAGE_ORDER, calcInitialInvestment, calcMultiple } from "@/lib/types";
+import { calcInitialInvestment, calcMultiple } from "@/lib/types";
+import { stageProgressOf } from "@/lib/stage-timeline";
 import {
   loadSeoulZones,
   refreshSeoulZones,
@@ -612,8 +613,12 @@ export default function ZoneExplorer() {
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
   // 대표 구역의 서울시 원본 레코드 — 같은 id 의 고시 레코드(단계·단계별 날짜·권리산정기준일).
   //   대표 구역 패널은 샘플 값으로 그리지만, 「사업 진행단계」 카드는 일반 구역과 같은
-  //   서울시 원본으로 그린다(2026-11-28).
+  //   서울시 원본으로 그린다(2026-11-28). 상단 사업유형·진행단계 배지도 같은 레코드 값을 쓴다.
   const selectedOfficial = selected ? seoulZones.find((z) => z.id === selected.id) : undefined;
+  // 상단 배지가 띄울 단계 — 원본이 있으면 원본(카드와 같은 값), 아직 없으면 샘플 값.
+  const selectedStage = selectedOfficial?.stage ?? selected?.stage ?? "";
+  // 준공 구역은 '예상 입주·추정 비례율'이 의미가 없다 — 사업개요에서 전망 행을 빼고 준공일만 둔다.
+  const selectedCompleted = selectedStage.startsWith("준공");
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   // 지도 전체 실거래 가격표 — 지도가 뜬 뒤 한 번만 받아 둔다(700KB급, 화면을 막지 않게)
   useEffect(() => {
@@ -3143,13 +3148,17 @@ export default function ZoneExplorer() {
                   flagged={selected.toehoApplied}
                 />
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <TypeBadge type={selected.type} />
-                  <StageBadge stage={selected.stage} stageOrder={STAGE_ORDER[selected.stage]} />
+                  {/* 사업유형·진행단계 배지 — 아래 「사업 진행단계」 카드와 같은 서울시 원본 레코드 값.
+                      샘플 값으로 그리면 한 화면에서 배지와 카드가 다른 단계를 말한다
+                      (예: 성수전략2 위 '착공' vs 아래 '조합설립인가'). 지도 폴리곤 색·이름표도 같은
+                      원본 `type`을 쓰므로 배지를 원본으로 맞추면 지도와도 일치한다(2026-11-28). */}
+                  <TypeBadge type={selectedOfficial?.type ?? selected.type} />
+                  <StageBadge stage={selectedStage} stageOrder={stageProgressOf(selectedStage)} />
                   <Badge tone={selected.residenceRequired ? "red" : "slate"}>
                     {selected.residenceRequired ? "실거주 의무" : "실거주 무관"}
                   </Badge>
                   {selected.toehoApplied && <Badge tone="gold">토허제 적용</Badge>}
-                  <Badge tone="blue">예상 입주 {selected.moveInEstimate}</Badge>
+                  {!selectedCompleted && <Badge tone="blue">예상 입주 {selected.moveInEstimate}</Badge>}
                 </div>
 
                 {/* 동의율 — 모든 구역 상세에 같은 자리로 붙는다(값이 없으면 '미공개') */}
@@ -3169,11 +3178,16 @@ export default function ZoneExplorer() {
                   <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-xl border border-slate-200 p-3 text-xs">
                     <dt className="whitespace-nowrap text-slate-500">총 세대수</dt>
                     <dd className="text-right font-semibold">{selected.households.toLocaleString()}세대</dd>
-                    <dt className="whitespace-nowrap text-slate-500">추정 비례율</dt>
-                    <dd className="text-right font-semibold">{selected.ratioEstimate}%</dd>
+                    {/* 준공 구역은 비례율·입주 전망이 이미 지나간 값이라 보여 주지 않는다 */}
+                    {!selectedCompleted && (
+                      <>
+                        <dt className="whitespace-nowrap text-slate-500">추정 비례율</dt>
+                        <dd className="text-right font-semibold">{selected.ratioEstimate}%</dd>
+                      </>
+                    )}
                     <dt className="whitespace-nowrap text-slate-500">시공사</dt>
                     <dd className="text-right font-semibold">{selected.constructor}</dd>
-                    <dt className="whitespace-nowrap text-slate-500">예상 입주</dt>
+                    <dt className="whitespace-nowrap text-slate-500">{selectedCompleted ? "준공" : "예상 입주"}</dt>
                     <dd className="text-right font-semibold">{selected.moveInEstimate}</dd>
                   </dl>
                 </div>

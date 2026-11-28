@@ -502,6 +502,23 @@ export const HALTED_STAGE: Record<string, string> = {
   "후보지 신청(2026-03-11) 후 마포구 미추천(2026-08-08 게시)": "마포구 후보지 미추천",
 };
 
+/**
+ * 서울시 추진단계 표기 → 뱃지 색을 고르는 굵은 순번(1~6).
+ *   · 상세 패널 맨 위 단계 뱃지(StageBadge)가 초록(후반)·파랑(중반)·호박(초반)을 고르는 데만 쓴다.
+ *   · 사다리 칸 수(재개발 13단계 등)와는 무관하게 서울시 표기 문자열만 본다 — 대표 구역처럼
+ *     샘플 `ZoneStage`가 아닌 원본 표기('조합설립인가'·'지구변경' 등)를 그대로 띄울 때 쓴다.
+ */
+export function stageProgressOf(stage?: string | null): number {
+  const s = (stage ?? "").trim();
+  if (!s) return 1;
+  if (/준공|사용승인|사업완료|입주(?!자)/.test(s)) return 6;
+  if (/착공/.test(s)) return 5;
+  if (/이주|철거|멸실/.test(s)) return 4;
+  if (/관리처분/.test(s)) return 3;
+  if (/사업시행|조합설립|시공사|건축심의|건축허가/.test(s)) return 2;
+  return 1;
+}
+
 /** 유형별 예외 — 같은 표기라도 사업유형에 따라 다른 칸으로 간다. */
 export const EXACT_BY_TYPE: Partial<Record<string, Record<string, StageEvent[]>>> = {
   // 모아타운의 '위원회심의'는 관리계획(수립·공람) 심의라 구역지정이 아니다
