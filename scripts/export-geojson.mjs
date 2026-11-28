@@ -67,6 +67,8 @@ const EXTRA = [
   "householdsNow",
   "householdsPlan",
   "deterioration",
+  // 주민설명회 등 주민 안내 일정 — 상세 패널 「📢 주민설명회 일정」 카드(2026-11-28)
+  "briefings",
 ];
 
 const features = zones.map((z) => {

@@ -13,7 +13,10 @@
 //     → 지도에는 폴리곤 대신 점으로 그린다. 없는 경계를 지어내지 않는다.
 //   · 페이지 번들에 넣지 않고 클라이언트에서 fetch한다(2,179구역 ≈ 1.6MB → gzip 300KB대).
 // ─────────────────────────────────────────────────────────────────────────────
-import type { MapZoneType, ZoneDivider } from "@/lib/types";
+import type { MapZoneType, ZoneBriefing, ZoneDivider } from "@/lib/types";
+
+/** 주민설명회 일정 타입 — 화면(ZoneBriefingCard)과 같이 쓰도록 types 에서 정의했다 */
+export type { ZoneBriefing };
 
 /** 공식 확인 출처(고시·정보몽땅·자치구) */
 export type ZoneSource = { label: string; url: string };
@@ -101,6 +104,8 @@ export type SeoulZone = {
   rightsDate?: string;
   /** 단계 날짜 기준일(예: 2026-06-30 서울시 통계 기준) */
   datesAsOf?: string;
+  /** 주민설명회 등 주민 안내 일정 — 상세 패널 상단 「📢 주민설명회 일정」 카드 */
+  briefings?: ZoneBriefing[];
   /** 이 구역 레코드의 자료 기준일(서울플랜+ 기준일, 예: 2026-09-10) — 화면에 '단계 기준'으로 쓴다 */
   asOf?: string;
 };

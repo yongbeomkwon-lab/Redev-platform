@@ -86,6 +86,7 @@ import { MY_LISTINGS, MY_LISTINGS_AS_OF, isMyListing, myPinFromListing } from "@
 import { SHOW_MAP_LISTING_BADGES } from "@/lib/zone-listing-badges";
 import { AdminDrawToolbar, AdminZonePanel, type AdminMetaForm } from "@/components/AdminZonePanel";
 import ZoneConsent from "@/components/ZoneConsent";
+import ZoneBriefingCard from "@/components/ZoneBriefingCard";
 import {
   ADMIN_STORAGE_KEY,
   CUSTOM_ZONE_TYPES,
@@ -3160,6 +3161,9 @@ export default function ZoneExplorer() {
                   {selected.toehoApplied && <Badge tone="gold">토허제 적용</Badge>}
                   {!selectedCompleted && <Badge tone="blue">예상 입주 {selected.moveInEstimate}</Badge>}
                 </div>
+
+                {/* 📢 주민설명회 일정 — 대표 구역도 같은 카드. 데이터에 briefings 가 있을 때만 뜨다 */}
+                <ZoneBriefingCard briefings={selected.briefings} />
 
                 {/* 동의율 — 모든 구역 상세에 같은 자리로 붙는다(값이 없으면 '미공개') */}
                 <ZoneConsent

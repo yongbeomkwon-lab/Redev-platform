@@ -87,6 +87,37 @@ export const STAGE_ORDER: Record<ZoneStage, number> = {
   준공: 6,
 };
 
+/**
+ * 구역 주민설명회·설명회 일정 — 상세 패널의 「📢 주민설명회 일정」 카드(ZoneBriefingCard)가 읽는다.
+ *   · 한 구역에 여러 번 열리면 배열에 넣는다(화면이 날짜순으로 다시 정렬한다).
+ *   · 값은 포스터·공고문에 적힌 그대로만 넣는다 — 확인되지 않은 일정을 지어내지 않는다.
+ *   · 지난 일정도 지우지 않는다: 화면이 '종료'로 흐리게 남겨 설명회가 있었음을 보여 준다.
+ */
+export type ZoneBriefing = {
+  /** 일정 종류 — 카드 머리 문구 `📢 ○○ 일정` (기본 '주민설명회') */
+  kind?: string;
+  title: string;
+  /** YYYY-MM-DD — D-day·정렬 기준(한국 시간 자정) */
+  date: string;
+  /** "10:00" (24시간) — 화면이 오전/오후로 바꿔 쓴다 */
+  time?: string;
+  /** 포스터에 적힌 일시 표기 그대로(있으면 이 문장을 그대로 보여 준다) */
+  dateLabel?: string;
+  place?: string;
+  /** 장소 부가 설명 — 본사·출구·도보 시간 등 */
+  placeNote?: string;
+  /** 주관(시행사·신탁사·조합 등) */
+  host?: string;
+  /** 안내 문구 — '대중교통 이용 권장' 등 */
+  note?: string;
+  /** 포스터 이미지 경로(public 기준, 예: /images/briefings/...) */
+  poster?: string;
+  /** 안내 링크 — 오픈채팅·신청 페이지. kind:'kakao' 면 카카오 노란 버튼 */
+  links?: { label: string; url: string; kind?: "kakao" | "link" }[];
+  /** 자료 출처(포스터·공고문 등) — 카드 맨 아래 작은 글씨 */
+  source?: string;
+};
+
 /** 구역(정비구역) */
 export type Zone = {
   id: string;
@@ -124,6 +155,8 @@ export type Zone = {
   consentDate?: string;
   /** 동의율 비고(진행 경과·출처) */
   consentNote?: string;
+  /** 주민설명회 등 주민 안내 일정 — 상세 패널 상단 「📢 주민설명회 일정」 카드 */
+  briefings?: ZoneBriefing[];
   summary: string;
 };
 

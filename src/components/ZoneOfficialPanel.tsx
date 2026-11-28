@@ -24,6 +24,7 @@ import type { BuildingTradeTarget } from "@/lib/molit";
 import StageTimeline from "./StageTimeline";
 import ZoneConsent from "./ZoneConsent";
 import ZoneVitalStats from "./ZoneVitalStats";
+import ZoneBriefingCard from "./ZoneBriefingCard";
 
 export default function ZoneOfficialPanel({
   zone,
@@ -90,6 +91,11 @@ export default function ZoneOfficialPanel({
           닫기
         </button>
       </div>
+
+      {/* 📢 주민설명회 일정 — 구역 상세 맨 위, 동의율·단계보다 먼저.
+          날짜가 정해진 안내라 지나가면 다시 볼 수 없다 — 가장 눈에 띄는 자리에 둔다.
+          데이터에 briefings 가 없으면 아무것도 그리지 않는다(다른 구역은 그대로). */}
+      <ZoneBriefingCard briefings={zone.briefings} />
 
       {/* 동의율 — 사업 추진을 가르는 핵심 수치라 단계 타임라인보다 위에 둔다.
           값이 없는 구역은 '미공개' 한 줄로만 보여 준다(0%와 다른 상태). */}
