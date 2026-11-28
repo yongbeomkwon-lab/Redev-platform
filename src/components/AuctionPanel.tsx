@@ -51,6 +51,22 @@ import {
   type AuctionDetailsData,
   type AuctionPhoto,
 } from "@/lib/auction-details";
+import {
+  auctionBadges,
+  defaultPremiumAssumptions,
+  estimatePremium,
+  isResidentialUsage,
+  stagePassedPricing,
+  tenantPriority,
+  type AuctionBadge,
+  type PremiumAssumptions,
+} from "@/lib/auction-signals";
+import {
+  loadAuctionOpinions,
+  opinionFor,
+  type AuctionOpinionRecord,
+  type AuctionOpinionsData,
+} from "@/lib/auction-opinions";
 import { maskNamesInText, maskPersonName, tenantNamesOf } from "@/lib/mask-name";
 import { GongmaeDetail, GongmaeList, GONGMAE_ACCENT } from "@/components/GongmaePanelBody";
 import type { GongmaeAuctionItem, GongmaeMeta } from "@/lib/gongmae";
@@ -133,6 +149,7 @@ export default function AuctionPanel({
   items,
   zoneId,
   zoneName,
+  zoneStage,
   zoneTotal,
   activeId,
   onSelect,
@@ -151,6 +168,8 @@ export default function AuctionPanel({
   items: AuctionItem[];
   zoneId?: string;
   zoneName?: string;
+  /** 구역 추진단계(서울시) — 뱃지·예상 P의 '준공 후' 판단에 쓴다 */
+  zoneStage?: string;
   /** 그 구역의 전체 경매 건수(매각단위) — 핀 묶음보다 많으면 「구역 전체 보기」를 띄운다 */
   zoneTotal?: number;
   /** 펼친 물건 id — null 이면 목록 */
@@ -181,6 +200,7 @@ export default function AuctionPanel({
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [details, setDetails] = useState<AuctionDetailsData | null>(null);
+  const [opinions, setOpinions] = useState<AuctionOpinionsData | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +210,9 @@ export default function AuctionPanel({
     let alive = true;
     loadAuctionDetails().then((d) => {
       if (alive) setDetails(d);
+    });
+    loadAuctionOpinions().then((d) => {
+      if (alive) setOpinions(d);
     });
     return () => {
       alive = false;
@@ -434,6 +457,8 @@ export default function AuctionPanel({
           <ItemDetail
             item={active}
             detail={detailForItem(details, active)}
+            opinion={opinionFor(opinions, active.id)}
+            zoneStage={zoneStage}
             position={activeIndex >= 0 ? { index: activeIndex + 1, total: flat.length } : null}
             onBack={() => onSelect(null)}
             onPrev={
@@ -526,7 +551,13 @@ export default function AuctionPanel({
                     <ul className="mt-1 space-y-1.5">
                       {visible.map((it) => (
                         <li key={it.id}>
-                          <ListRow item={it} onOpen={() => onSelect(it.id)} />
+                          <ListRow
+                            item={it}
+                            detail={detailForItem(details, it)}
+                            opinion={opinionFor(opinions, it.id)}
+                            zoneStage={zoneStage}
+                            onOpen={() => onSelect(it.id)}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -662,10 +693,26 @@ function ListSummary({
   );
 }
 
-function ListRow({ item, onOpen }: { item: AuctionItem; onOpen: () => void }) {
+function ListRow({
+  item,
+  detail,
+  opinion,
+  zoneStage,
+  onOpen,
+}: {
+  item: AuctionItem;
+  detail?: AuctionDetail;
+  opinion?: AuctionOpinionRecord;
+  zoneStage?: string;
+  onOpen: () => void;
+}) {
   const left = daysUntilSale(item.saleDate);
-  const flags = auctionNoteFlags(item.note);
   const deposit = minimumDeposit(item.minimum);
+  // 목록에서도 상세와 **같은 규칙**의 뱃지를 단다 — 위험·주의가 먼저 오도록 정렬돼 있다
+  const badges = auctionBadges(item, detail, { zoneStage });
+  const shownBadges = badges.filter((b) => b.tone !== "info").length > 0
+    ? badges.filter((b) => b.tone !== "info")
+    : badges;
   return (
     <button
       type="button"
@@ -674,7 +721,24 @@ function ListRow({ item, onOpen }: { item: AuctionItem; onOpen: () => void }) {
       onClick={onOpen}
       className="w-full rounded border border-slate-200 bg-white p-1.5 text-left transition hover:border-amber-400 hover:bg-amber-50/40"
     >
-      <p className="line-clamp-2 text-[11px] leading-snug text-slate-700">{item.address}</p>
+      <p className="flex items-start gap-1">
+        {opinion && (
+          <span
+            title={`종합의견 ${opinion.verdict} · 참고 ${opinion.score}점`}
+            className={
+              "mt-[1px] shrink-0 rounded px-1 py-[1px] text-[8.5px] font-extrabold " +
+              (opinion.verdict === "매력"
+                ? "bg-emerald-600 text-white"
+                : opinion.verdict === "검토"
+                  ? "bg-amber-500 text-white"
+                  : "bg-rose-600 text-white")
+            }
+          >
+            {opinion.verdict}
+          </span>
+        )}
+        <span className="line-clamp-2 min-w-0 text-[11px] leading-snug text-slate-700">{item.address}</span>
+      </p>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[10.5px]">
         <span className="rounded bg-slate-900 px-1 py-[1px] text-[9px] font-bold text-white">
           {item.usage || "물건"}
@@ -707,23 +771,9 @@ function ListRow({ item, onOpen }: { item: AuctionItem; onOpen: () => void }) {
           </span>
         )}
         {deposit != null && <span>보증금 {formatWon(deposit)}</span>}
-        {flags.slice(0, 2).map((f) => (
-          <span
-            key={f.key}
-            className={
-              "rounded px-1 py-[1px] font-semibold " +
-              (f.tone === "rose"
-                ? "bg-rose-100 text-rose-800"
-                : f.tone === "amber"
-                  ? "bg-amber-100 text-amber-800"
-                  : "bg-slate-200 text-slate-700")
-            }
-          >
-            {f.label}
-          </span>
-        ))}
         <span className="ml-auto shrink-0 font-semibold text-amber-700">상세 ›</span>
       </div>
+      {shownBadges.length > 0 && <BadgeChips badges={shownBadges} max={3} className="mt-1" />}
     </button>
   );
 }
@@ -850,6 +900,351 @@ function RightsBanner({ detail }: { detail?: AuctionDetail }) {
         </p>
       )}
       <p className="mt-0.5 text-[9.5px] leading-relaxed opacity-80">{st.note}</p>
+    </div>
+  );
+}
+
+/* ─────────────────── 권리분석 뱃지 · 종합의견 · 예상 P ─────────────────── */
+
+const BADGE_STYLE: Record<AuctionBadge["tone"], string> = {
+  risk: "bg-rose-100 text-rose-800 ring-rose-300",
+  warn: "bg-amber-100 text-amber-900 ring-amber-300",
+  good: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  info: "bg-slate-100 text-slate-600 ring-slate-200",
+};
+
+/** 뱃지 알약 — 목록·상세 위쪽에 같은 모양으로 붙는다. 누르면 근거(note)를 title 로 보여 준다 */
+function BadgeChips({
+  badges,
+  max = 4,
+  className = "",
+}: {
+  badges: AuctionBadge[];
+  max?: number;
+  className?: string;
+}) {
+  if (badges.length === 0) return null;
+  const shown = badges.slice(0, max);
+  return (
+    <span className={`flex flex-wrap items-center gap-1 ${className}`} data-testid="auction-badges">
+      {shown.map((b) => (
+        <span
+          key={b.key}
+          title={b.note}
+          data-badge={b.key}
+          className={`rounded px-1 py-[1px] text-[9.5px] font-semibold ring-1 ${BADGE_STYLE[b.tone]}`}
+        >
+          {b.label}
+        </span>
+      ))}
+      {badges.length > shown.length && (
+        <span className="text-[9px] font-semibold text-slate-400">+{badges.length - shown.length}</span>
+      )}
+    </span>
+  );
+}
+
+/** 상세 위쪽 뱃지 — 알약 + 위험/주의 뱃지의 근거를 접어서 함께 보여 준다 */
+function DetailBadges({ badges }: { badges: AuctionBadge[] }) {
+  const notes = badges.filter((b) => b.tone === "risk" || b.tone === "warn");
+  if (badges.length === 0) return null;
+  return (
+    <div className="mt-1.5" data-testid="auction-badge-panel">
+      <BadgeChips badges={badges} max={8} />
+      {notes.length > 0 && (
+        <details className="mt-1 rounded border border-slate-200 bg-slate-50/70 px-1.5 py-1">
+          <summary className="cursor-pointer list-none text-[9.5px] font-semibold text-slate-500 [&::-webkit-details-marker]:hidden">
+            근거 {notes.length}건 보기 ▾
+          </summary>
+          <ul className="mt-1 space-y-0.5">
+            {notes.map((b) => (
+              <li key={b.key} className="text-[9.5px] leading-relaxed text-slate-600">
+                <b className={b.tone === "risk" ? "text-rose-700" : "text-amber-800"}>{b.label}</b>
+                <span className="text-slate-400"> — </span>
+                {b.note}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** 종합의견 — 물건별로 미리 생성한 점수·매력·주의·요약(`auction-opinions.json`) */
+function OpinionCard({ opinion }: { opinion?: AuctionOpinionRecord }) {
+  if (!opinion) return null;
+  const tone =
+    opinion.verdict === "매력"
+      ? "border-emerald-300 bg-emerald-50/70 text-emerald-900"
+      : opinion.verdict === "검토"
+        ? "border-amber-300 bg-amber-50/70 text-amber-900"
+        : "border-rose-300 bg-rose-50/70 text-rose-900";
+  const chip =
+    opinion.verdict === "매력"
+      ? "bg-emerald-600 text-white"
+      : opinion.verdict === "검토"
+        ? "bg-amber-600 text-white"
+        : "bg-rose-600 text-white";
+  return (
+    <div className={`mt-1.5 rounded-lg border px-2 py-1.5 ${tone}`} data-testid="auction-opinion">
+      <p className="flex items-center gap-1 text-[11px] font-bold">
+        🧭 종합의견
+        <span className={`ml-auto rounded px-1.5 py-[1px] text-[9.5px] font-extrabold ${chip}`}>
+          {opinion.verdict} · 참고 {opinion.score}점
+        </span>
+      </p>
+      <p className="mt-0.5 text-[11px] font-extrabold leading-snug">{opinion.headline}</p>
+      <p className="mt-0.5 text-[10.5px] leading-relaxed">{opinion.summary}</p>
+      <div className="mt-1 space-y-1">
+        {opinion.merits.length > 0 && (
+          <ul className="space-y-0.5">
+            {opinion.merits.slice(0, 3).map((m, i) => (
+              <li key={`m-${i}`} className="flex gap-1 break-words text-[10px] leading-relaxed text-emerald-900">
+                <span aria-hidden className="shrink-0 font-bold">✓</span>
+                <span className="min-w-0">{m}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {opinion.risks.length > 0 && (
+          <ul className="space-y-0.5">
+            {opinion.risks.slice(0, 3).map((r, i) => (
+              <li key={`r-${i}`} className="flex gap-1 break-words text-[10px] leading-relaxed text-rose-900">
+                <span aria-hidden className="shrink-0 font-bold">!</span>
+                <span className="min-w-0">{r}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <p className="mt-1 text-[9px] leading-relaxed text-slate-500">
+        수집된 값(감정가·최저가·구역 단계·임차인 전입일 등)만으로 만든 참고 의견입니다 · 투자 판단은 원문
+        확인
+      </p>
+    </div>
+  );
+}
+
+/** 슬라이더 한 줄 — 라벨·현재값·레인지 */
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  display: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between gap-1 text-[9.5px] text-slate-500">
+        <span className="min-w-0 truncate">{label}</span>
+        <b className="shrink-0 text-[10px] font-bold text-slate-700">{display}</b>
+      </span>
+      <input
+        type="range"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-0.5 h-1 w-full cursor-pointer accent-amber-600"
+      />
+    </label>
+  );
+}
+
+/**
+ * 예상 P(수익분석) — 재개발 물건의 권리가액과 프리미엄을 **가정을 드러내 놓고** 계산한다.
+ *   · 기준액은 법원 감정가다(공시가격은 리디브에 없다 — 화면에 그 사실을 적는다).
+ *   · 보정률·비례율·평당 분양가·예상 낙찰가는 모두 사용자가 바꿀 수 있고, 기본값도 함께 보인다.
+ *   · 구역이 준공·입주·착공 단계면 권리가액 산정 시점이 지났으므로 계산 대신 안내만 남긴다.
+ */
+function PremiumCard({
+  item,
+  detail,
+  zoneStage,
+  exclusivePy,
+  landPy,
+}: {
+  item: AuctionItem;
+  detail?: AuctionDetail;
+  zoneStage?: string;
+  exclusivePy?: number | null;
+  landPy?: number | null;
+}) {
+  const base = item.appraised ?? 0;
+  const applicable = base > 0 && isResidentialUsage(item.usage) && !stagePassedPricing(zoneStage);
+  const [assumptions, setAssumptions] = useState<PremiumAssumptions>(() =>
+    defaultPremiumAssumptions(item, detail)
+  );
+
+  // 물건을 바꾸면 가정을 그 물건 기준으로 다시 잡는다(비례율·보정률은 구역 취향이라 유지해도 되지만,
+  // 낙찰가·인수 보증금은 물건마다 달라 그대로 두면 오해를 만든다)
+  useEffect(() => {
+    setAssumptions(defaultPremiumAssumptions(item, detail));
+  }, [item.id, item.minimum, item.appraised]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!applicable) {
+    const reason = !isResidentialUsage(item.usage)
+      ? "주거용 물건이 아니어서 재개발 권리가액 계산을 적용하지 않습니다."
+      : stagePassedPricing(zoneStage)
+        ? `구역이 '${zoneStage}' 단계라 권리가액 산정 시점이 지났습니다 — 준공 후 시세로 보세요.`
+        : "감정가가 수집되지 않아 계산할 수 없습니다.";
+    return (
+      <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5" data-testid="auction-premium">
+        <p className="text-[11px] font-bold text-slate-700">📈 예상 P (수익분석)</p>
+        <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{reason}</p>
+      </div>
+    );
+  }
+
+  const est = estimatePremium({ base, exclusivePy, assumptions });
+  const priority = tenantPriority(detail);
+  const set = (patch: Partial<PremiumAssumptions>) => setAssumptions((a) => ({ ...a, ...patch }));
+  const bidMan = Math.round(assumptions.bid / 10000);
+
+  return (
+    <div className="mt-1.5 rounded-lg border border-amber-200 bg-white px-2 py-1.5" data-testid="auction-premium">
+      <p className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
+        📈 예상 P (수익분석)
+        <span className="ml-auto text-[9px] font-medium text-slate-400">감정가 기준 · 조정 가능</span>
+      </p>
+
+      {/* 결과 3칸 — 권리가액 · 예상 P · 총 투자금 */}
+      <div className="mt-1 grid grid-cols-3 gap-1 text-center">
+        <div className="rounded bg-slate-50 px-1 py-1">
+          <p className="text-[9px] text-slate-500">예상 권리가액</p>
+          <b className="text-[11px] font-extrabold text-slate-900">{formatWon(est.entitlement)}</b>
+        </div>
+        <div className={`rounded px-1 py-1 ${est.premium >= 0 ? "bg-emerald-50" : "bg-rose-50"}`}>
+          <p className="text-[9px] text-slate-500">예상 P</p>
+          <b className={`text-[11px] font-extrabold ${est.premium >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+            {est.premium >= 0 ? "+" : "−"}
+            {formatWon(Math.abs(est.premium))}
+          </b>
+        </div>
+        <div className="rounded bg-amber-50 px-1 py-1">
+          <p className="text-[9px] text-slate-500">총 투자금</p>
+          <b className="text-[11px] font-extrabold text-amber-900">{formatWon(est.totalInvest)}</b>
+        </div>
+      </div>
+
+      <p className="mt-1 text-[9.5px] leading-relaxed text-slate-500">
+        낙찰가 {formatWon(assumptions.bid)}
+        {est.premiumRatePct != null && (
+          <span className={est.premium >= 0 ? " font-semibold text-emerald-700" : " font-semibold text-rose-700"}>
+            {" "}대비 {est.premiumRatePct > 0 ? "+" : ""}
+            {est.premiumRatePct}%
+          </span>
+        )}
+        {" · "}부대비용 {formatWon(est.cost)}({assumptions.costRatePct}%)
+        {assumptions.assumedDeposit > 0 && <> · 인수 보증금 {formatWon(assumptions.assumedDeposit)}</>}
+      </p>
+
+      {est.saleEstimate != null && (
+        <p className="mt-0.5 text-[9.5px] leading-relaxed text-slate-500">
+          현 전용 {exclusivePy}평 기준 예상 분양가 {formatWon(est.saleEstimate)} →{" "}
+          <b className={est.contribution != null && est.contribution > 0 ? "text-rose-700" : "text-emerald-700"}>
+            분담금 {formatWon(Math.abs(est.contribution ?? 0))}
+            {est.contribution != null && est.contribution < 0 ? " 환급" : ""}
+          </b>
+        </p>
+      )}
+      {est.affordablePy != null && (
+        <p className="mt-0.5 text-[9.5px] leading-relaxed text-slate-500">
+          권리가액으로 평당 {assumptions.pricePerPyMan.toLocaleString()}만원 분양분 약{" "}
+          <b className="text-slate-700">{est.affordablePy}평</b> 확보{landPy != null ? ` · 대지권 ${landPy}평` : ""}
+        </p>
+      )}
+
+      {/* 가정 조정 — 기본값을 숨기지 않고 요약줄에 그대로 적는다 */}
+      <details className="mt-1 rounded border border-slate-200 bg-slate-50/70 px-1.5 py-1">
+        <summary className="cursor-pointer list-none text-[9.5px] font-semibold text-slate-500 [&::-webkit-details-marker]:hidden">
+          가정 조정 ▾ 비례율 {assumptions.ratioPct}% · 보정률 {assumptions.adjustment.toFixed(2)} · 평당{" "}
+          {assumptions.pricePerPyMan.toLocaleString()}만원
+        </summary>
+        <div className="mt-1 space-y-1">
+          <SliderRow
+            label="비례율(종전자산 → 권리가액)"
+            value={assumptions.ratioPct}
+            min={70}
+            max={130}
+            step={1}
+            display={`${assumptions.ratioPct}%`}
+            onChange={(v) => set({ ratioPct: v })}
+          />
+          <SliderRow
+            label="보정률(법원 감정가 → 종전자산)"
+            value={assumptions.adjustment}
+            min={1}
+            max={1.5}
+            step={0.01}
+            display={assumptions.adjustment.toFixed(2)}
+            onChange={(v) => set({ adjustment: v })}
+          />
+          <SliderRow
+            label="예상 평당 분양가(일반분양)"
+            value={assumptions.pricePerPyMan}
+            min={2000}
+            max={8000}
+            step={100}
+            display={`${assumptions.pricePerPyMan.toLocaleString()}만원/평`}
+            onChange={(v) => set({ pricePerPyMan: v })}
+          />
+          <div className="flex items-center gap-1">
+            <span className="text-[9.5px] text-slate-500">예상 낙찰가</span>
+            <input
+              type="number"
+              value={bidMan}
+              min={0}
+              step={100}
+              aria-label="예상 낙찰가(만원)"
+              onChange={(e) => set({ bid: Math.max(0, Number(e.target.value) || 0) * 10000 })}
+              className="w-16 rounded border border-slate-300 px-1 py-[1px] text-right text-[10px] text-slate-800"
+            />
+            <span className="text-[9.5px] text-slate-500">만원</span>
+            <button
+              type="button"
+              onClick={() => set({ bid: item.minimum ?? base })}
+              className="rounded border border-slate-300 bg-white px-1 py-[1px] text-[9px] font-semibold text-slate-600 hover:border-slate-500"
+            >
+              최저가
+            </button>
+            <button
+              type="button"
+              onClick={() => set({ bid: Math.round(base * 0.9) })}
+              className="rounded border border-slate-300 bg-white px-1 py-[1px] text-[9px] font-semibold text-slate-600 hover:border-slate-500"
+            >
+              감정가 90%
+            </button>
+          </div>
+          {priority.state === "senior" && priority.deposit > 0 && (
+            <button
+              type="button"
+              onClick={() => set({ assumedDeposit: priority.deposit })}
+              className="rounded border border-rose-300 bg-white px-1 py-[1px] text-[9px] font-semibold text-rose-700 hover:border-rose-500"
+            >
+              인수 보증금 {formatWon(priority.deposit)} 반영
+            </button>
+          )}
+        </div>
+      </details>
+
+      <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
+        법원 감정가에 보정률을 곱해 종전자산을 추정하고 비례율로 권리가액을 계산한 값입니다. 국토부 공시가격은
+        수집하지 않았습니다. 실제 조합 감정평가·비례율·분양가에 따라 달라질 수 있어 투자 판단의 근거로 쓸 수
+        없습니다.
+      </p>
     </div>
   );
 }
@@ -1324,6 +1719,8 @@ function AppraisalAccordion({
 function ItemDetail({
   item,
   detail,
+  opinion,
+  zoneStage,
   position,
   onBack,
   onPrev,
@@ -1341,6 +1738,8 @@ function ItemDetail({
 }: {
   item: AuctionItem;
   detail?: AuctionDetail;
+  opinion?: AuctionOpinionRecord;
+  zoneStage?: string;
   position: { index: number; total: number } | null;
   onBack: () => void;
   onPrev?: () => void;
@@ -1393,6 +1792,11 @@ function ItemDetail({
 
   const photos = useMemo(() => normalizePhotos(detail?.photos), [detail?.photos]);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
+  // 권리분석 뱃지 — 목록과 같은 규칙(auction-signals). 위험·주의가 앞에 온다
+  const badges = useMemo(
+    () => auctionBadges(item, detail, { zoneStage }),
+    [item, detail, zoneStage]
+  );
 
   return (
     <div className="min-w-0 px-2.5 pb-2.5 pt-2">
@@ -1466,6 +1870,12 @@ function ItemDetail({
         </p>
       </div>
 
+      {/* 권리분석 뱃지 — 상세에서도 가장 먼저: 임차인·지분·위반건축물 같은 위험/특이사항 */}
+      <DetailBadges badges={badges} />
+
+      {/* 종합의견 — 물건별로 미리 만든 점수·매력·주의·요약 */}
+      <OpinionCard opinion={opinion} />
+
       {/* 권리 안전도 — 이 물건을 볼 때 가장 먼저 알아야 하는 것 */}
       <RightsBanner detail={detail} />
 
@@ -1537,6 +1947,15 @@ function ItemDetail({
           </p>
         )}
       </div>
+
+      {/* 예상 P — 재개발 물건의 권리가액·프리미엄(가정 조정 가능) */}
+      <PremiumCard
+        item={item}
+        detail={detail}
+        zoneStage={zoneStage}
+        exclusivePy={exclusivePy}
+        landPy={landPy}
+      />
 
       {/* 매각기일 — 가장 급한 정보 */}
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border border-amber-200 bg-amber-50/60 px-2 py-1.5">

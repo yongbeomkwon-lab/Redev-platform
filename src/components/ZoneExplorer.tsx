@@ -2427,6 +2427,7 @@ export default function ZoneExplorer() {
               seoulZones.find((z) => z.id === auctionPanel.zoneId)?.name ??
               auctionPanel.items[0]?.zoneName
             }
+            zoneStage={seoulZones.find((z) => z.id === auctionPanel.zoneId)?.stage}
             zoneTotal={countAuctionSales(auctions?.byZone[auctionPanel.zoneId] ?? [])}
             activeId={auctionPanel.activeId}
             onSelect={(id) => setAuctionPanel((p) => (p ? { ...p, activeId: id } : p))}

@@ -51,6 +51,15 @@ const nextConfig: NextConfig = {
           { key: "Vercel-CDN-Cache-Control", value: "no-store" },
         ],
       },
+      {
+        // 경매 종합의견 — auctions.json·auction-details.json 이 바뀌면 함께 다시 만든다
+        source: "/data/auction-opinions.json",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+        ],
+      },
     ];
   },
 };

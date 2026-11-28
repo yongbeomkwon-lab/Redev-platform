@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3100",
     "geojson": "node scripts/export-geojson.mjs",
-    "subway": "python3 scripts/build-subway-dataset.py"
+    "subway": "python3 scripts/build-subway-dataset.py",
+    "opinions": "node scripts/gen-auction-opinions.mjs"
   },
   "dependencies": {
     "leaflet": "1.9.4",
