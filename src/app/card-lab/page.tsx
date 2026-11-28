@@ -3,9 +3,11 @@
 //   · 국토부 API 연계 장애 기간에는 실거래 목록이 비어 카드 버튼을 볼 수 없어서,
 //     같은 컴포넌트(TradeCardButton)를 **샘플 거래**로 띄워 렌더링 결과를 검수한다.
 //   · 검수 후 이 폴더는 지운다(운영 화면에는 노출되지 않음).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import TradeCardButton from "@/components/TradeCardButton";
 import ZoneRedevelopmentCheck from "@/components/ZoneRedevelopmentCheck";
+import { CARD_H, CARD_W, renderTradeCardPng } from "@/lib/trade-card";
+import { buildCardData } from "@/components/TradeCardButton";
 import type { MolitTransaction } from "@/lib/molit";
 
 function tx(over: Partial<MolitTransaction>): MolitTransaction {
@@ -96,6 +98,23 @@ const VILLA: MolitTransaction[] = [
 
 export default function CardLab() {
   const [zone, setZone] = useState("금호23구역");
+  const [aptUrl, setAptUrl] = useState("");
+  const [villaUrl, setVillaUrl] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const b1 = await renderTradeCardPng(buildCardData(APT[APT.length - 2], APT, { zoneName: zone }));
+      const b2 = await renderTradeCardPng(buildCardData(VILLA[0], VILLA, { zoneName: zone }));
+      if (!alive) return;
+      setAptUrl(URL.createObjectURL(b1));
+      setVillaUrl(URL.createObjectURL(b2));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [zone]);
+
   return (
     <main className="mx-auto max-w-3xl space-y-4 p-4">
       <h1 className="text-lg font-bold">검수용 — 실거래 공유 카드 / 자가진단기</h1>
@@ -109,10 +128,18 @@ export default function CardLab() {
           <span className="text-[13px] font-bold">아파트 (113.52㎡ · 32억 5,000만)</span>
           <TradeCardButton tx={APT[APT.length - 2]} peers={APT} zoneName={zone} />
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        {aptUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={aptUrl} alt="아파트 카드" data-testid="card-apt" className="mt-2 w-full" width={CARD_W} height={CARD_H} />
+        )}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-bold">연립·다세대 (59.8㎡ · 4억 7,500만)</span>
           <TradeCardButton tx={VILLA[0]} peers={VILLA} zoneName={zone} />
         </div>
+        {villaUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={villaUrl} alt="연립 카드" data-testid="card-villa" className="mt-2 w-full" width={CARD_W} height={CARD_H} />
+        )}
       </div>
 
       <div className="rounded-xl border border-line bg-white p-3">
