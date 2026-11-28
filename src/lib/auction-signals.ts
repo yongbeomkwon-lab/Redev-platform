@@ -187,7 +187,10 @@ export function tenantPriority(detail: AuctionDetail | undefined): TenantPriorit
       state: "absent",
       count: tenants.length,
       deposit: 0,
-      note: `임차인 ${tenants.length}명 모두 경매개시일(${detail?.commenceDate ?? "-"}) 이후 전입 — 말소기준권리보다 뒤`,
+      note:
+        tenants.length > 1
+          ? `임차인 ${tenants.length}명 모두 경매개시일(${detail?.commenceDate ?? "-"}) 이후 전입 — 말소기준권리보다 뒤`
+          : `임차인이 경매개시일(${detail?.commenceDate ?? "-"}) 이후 전입 — 말소기준권리보다 뒤`,
     };
   }
   return {
