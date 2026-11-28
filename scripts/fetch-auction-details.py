@@ -1141,6 +1141,37 @@ def rebuild() -> dict:
             errors.append(f"manual-details.json: {e}")
 
     item_count = sum(len(v.get("lists") or []) for v in by_case.values())
+    # ⑦ 같은 사건의 다른 물건 줄에도 상세를 붙인다
+    #   · 일괄매각처럼 물건번호가 겹치는 사건은 auctions.json 의 물건 id 두 줄이 인덱스에서
+    #     하나로 접혀 한 줄만 상세를 받는다. 사건 상세·사진은 물건이 아니라 사건 단위이므로
+    #     상세가 하나뿐인 사건은 나머지 줄에도 같은 레코드를 붙인다(빈 패널 방지).
+    ids_by_case: dict[tuple[str, str], list[str]] = {}
+    if os.path.exists(AUCTIONS):
+        _a = json.load(open(AUCTIONS, encoding="utf-8"))
+        for items in (_a.get("byZone") or {}).values():
+            for it in items:
+                ids_by_case.setdefault((it["courtCode"], it["caseNo"]), [])
+                if it["id"] not in ids_by_case[(it["courtCode"], it["caseNo"])]:
+                    ids_by_case[(it["courtCode"], it["caseNo"])].append(it["id"])
+    for (court, case_no), ids in ids_by_case.items():
+        if len(ids) < 2:
+            continue
+        # 물건번호가 겹쳐 인덱스에서 접힌 줄만 대상으로 한다(정상 사건은 seq 마다 다른 레코드)
+        if len(ids) <= len(idx.get((court, case_no)) or {}):
+            continue
+        have = [i for i in ids if i in by_id]
+        if len(have) != 1:
+            continue
+        src_rec = by_id[have[0]]
+        for iid in ids:
+            if iid in by_id:
+                continue
+            rec = json.loads(json.dumps(src_rec))
+            if not rec.get("photos"):
+                pics = photos_for(court, case_no, "1")
+                if pics:
+                    rec["photos"] = pics
+            by_id[iid] = rec
     prev_blocked = None
     if os.path.exists(OUT):
         try:
