@@ -226,6 +226,14 @@ function GongmaeRow({ item, onOpen }: { item: GongmaeAuctionItem; onOpen: () => 
           {g.usage || g.usageMid || "부동산"}
         </span>
         <span className="min-w-0 truncate text-[11px] font-semibold text-slate-800">{unitLabel(item)}</span>
+        {g.rounds && g.rounds.length > 1 && (
+          <span
+            className="shrink-0 rounded bg-violet-50 px-1 py-[1px] text-[9px] font-semibold text-violet-700 ring-1 ring-violet-200"
+            title={`이 물건은 다음 회차까지 ${g.rounds.length}번 예정돼 있습니다 — 상세에서 회차별 최저가를 볼 수 있습니다`}
+          >
+            회차 {g.rounds.length}
+          </span>
+        )}
         <span
           className={`ml-auto shrink-0 rounded px-1 py-[1px] text-[9px] font-semibold ring-1 ${
             STATUS_TONE[g.status] ?? "bg-slate-100 text-slate-600 ring-slate-200"
@@ -370,6 +378,36 @@ export function GongmaeDetail({
         {g.dtbtRqrEdtmCont && <Row label="배분요구종기">{g.dtbtRqrEdtmCont}</Row>}
         {g.evcRsbyTrgtCont && <Row label="인수 책임">{g.evcRsbyTrgtCont}</Row>}
       </dl>
+
+      {g.rounds && g.rounds.length > 1 && (
+        <div className="mt-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+          <p className="text-[10px] font-bold text-slate-700">
+            회차 {g.rounds.length} <span className="font-normal text-slate-400">— 지금은 가장 가까운 회차입니다</span>
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {g.rounds.slice(0, 6).map((r, i) => {
+              const cur = r.pbctCdtnNo === g.pbctCdtnNo;
+              return (
+                <li
+                  key={r.pbctCdtnNo}
+                  className={`flex items-baseline gap-1 text-[10px] ${cur ? "font-bold text-teal-800" : "text-slate-600"}`}
+                >
+                  <span className="w-8 shrink-0 text-slate-400">{i + 1}회</span>
+                  <span className="w-[5.5rem] shrink-0">
+                    {r.bidEnd ? `${Number(r.bidEnd.slice(4, 6))}.${Number(r.bidEnd.slice(6, 8))}` : "-"}
+                  </span>
+                  <span className="min-w-0 truncate">최저 {formatWon(r.minimum)}</span>
+                  {r.minimumRate != null && <span className="text-slate-400">({r.minimumRate}%)</span>}
+                  {cur && <span className="ml-auto shrink-0 text-[9px] text-teal-700">이번</span>}
+                </li>
+              );
+            })}
+            {g.rounds.length > 6 && (
+              <li className="text-[9.5px] text-slate-400">… 이후 {g.rounds.length - 6}회차 더</li>
+            )}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-1.5 flex flex-wrap gap-1">
         <button

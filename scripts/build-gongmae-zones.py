@@ -159,11 +159,21 @@ def main() -> None:
             continue
         alive.append(it)
 
+    # ①-2 같은 물건(cltrMngNo)의 **회차**를 하나로 묶는다 — 온비드는 다음 회차까지 전부 목록에 올린다.
+    #   · 예: 황학동 741 대지가 10회차까지(1,084만 → 975만 → 867만 …) 한꺼번에 내려온다.
+    #   · 목록 한 줄 = 물건 1건이 되도록 **가장 가까운 회차**를 대표로 두고, 회차 사다리는 rounds 로 남긴다.
+    rounds_of: dict[str, list[dict]] = collections.defaultdict(list)
+    for it in alive:
+        rounds_of[str(it.get("cltrMngNo") or it.get("onbidCltrno"))].append(it)
+    for k in rounds_of:
+        rounds_of[k].sort(key=lambda x: (str(x.get("cltrBidEndDt") or ""), x.get("pbctCdtnNo") or 0))
+    reps = [lst[0] for lst in rounds_of.values()]
+
     by_zone: dict[str, list[dict]] = collections.defaultdict(list)
     matched = 0
     no_coord = 0
     no_zone = 0
-    for it in alive:
+    for it in reps:
         lat, lng = it.get("lat"), it.get("lng")
         if not lat or not lng:
             no_coord += 1
@@ -237,6 +247,22 @@ def main() -> None:
             "zoneName": primary["name"],
             "zoneIds": [z["id"] for z in hits],
             "detailUrl": ONBID_SEARCH_URL,
+            "rounds": [
+                {
+                    "pbctCdtnNo": r.get("pbctCdtnNo"),
+                    "bidStart": str(r.get("cltrBidBgngDt") or ""),
+                    "bidEnd": str(r.get("cltrBidEndDt") or ""),
+                    "minimum": to_int(r.get("lowstBidPrcIndctCont")),
+                    "minimumRate": (
+                        round(to_int(r.get("lowstBidPrcIndctCont")) / to_int(r.get("apslEvlAmt")) * 100, 1)
+                        if to_int(r.get("lowstBidPrcIndctCont")) and to_int(r.get("apslEvlAmt"))
+                        else None
+                    ),
+                    "failCount": to_int(r.get("usbdNft")),
+                    "status": r.get("pbctStatNm") or "",
+                }
+                for r in rounds_of[str(it.get("cltrMngNo") or it.get("onbidCltrno"))]
+            ],
         }
         by_zone[primary["id"]].append(item)
 
@@ -253,6 +279,7 @@ def main() -> None:
         "basisDate": today,
         "seoulItems": len(raw),
         "activeItems": len(alive),
+        "uniqueItems": len(reps),
         "droppedEnded": dropped_done,
         "geocoded": sum(1 for i in alive if i.get("lat")),
         "matched": matched,
@@ -260,7 +287,8 @@ def main() -> None:
         "byStatus": dict(status_counts),
         "byGu": dict(gu_counts.most_common(12)),
         "note": "입찰이 끝나지 않은(입찰 예정·진행 중) 서울특별시 부동산 공매 물건을 온비드 공식 API로 받아 "
-                "지번 좌표(카카오 주소검색)로 정비구역 경계에 매칭한 결과입니다. 한 줄이 물건·공매조건 1건이고, "
+                "지번 좌표(카카오 주소검색)로 정비구역 경계에 매칭한 결과입니다. 한 줄이 **물건 1건**이고, "
+                "같은 물건의 다음 회차는 rounds 에 사다리로 담았습니다(대표는 가장 가까운 회차). "
                 "온비드 원문 상세는 딥링크가 없어 물건관리번호로 공매 물건검색에서 찾습니다.",
     }
     payload = {"meta": meta, "byZone": by_zone}

@@ -13,6 +13,17 @@
 import { buildAuctionPins, shortAuctionWon, shortSaleDate, type AuctionMapPin } from "./auction-pins";
 import type { AuctionItem } from "./auctions";
 
+/** 같은 물건의 회차 하나 — 온비드는 다음 회차까지 전부 목록에 올린다 */
+export type GongmaeRound = {
+  pbctCdtnNo: number;
+  bidStart: string;
+  bidEnd: string;
+  minimum: number | null;
+  minimumRate: number | null;
+  failCount: number | null;
+  status: string;
+};
+
 export type GongmaeItem = {
   /** `onbid:{물건관리번호}:{공매조건번호}` */
   id: string;
@@ -67,6 +78,8 @@ export type GongmaeItem = {
   zoneName: string;
   zoneIds: string[];
   detailUrl: string;
+  /** 회차 사다리 — 가장 가까운 회차가 이 항목이고, 뒤따르는 회차가 여기 담긴다 */
+  rounds?: GongmaeRound[];
 };
 
 export type GongmaeMeta = {
@@ -74,8 +87,10 @@ export type GongmaeMeta = {
   collectedAt: string;
   basisDate: string;
   seoulItems: number;
-  activeItems: number;
-  geocoded: number;
+  /** 입찰이 살아 있는 공매조건 수(회차 포함) */
+  activeItems?: number;
+  /** 물건 단위 고유 건수(회차 접기 전) */
+  uniqueItems?: number;
   matched: number;
   zonesWithGongmae: number;
   byStatus?: Record<string, number>;
