@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import LawSearch from "@/components/LawSearch";
 import { LAWS, LAW_ARTICLES } from "@/data/laws";
 
@@ -40,6 +41,13 @@ export default function LawsPage() {
           법령·조례 {LAWS.length}개
         </span>
         <span className="rounded-full border border-line bg-white px-2.5 py-1 text-slate-600">원문 대조 완료</span>
+        {/* 판례 리포트로 바로 — 폰은 하단 탭이 「법령·판례」 하나라 이 링크가 다리 역할을 한다 */}
+        <Link
+          href="/cases"
+          className="rounded-full border border-brand/35 bg-white px-2.5 py-1 text-brand transition-colors hover:bg-brand-tint"
+        >
+          판례 리포트 →
+        </Link>
       </div>
 
       {/* ── 검색 + 결과 ──────────────────────────────────────────────────── */}

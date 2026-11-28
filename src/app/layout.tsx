@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import BrandLogo from "@/components/BrandLogo";
 import SiteNav from "@/components/SiteNav";
+import MobileShell from "@/components/mobile/MobileShell";
+import PwaRegister from "@/components/mobile/PwaRegister";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
@@ -13,6 +15,21 @@ const SHARE_DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: "리디브",
+  // 홈 화면에 추가(PWA) — public/manifest.json · public/icons/*
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "리디브",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  formatDetection: { telephone: false },
   title: "리디브(redev) — 서울 재개발 구역·매물 플랫폼",
   description:
     "서울 정비구역 실거래가 조회(무료), 중개사 매물 등록(유료), 검증 매물 열람(유료) — 재개발 입주권·조합원 물건 원스톱 플랫폼",
@@ -41,6 +58,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  // 폰 브라우저·설치형 앱의 상단 표시줄 색 (오레오 블루)
+  themeColor: "#0054a6",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
@@ -65,6 +89,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex min-h-dvh flex-col bg-canvas text-ink antialiased">
         {/* 로그인 상태·로그인 창은 앱 전체가 공유한다(헤더·커뮤니티·지도 구역 패널) */}
         <AuthProvider>
+        {/* 폰 전용 앱 껍데기 — 하단 탭 바 + 모바일 홈(지도 위에 덮는다). 데스크톱은 그대로. */}
+        <MobileShell>
         <header className="sticky top-0 z-[700] h-[52px] shrink-0 border-b border-line bg-white">
           <div className="flex h-full items-center justify-between gap-2 px-3 sm:px-4">
             <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap" aria-label="리디브 홈">
@@ -77,8 +103,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SiteNav />
           </div>
         </header>
-        <main className="flex-1">{children}</main>
+        {/* 본문 아래 여백 = 폰 하단 탭 바 높이(--mtab-h, 데스크톱은 0) — 지도 화면은
+            컨테이너 높이에서 같은 값을 빼므로 탭 바가 지도를 가리지 않는다. */}
+        <main className="flex-1 pb-[var(--mtab-h)]">{children}</main>
+        </MobileShell>
         </AuthProvider>
+        <PwaRegister />
       </body>
     </html>
   );

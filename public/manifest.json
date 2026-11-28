@@ -1,0 +1,56 @@
+{
+  "name": "리디브 — 서울 정비사업",
+  "short_name": "리디브",
+  "description": "서울 2,400여 개 재개발·재건축 구역경계, 5년 실거래, 법원경매·공매, 구역 분석을 한눈에 — 리디브(redev)",
+  "lang": "ko-KR",
+  "dir": "ltr",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "theme_color": "#0054a6",
+  "background_color": "#ffffff",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "구역 지도",
+      "short_name": "지도",
+      "description": "서울 정비구역 경계 지도",
+      "url": "/"
+    },
+    {
+      "name": "검증 매물",
+      "short_name": "매물",
+      "description": "중개사가 올린 검증 매물 목록",
+      "url": "/listings"
+    },
+    {
+      "name": "법령·조례 검색",
+      "short_name": "법령",
+      "description": "도정법·서울시 조례·빈집법 조문 검색",
+      "url": "/laws"
+    }
+  ]
+}

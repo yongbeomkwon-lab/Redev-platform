@@ -33,10 +33,9 @@ export default function SiteNav() {
 
   return (
     <nav className="flex min-w-0 items-center gap-0 whitespace-nowrap text-[11px] font-medium sm:gap-1 sm:text-[13px]">
-      {/* 링크 묶음 — 폰에서는 이 안만 넘친다(가로 스크롤). '등록'과 로그인 버튼은
-          묶음 밖에 두어 폭이 모자라도 가려지지 않는다. 데스크톱은 sm:contents 로
-          예전과 똑같이 nav 의 직계 자식처럼 배치된다. */}
-      <div className="flex min-w-0 items-center gap-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:contents">
+      {/* 링크 묶음 — 폰(<640px)에서는 숨긴다. 폰은 하단 앱 탭 바(MobileTabBar)가
+          홈·지도·검색·법령·내 정보를 맡고, 헤더에는 로고와 로그인만 남긴다(2026-11-28). */}
+      <div className="hidden min-w-0 items-center gap-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:contents">
         {LINKS.map((l) => {
           const active = isActive(l.href);
           return (
@@ -66,7 +65,7 @@ export default function SiteNav() {
       </div>
       <Link
         href="/register"
-        className="ml-0.5 shrink-0 rounded-md bg-brand px-1 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5 sm:px-2.5"
+        className="ml-0.5 hidden shrink-0 rounded-md bg-brand px-1 py-1.5 text-white transition-colors hover:bg-brand-deep sm:ml-1.5 sm:inline-block sm:px-2.5"
       >
         <span className="sm:hidden">등록</span>
         <span className="hidden sm:inline">중개사 매물 등록</span>

@@ -523,6 +523,19 @@ body {
   --color-blue-900: #00294f;
 }
 
+/* ── 폰 하단 앱 탭 바 높이 (2026-11-28) ─────────────────────────────────────
+   하단 탭 바(MobileTabBar)의 높이를 한 곳에서 정한다.
+   · 본문 아래 여백(layout <main>)과 지도 컨테이너 높이(ZoneExplorer)가 이 값을 함께 쓴다.
+   · 데스크톱·태블릿(md 이상)은 탭 바가 없으므로 0. */
+:root {
+  --mtab-h: 0px;
+}
+@media (max-width: 767.98px) {
+  :root {
+    --mtab-h: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 html,
 body {
   font-family: var(--font-sans);

@@ -107,6 +107,7 @@ import {
 } from "@/lib/custom-zones";
 import { applyCustomZoneOverrides, customOverrideFor } from "@/lib/zone-overrides";
 import { parseConsentRate } from "@/lib/consent";
+import { onMapLayer, takePendingMapLayer } from "@/lib/map-layer";
 import { loadRecentTx } from "@/lib/tx-recent";
 
 const ZONE_TYPES: (MapZoneType | "전체")[] = [
@@ -533,6 +534,47 @@ export default function ZoneExplorer() {
     urlZoneFittedRef.current = urlZoneId;
     setZoneFitRequest((n) => n + 1);
   }, [urlZoneId, seoulZones]);
+
+  // ── 홈 퀵메뉴가 켜 달라고 한 지도 도구(경매·공매 핀 / 구역 그리기) — 2026-11-28 ──────
+  //   · 모바일 홈은 지도 위에 덮여 있을 뿐 지도는 계속 살아 있으므로, 이벤트로 바로 켜 준다.
+  //   · 지도가 그 순간 새로 마운트되는 중이면 takePendingMapLayer() 가 대신 받는다.
+  const applyLayerRef = useRef<(layer: string) => void>(() => {});
+  applyLayerRef.current = (layer: string) => {
+    if (layer === "auction") setAuctionPinsOn(true);
+    else if (layer === "gongmae") setGongmaePinsOn(true);
+    else if (layer === "draw" && !zoneDrawOn) startZoneDraw();
+  };
+  useEffect(() => {
+    const first = takePendingMapLayer();
+    if (first) applyLayerRef.current(first);
+    return onMapLayer((l) => applyLayerRef.current(l));
+  }, []);
+
+  // ── `/?q=…` — 모바일 홈 검색이 넘긴 말을 지도 검색이 그대로 찾는다 (2026-11-28) ──
+  //   · 구역명은 홈에서 바로 골라지므로, 여기로 오는 것은 주소·지하철역 이름이다.
+  //   · 주소 판정(광선교차)·역 핀까지 기존 submitSearch 가 그대로 처리한다.
+  const autoQueryRef = useRef<string | null>(null);
+  useEffect(() => {
+    const q = searchParams?.get("q");
+    if (!q) return;
+    if (autoQueryRef.current === q) return;
+    autoQueryRef.current = q;
+    setQuery(q);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const q = autoQueryRef.current;
+    if (!q || loading || query !== q) return;
+    // 구역 목록·역 목록이 같은 시점에 도착하므로 반 박자(500ms) 기다렸다 찾는다 —
+    //   주소 판정은 기다리지 않고도 바로 되지만, 역 이름·구역명이 함께 걸리게 하려는 것.
+    const t = window.setTimeout(() => {
+      autoQueryRef.current = null;
+      void submitSearch();
+    }, 500);
+    return () => window.clearTimeout(t);
+    // submitSearch 는 이번 렌더의 query 를 그대로 쓴다 — 아래 deps 로만 다시 돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, loading]);
 
   // 저장해 둔 구역이 데이터에서 사라졌으면(구역 개편·이름 변경) 선택을 비운다
   //   — 지도에 없는 id 로 패널만 빈 채 뜨는 일을 막는다.
@@ -1550,6 +1592,17 @@ export default function ZoneExplorer() {
     });
   }
 
+  /** 구역 그리기를 '켜기만' 한다 — 홈 퀵메뉴(구역 그리기)에서 부른다(여러 번 눌러도 꺼지지 않게) */
+  function startZoneDraw() {
+    setZoneDrawPoints([]);
+    setZoneDrawDone(null);
+    setSelectedId(undefined);
+    setJibunPickOn(false);
+    setPanelOpen(false);
+    setLegendOpen(false);
+    setZoneDrawOn(true);
+  }
+
   /** 그리기 닫기 — 찍은 점·완성된 폴리곤·분석 카드를 모두 거둔다 */
   function closeZoneDraw() {
     setZoneDrawOn(false);
@@ -1994,14 +2047,14 @@ export default function ZoneExplorer() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100dvh-52px)] items-center justify-center bg-slate-100 text-sm text-slate-500">
+      <div className="flex h-[calc(100dvh-52px-var(--mtab-h))] items-center justify-center bg-slate-100 text-sm text-slate-500 md:h-[calc(100dvh-52px)]">
         데이터를 불러오는 중…
       </div>
     );
   }
 
   return (
-    <div className="relative h-[calc(100dvh-52px)] w-full overflow-hidden bg-slate-200">
+    <div className="relative h-[calc(100dvh-52px-var(--mtab-h))] w-full overflow-hidden bg-slate-200 md:h-[calc(100dvh-52px)]">
       {/* ── 지도: 화면 전체 ─────────────────────────────────────────────────── */}
       <div className="absolute inset-0">
         {/* 매물 배지 — 사용자 요청(2026-11-21)으로 초기 화면에는 매물 배지를 넘기지 않는다.
@@ -2206,6 +2259,7 @@ export default function ZoneExplorer() {
               placeholder="구역명·사업유형·자치구·주소 검색 — 예: 신림동 362-32, 청년안심"
               aria-label="구역명·자치구·주소 검색"
               data-testid="zone-search-input"
+              id="zone-search-input"
               className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
             <button
