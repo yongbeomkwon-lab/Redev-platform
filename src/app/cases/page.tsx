@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "현금청산 판례 리포트 — 리디브(redev)",
   description:
-    "재개발·재건축 현금청산 판례만 모았습니다 — 분양신청 미신청·철회, 다물권자(1+1·대표조합원), 권리산정기준일 이후 지분, 감정평가 기준일·개발이익, 수용·명도까지 대법원 판결 원문 기준으로 정리합니다.",
+    "재개발·재건축 현금청산 판례만 모았습니다 — 분양신청 미신청·철회, 다물권자(1+1·대표조합원), 권리산정기준일 이후 지분, 감정평가 기준일·개발이익, 투기과열지구 5년 재당첨 제한(한남3구역), 수용·명도까지 판결 원문 기준으로 정리합니다.",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,6 +13,8 @@ export const metadata: Metadata = {
 //   · 카드의 사건번호·선고일·법원·판시는 국가법령정보센터·대법원 판례속보·케이스노트의
 //     판결문으로 하나씩 대조한 것만 적는다. 확인되지 않은 사건은 넣지 않는다.
 //   · 각 카드는 요지(사실관계) → 핵심 법리(조문) → 중개 실무 체크포인트 순서다.
+//   · 2026-11-28 추가: 한남3구역 5년 재당첨 제한(서울행정법원 2022구합71424) — 첫 대법원
+//     아닌 1심 판결이라 카드에 '1심'을 밝히고, 인용은 판결문 원문(이유·인정사실)만 쓴다.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Issue = { no: string; title: string; desc: string; anchor: string };
@@ -44,6 +46,12 @@ const ISSUES: Issue[] = [
   },
   {
     no: "05",
+    title: "투기과열지구 5년 재당첨 제한",
+    desc: "다른 구역에서 입주권을 받은 지 5년이 안 됐다면 — 투기과열지구에서 새로 산 물건으로는 분양신청이 막히고 현금청산으로 갈 수 있습니다.",
+    anchor: "#case-5",
+  },
+  {
+    no: "06",
     title: "수용·명도·지연가산금",
     desc: "협의가 깨진 뒤 조합이 쓸 수 있는 절차(수용재결·매도청구)와, 그 절차를 늦게 밟았을 때 조합이 지는 가산금.",
     anchor: "#more",
@@ -65,6 +73,18 @@ type CaseCard = {
   checks: string[];
   result: string;
   source: { label: string; href: string };
+  // 2026-11-28 — 타임라인(날짜만)과 '5년 제한 창' 도식. 판결문에 적힌 날짜만 올린다.
+  timeline?: {
+    caption: string;
+    window?: {
+      title: string;
+      badge: string;
+      windowPct: number;
+      footnote: string;
+      marks: { pct: number; pos: "start" | "mid" | "end"; when: string; what: string }[];
+    };
+    beats: { when: string; tag?: string; what: string; note?: string; key?: boolean }[];
+  };
 };
 
 const CASES: CaseCard[] = [
@@ -214,6 +234,141 @@ const CASES: CaseCard[] = [
     result: "파기환송(매매대금 산정 부분) — 기준시점은 양수일, 개발이익 포함",
     source: { label: "판결 전문 (케이스노트)", href: "https://casenote.kr/대법원/2022다228230" },
   },
+  {
+    id: "case-5",
+    no: "05",
+    issue: "투기과열지구 · 5년 재당첨 제한",
+    title: "다른 구역에서 당첨된 지 5년 안이면, 한남3구역 건물을 사서 조합원이 돼도 현금청산",
+    court: "서울행정법원",
+    decided: "2024. 7. 4.",
+    caseNo: "2022구합71424",
+    caseName: "분양대상자지위확인",
+    appeal: "1심 판결 — 항소·확정 여부는 확인되지 않음",
+    facts: [
+      "한남3재정비촉진구역(서울 용산구 일대 386,395.5㎡)은 투기과열지구입니다. 원고는 2020. 10. 19. 구역 안 단층주택(49.59㎡) 가운데 24.79㎡를 사서 조합원이 됐고, 조합원 분양신청 기간(2021. 4. 9.~6. 27.) 중인 2021. 5. 15. 84㎡형에 분양신청을 했습니다.",
+      "원고는 2014. 5. 30. 동대문구 D구역 주택을 취득해 2015. 12. 20. 그 조합에 분양신청을 했고, D구역은 2018. 5. 10. 원고를 분양대상자로 정한 최초 관리처분계획을 인가받았습니다. 원고는 그 주택을 2019. 12. 23. 매도하고 한남3구역으로 옮겼습니다.",
+      "한남3구역 조합이 한국부동산원과 용산구청에 분양신청자·세대원의 최근 5년 당첨 이력을 조회해, 2022. 3. 31. 원고의 2018. 5. 10. D구역 당첨 사실을 통보받았습니다. 조합은 소명절차를 거쳐 원고를 현금청산대상자로 정했고, 2023. 6. 23. 용산구청 인가·고시로 확정됐습니다.",
+      "당시 용산구청 자료를 인용한 보도에 따르면 한남3구역 조합원 3,834명 가운데 216명이 현금청산 대상으로 분류됐습니다(헤럴드경제 2023. 7. 15.).",
+    ],
+    law: [
+      {
+        text: "도시정비법 제72조 제6항은 투기과열지구 정비사업에서 관리처분계획에 따라 조합원분양분·일반분양분 분양대상자로 선정된 사람과 그 세대에 속한 사람은 분양대상자 선정일부터 5년 이내에 투기과열지구에서 분양신청을 할 수 없다고 정합니다. 조합원분양분의 선정일은 '최초 관리처분계획 인가일'입니다.",
+        cite: "도시정비법 제72조 제6항 (2018. 2. 9. 시행)",
+      },
+      {
+        text: "법원은 이 '최초 관리처분계획 인가일'이 분양대상자가 된 선행 사업의 인가일을 뜻한다고 봤습니다. 원고가 분양신청을 한 2015. 12. 20.은 선정일이 아니고 기산점은 2018. 5. 10.이므로, 5년이 지나지 않은 2021. 5. 15. 신청은 받아들일 수 없다는 것입니다.",
+      },
+      {
+        text: "부칙 제37조의2(구 부칙 제4조)는 법 시행 전 투기과열지구 토지등소유자에게 종전 규정을 적용하지만, 단서 제1호는 시행 후 사업구역의 토지·건축물을 취득해 조합원분양분 분양대상자로 선정되면 다시 제한을 걸도록 합니다. 법원은 5년 제한이 걸린 까닭이 '법 시행 전에 주택을 산 것'이 아니라 '시행 후 D구역 분양대상자로 선정된 것'이라며 소급입법이 아니라고 했습니다.",
+      },
+      {
+        text: "1세대 1주택자라거나 D구역 주택을 팔아 그 사업의 분양대상자 지위에서 빠졌다는 사정도 받아들여지지 않았습니다. 법은 상속·결혼·이혼으로 조합원 자격을 얻은 경우만 예외로 두고 있고, 관리처분계획을 변경해 분양절차를 새로 연다는 주장도 실제로 개시된 절차가 없다는 이유로 배척됐습니다.",
+      },
+    ],
+    checks: [
+      "매수 전에 매수자 본인과 세대원 전원의 청약홈 'APT 당첨사실조회'를 돌려 최근 5년 투기과열지구 당첨 이력을 확인하세요. 조합은 한국부동산원과 관할 구청에 조회를 의뢰하므로, 매수 전에 확인하지 않은 이력은 계약 뒤에 그대로 드러납니다.",
+      "기산점은 '내가 분양신청한 날'이 아니라 '선행 사업의 최초 관리처분계획 인가일'입니다. 다른 구역에 분양신청만 해 둔 상태라면, 그 구역의 관리처분 인가일이 잡히는 순간부터 5년이 새로 시작됩니다.",
+      "두 사업의 인가일과 분양신청 기간을 나란히 놓고 날짜를 계산하세요. 끝나는 날은 후행 사업의 분양신청 마감일 기준이라, 며칠 차이로 자격이 갈립니다.",
+      "1세대 1주택자라서, 기존 물건을 팔았으니까 괜찮다고 설명하면 안 됩니다. 이 사건 원고는 둘 다 주장했지만 모두 배척됐습니다.",
+      "상속·결혼·이혼으로 조합원 자격을 얻은 경우가 유일한 예외입니다. 예외에 해당해도 실제 판단은 관리처분계획 인가권자인 구청이 하므로, 계약 전에 구청 주거정비과에 확인해 두세요.",
+      "걸리면 받는 돈은 감정평가액 기준 현금청산입니다. 입주권 프리미엄과의 차액을 숫자로 계산해 계약 전에 보여주세요 — 이 구역에서는 웃돈 8~9억 원이 사라졌다는 사례가 보도되기도 했습니다(헤럴드경제 2023. 7. 15.).",
+    ],
+    result: "청구 기각 — 현금청산대상자로 정한 관리처분계획 유지(1심)",
+    source: { label: "판결 전문 (빅케이스)", href: "https://bigcase.ai/cases/서울행정법원/2022구합71424" },
+    timeline: {
+      caption: "판결문에 적힌 날짜만",
+      window: {
+        title: "5년 제한 창 — 분양신청이 창 안에 들어왔습니다",
+        badge: "2018.5.10 → 2023.5.10",
+        windowPct: 100,
+        footnote:
+          "기산일(2018. 5. 10.)부터 5년이 끝나는 2023. 5. 10.까지가 제한 기간입니다. 원고의 분양신청(2021. 5. 15.)은 그 안에 있었고, 현금청산대상자로 확정된 것은 창이 끝난 뒤인 2023. 6. 23. 인가·고시 때입니다.",
+        marks: [
+          { pct: 0, pos: "start", when: "2018.5.10.", what: "기산 · D구역 최초 관리처분 인가" },
+          { pct: 60.3, pos: "mid", when: "2021.5.15.", what: "한남3구역 분양신청" },
+          { pct: 100, pos: "end", when: "2023.5.10.", what: "5년 만료" },
+        ],
+      },
+      beats: [
+        {
+          when: "2014.5.30.",
+          tag: "취득",
+          what: "원고, 동대문구 D구역 이문동 주택 취득",
+          note: "나중에 5년 제한의 출발점이 되는 ‘선행 사업’ 물건입니다.",
+        },
+        {
+          when: "2015.12.20.",
+          tag: "분양신청",
+          what: "D구역 조합에 분양신청",
+          note: "원고는 이 날을 기산점으로 보아 “5년이 지났다”고 주장했지만, 법원은 받아들이지 않았습니다.",
+        },
+        {
+          when: "2018.2.9.",
+          tag: "규제 시행",
+          what: "투기과열지구 5년 재당첨 제한 시행",
+          note: "2017. 8. 3. 서울 전역이 투기과열지구로 지정됐고, 2017. 10. 24. 개정으로 신설된 제72조 제6항이 2018. 2. 9.부터 시행됐습니다.",
+        },
+        {
+          when: "2018.5.10.",
+          tag: "기산점",
+          what: "D구역 최초 관리처분계획 인가 — 분양대상자로 선정",
+          note: "이 날부터 5년이 시작됩니다. 원고가 이 기간 안에 한남3구역에 분양신청을 했습니다.",
+          key: true,
+        },
+        {
+          when: "2019.12.23.",
+          tag: "매도",
+          what: "D구역 주택 매도",
+          note: "분양대상자 지위에서 빼졌다는 근거로 쓰였지만, 판단은 달라지지 않았습니다.",
+        },
+        {
+          when: "2020.10.19.",
+          tag: "매수",
+          what: "한남3구역 단층주택 24.79㎡ 취득 — 조합원이 됨",
+          note: "기산일로부터 2년 5개월 뒤, 5년 창 안에서 이뤄진 취득입니다.",
+        },
+        {
+          when: "2021.5.15.",
+          tag: "창 안",
+          what: "한남3구역 84㎡형 분양신청",
+          note: "접수기간은 2021. 4. 9.~6. 27. 5년 창이 끝나기 1년 11개월쯤 전이었습니다.",
+          key: true,
+        },
+        {
+          when: "2022.3.31.",
+          tag: "조회",
+          what: "한국부동산원·용산구청 조회 결과, 2018. 5. 10. D구역 당첨 이력 통보",
+          note: "조합이 분양신청자와 세대원의 최근 5년 이력을 직접 조회해 잡아냈습니다. 소명절차가 이어졌습니다.",
+        },
+        {
+          when: "2022년",
+          tag: "제소",
+          what: "원고, 소송 제기(2022구합71424)",
+          note: "접수일은 판결문에 나오지 않습니다(사건번호가 2022년 접수분).",
+        },
+        {
+          when: "2023.6.23.",
+          tag: "청산 확정",
+          what: "현금청산대상자로 정한 관리처분계획 인가·고시",
+          note: "용산구청장 인가. 청구취지가 취소를 구한 처분이 바로 이것입니다.",
+          key: true,
+        },
+        {
+          when: "2023.8.30.",
+          tag: "변경 총회",
+          what: "재정비촉진계획·관리처분계획 변경 가결",
+          note: "원고는 “새 분양절차를 열 것이니 5년이 지났다”고 했지만, 실제 개시된 절차가 없다며 배척됐습니다.",
+        },
+        {
+          when: "2024.7.4.",
+          tag: "판결",
+          what: "서울행정법원 제2부, 청구 기각",
+          note: "현금청산대상자로 정한 관리처분계획이 그대로 유지됐습니다(1심).",
+          key: true,
+        },
+      ],
+    },
+  },
 ];
 
 type MoreCase = {
@@ -227,7 +382,7 @@ type MoreCase = {
 
 const MORE: MoreCase[] = [
   {
-    no: "05",
+    no: "06",
     issue: "수용 · 지연가산금",
     cite: "대법원 2015. 12. 23. 선고 2015두50535 판결 [손실보상금]",
     name: "협의가 깨지면 별도 손실보상 협의 없이 바로 수용재결을 청구할 수 있다",
@@ -236,7 +391,7 @@ const MORE: MoreCase[] = [
     href: "https://casenote.kr/대법원/2015두50535",
   },
   {
-    no: "06",
+    no: "07",
     issue: "지연이자 · 명도",
     cite: "대법원 2020. 9. 3. 선고 2018두48922 판결 [청산금이자지급청구]",
     name: "150일을 넘겨 지급했어도, 소유자가 계속 점유하다 넘겼다면 지체책임은 없다",
@@ -245,7 +400,7 @@ const MORE: MoreCase[] = [
     href: "https://casenote.kr/대법원/2018두48922",
   },
   {
-    no: "07",
+    no: "08",
     issue: "감정 기준일 (구법)",
     cite: "대법원 2010. 12. 23. 선고 2010다73215 판결 [소유권이전등기절차이행등]",
     name: "재건축 조합은 매도청구로 소유권을 넘겨받고, 기준시점은 분양신청 마감 다음 날",
@@ -254,7 +409,7 @@ const MORE: MoreCase[] = [
     href: "https://casenote.kr/대법원/2010다73215",
   },
   {
-    no: "08",
+    no: "09",
     issue: "1세대 다물권",
     cite: "대법원 2023. 6. 29. 선고 2022두56586 판결 [관리처분계획일부무효확인등]",
     name: "1세대 다물권자에게서 나눠 사도, 대표 1인을 조합원으로 본다",
@@ -282,6 +437,120 @@ const HOW = [
   },
 ];
 
+/** 2026-11-28 — 판례 카드용 타임라인(세로 스텝) + '5년 제한 창' 가로 도식.
+ *  · 날짜는 판결문에 적힌 것만 넣는다(추정 금지). 연도만 확인되면 '2022년'처럼 쓴다.
+ */
+function CaseTimeline({ t }: { t: NonNullable<CaseCard["timeline"]> }) {
+  const shift = (pos: "start" | "mid" | "end") =>
+    pos === "end" ? "translateX(-100%)" : pos === "mid" ? "translateX(-50%)" : "none";
+
+  return (
+    <section className="border-b border-line bg-slate-50 px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="rounded bg-ink px-1.5 py-0.5 text-[10px] font-bold tracking-[0.08em] text-white">
+          TIMEFRAME
+        </span>
+        <h4 className="text-[12.5px] font-bold tracking-[-0.01em] text-ink">
+          언제 무슨 일이 있었길래 현금청산이 됐나
+        </h4>
+        <span className="ml-auto text-[10.5px] font-medium text-slate-500">{t.caption}</span>
+      </div>
+
+      {t.window && (
+        <div className="mt-3 rounded-lg border border-line bg-white px-3 pt-3 pb-2.5 sm:px-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+            <p className="text-[11.5px] font-bold text-ink">{t.window.title}</p>
+            <span className="text-[10px] font-bold tabular-nums text-brand">{t.window.badge}</span>
+          </div>
+
+          <div className="relative mt-3 h-[62px]">
+            <div className="absolute inset-x-0 top-[5px] h-[8px] rounded-full bg-slate-200" />
+            <div
+              className="absolute left-0 top-[5px] h-[8px] rounded-full bg-brand/45"
+              style={{ width: `${t.window.windowPct}%` }}
+            />
+            {t.window.marks.map((m, i) => (
+              <span
+                key={`line-${i}`}
+                aria-hidden
+                className={
+                  "absolute top-[1px] h-[16px] w-[2px] rounded-full " +
+                  (m.pos === "mid" ? "bg-brand" : "bg-slate-400")
+                }
+                style={{ left: `${m.pct}%`, transform: shift(m.pos) }}
+              />
+            ))}
+            {t.window.marks.map((m, i) => (
+              <span
+                key={`label-${i}`}
+                className="absolute top-[23px] whitespace-nowrap"
+                style={{ left: `${m.pct}%`, transform: shift(m.pos) }}
+              >
+                <span className="block text-[10.5px] font-extrabold leading-[1.35] tabular-nums text-ink">
+                  {m.when}
+                </span>
+                <span className="block text-[9.5px] font-medium leading-[1.35] text-slate-500">{m.what}</span>
+              </span>
+            ))}
+          </div>
+
+          <p className="mt-0.5 text-[11px] leading-[1.65] text-slate-600">{t.window.footnote}</p>
+        </div>
+      )}
+
+      <ol className="mt-4">
+        {t.beats.map((b, i) => (
+          <li key={i} className="grid grid-cols-[62px_14px_1fr] gap-x-2 sm:grid-cols-[76px_18px_1fr]">
+            <div className="pt-[3px] text-right text-[10px] font-bold leading-[1.45] tabular-nums text-slate-500 sm:text-[10.5px]">
+              {b.when}
+            </div>
+            <div className="relative flex justify-center">
+              {i < t.beats.length - 1 && (
+                <span
+                  aria-hidden
+                  className="absolute -bottom-[6px] left-1/2 top-[9px] w-px -translate-x-1/2 bg-slate-300"
+                />
+              )}
+              <span
+                aria-hidden
+                className={
+                  "relative z-10 mt-[5px] rounded-full " +
+                  (b.key
+                    ? "h-[9px] w-[9px] bg-brand ring-2 ring-brand/20"
+                    : "h-[7px] w-[7px] bg-white ring-1 ring-slate-400")
+                }
+              />
+            </div>
+            <div className="pb-3.5">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                {b.tag && (
+                  <span
+                    className={
+                      "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold " +
+                      (b.key ? "bg-brand text-white" : "border border-line bg-white text-slate-600")
+                    }
+                  >
+                    {b.tag}
+                  </span>
+                )}
+                <p
+                  className={
+                    "text-[12.5px] leading-[1.55] " +
+                    (b.key ? "font-bold text-ink" : "font-semibold text-slate-700")
+                  }
+                >
+                  {b.what}
+                </p>
+              </div>
+              {b.note && <p className="mt-0.5 text-[11.5px] leading-[1.65] text-slate-600">{b.note}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export default function CasesPage() {
   return (
     <div className="mx-auto w-full max-w-[980px] px-4 py-10 sm:px-6 sm:py-14">
@@ -295,15 +564,16 @@ export default function CasesPage() {
       </h1>
       <p className="mt-3 max-w-[660px] text-[14px] leading-[1.75] text-slate-600">
         분양신청을 놓쳐서, 다물권자 물건을 나눠 사서, 권리산정기준일 뒤에 지분을 갖게 돼서 —
-        결국 새 아파트 대신 돈으로 정산받는 자리. 상담에서 가장 자주 나오는 다섯 가지 쟁점을
-        대법원 판결 원문으로 확인해 정리했습니다. 판례가 어디서 갈렸는지, 계약 전에 무엇을
+        결국 새 아파트 대신 돈으로 정산받는 자리. 상담에서 가장 자주 나오는 여섯 가지 쟁점을
+        판결문 원문으로 확인해 정리했습니다. 판례가 어디서 갈렸는지, 계약 전에 무엇을
         확인해야 하는지까지 적었습니다.
       </p>
 
       <div className="mt-6 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
         <span className="rounded-full bg-brand-tint px-2.5 py-1 text-brand">2026. 11. 23. 발행</span>
+        <span className="rounded-full bg-brand px-2.5 py-1 text-white">2026. 11. 28. 한남3구역 1건 추가</span>
         <span className="rounded-full border border-line bg-white px-2.5 py-1 text-slate-600">
-          대법원 판결 8건
+          판결 9건 (대법원 8 · 행정법원 1)
         </span>
         <span className="rounded-full border border-line bg-white px-2.5 py-1 text-slate-600">
           판결문 원문 기준
@@ -317,7 +587,7 @@ export default function CasesPage() {
       <section className="mt-8 overflow-hidden rounded-xl border border-brand/20 bg-white">
         <div className="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
           <h2 className="text-[13px] font-bold text-ink">먼저 이것만</h2>
-          <span className="text-[11px] font-medium text-slate-500">현금청산의 뼈대 3가지</span>
+          <span className="text-[11px] font-medium text-slate-500">현금청산의 뼈대 4가지</span>
         </div>
         <ol className="divide-y divide-line">
           <li className="flex gap-3 px-4 py-3.5 sm:px-5">
@@ -339,6 +609,13 @@ export default function CasesPage() {
             <p className="text-[12.5px] leading-[1.7] text-slate-700">
               <b className="font-bold text-ink">얼마</b> — 재개발은 개발이익을 뺀 보상평가,
               재건축은 개발이익을 넣은 시가. 같은 청산인데 금액이 다릅니다.
+            </p>
+          </li>
+          <li className="flex gap-3 px-4 py-3.5 sm:px-5">
+            <span className="text-[11px] font-extrabold text-brand">04</span>
+            <p className="text-[12.5px] leading-[1.7] text-slate-700">
+              <b className="font-bold text-ink">누가</b> — 투기과열지구에서 다른 구역 당첨 이력
+              5년이 안 됐다면, 새로 산 물건으로는 분양신청을 못 합니다. 1세대 1주택자도 예외가 아닙니다.
             </p>
           </li>
         </ol>
@@ -363,7 +640,7 @@ export default function CasesPage() {
       {/* ── 판례 카드 ────────────────────────────────────────────────────── */}
       <div className="mt-12 flex items-end justify-between gap-3 border-b border-line pb-2">
         <h2 className="text-[15px] font-bold tracking-[-0.02em] text-ink">이번 호 판례</h2>
-        <p className="text-[11px] font-medium text-slate-500">4건 · 원문 대조 완료</p>
+        <p className="text-[11px] font-medium text-slate-500">5건 · 원문 대조 완료</p>
       </div>
 
       {CASES.map((c) => (
@@ -390,6 +667,8 @@ export default function CasesPage() {
               {c.appeal && <span className="text-slate-500"> · {c.appeal}</span>}
             </p>
           </header>
+
+          {c.timeline && <CaseTimeline t={c.timeline} />}
 
           <div className="divide-y divide-line">
             <section className="grid gap-1.5 px-4 py-3.5 sm:grid-cols-[70px_1fr] sm:gap-3 sm:px-5">
@@ -510,7 +789,7 @@ export default function CasesPage() {
         리디브의 판례 리포트는 공개된 판결문을 정리한 참고자료이며 법률 자문이 아닙니다. 판결 내용은
         사건마다 적용 법령(개정 전후)과 사실관계가 달라 그대로 적용할 수 없고, 개별 사안의 결론은
         계약·소송 전에 변호사 등 전문가의 확인을 받으세요. 사건번호·선고일은 국가법령정보센터·대법원
-        판례속보·케이스노트의 판결문과 대조했습니다.
+        판례속보·케이스노트·빅케이스의 판결문과 대조했습니다.
       </p>
     </div>
   );
