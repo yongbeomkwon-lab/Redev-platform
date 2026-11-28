@@ -618,7 +618,16 @@ export type StageTimelineInput = {
 
 export function buildStageTimeline(zone: StageTimelineInput): StageTimeline {
   const family = pickFamily(zone.type, zone.kind, zone.stage);
-  const steps = FAMILY_STEPS[family];
+  // 재정비촉진지구 레코드(예: 한남재정비촉진지구)는 '구역 지정' 칸이 곧 지구 지정이다 — 칸 이름을 바로 부른다
+  //   (현재 데이터에서 이 소분류는 한남재정비촉진지구 1곳뿐이고, 지구 단위 레코드라 구역 지정 칸이 없다)
+  const steps: Step[] =
+    zone.kind === "재정비촉진지구"
+      ? FAMILY_STEPS[family].map((s) =>
+          s.keys.includes("district") && s.label.includes("구역 지정")
+            ? { ...s, label: "재정비촉진지구 지정 고시" }
+            : s
+        )
+      : FAMILY_STEPS[family];
   const rawStage = zone.stage ?? "";
 
   const haltedReason = HALTED_STAGE[rawStage];
