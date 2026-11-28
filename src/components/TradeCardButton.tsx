@@ -8,7 +8,7 @@
 //  · 카드에 들어가는 숫자는 모두 **같은 단지·비슷한 평형의 실제 거래**에서 계산한다
 //    (최고가대비·3개월건수·평형최고·직전대비). 거래가 하나뿐이면 그 줄은 비운다.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { toPyeong, type MolitTransaction } from "@/lib/molit";
 import {
   deltaEokWon,
@@ -172,11 +172,12 @@ export default function TradeCardButton({
 }) {
   const [status, setStatus] = useState<Status>("idle");
   const [preview, setPreview] = useState<{ url: string; blob: Blob } | null>(null);
-  const data = useMemo(() => buildCardData(tx, peers, { zoneName }), [tx, peers, zoneName]);
 
   const make = useCallback(async () => {
     setStatus("making");
     try {
+      // 카드는 **누를 때만** 계산한다 — 목록 수백 행이 렌더마다 통계를 다시 내지 않게
+      const data = buildCardData(tx, peers, { zoneName });
       const blob = await renderTradeCardPng(data);
       // 1) 클립보드 이미지 복사 — 되면 끝(카톡 Ctrl+V)
       const ClipItem = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
@@ -200,7 +201,7 @@ export default function TradeCardButton({
       setStatus("error");
       setTimeout(() => setStatus("idle"), 3000);
     }
-  }, [data, tx.name, tx.dealDate]);
+  }, [tx, peers, zoneName]);
 
   const share = useCallback(async () => {
     if (!preview) return;
