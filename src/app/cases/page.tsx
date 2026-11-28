@@ -463,7 +463,8 @@ function CaseTimeline({ t }: { t: NonNullable<CaseCard["timeline"]> }) {
             <span className="text-[10px] font-bold tabular-nums text-brand">{t.window.badge}</span>
           </div>
 
-          <div className="relative mt-3 h-[62px]">
+          {/* 좁은 화면에서는 라벨이 두세 줄로 늘어나므로 높이를 따로 준다(절대배치는 높이를 키우지 못함) */}
+          <div className="relative mt-3 h-[80px] sm:h-[62px]">
             <div className="absolute inset-x-0 top-[5px] h-[8px] rounded-full bg-slate-200" />
             <div
               className="absolute left-0 top-[5px] h-[8px] rounded-full bg-brand/45"
