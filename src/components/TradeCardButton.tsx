@@ -64,28 +64,32 @@ export function buildCardData(
   const pct = maxSame > 0 ? Math.round((tx.price / maxSame) * 1000) / 10 : null;
   const hot = tx.price >= maxSame;
 
-  // 단지 전체(평형 무관) 시계열 — 월별 마지막 거래가로 이어 그린다
-  const all = peers
-    .filter(
-      (p) =>
-        !p.canceled &&
-        p.price > 0 &&
-        p.umdNm === tx.umdNm &&
-        (tx.kind === "단독·다가구"
-          ? p.jibun === tx.jibun
-          : p.name === tx.name && (tx.kind === "아파트" || p.jibun === tx.jibun))
-    )
-    .sort((a, b) => a.dealDate.localeCompare(b.dealDate));
-  const byMonth = new Map<string, number>();
-  for (const p of all) byMonth.set(p.dealDate.slice(0, 7), p.price);
-  if (!byMonth.size) for (const p of same) byMonth.set(p.dealDate.slice(0, 7), p.price);
-  const series = [...byMonth.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([ym, v]) => ({ t: Date.parse(`${ym}-01`), v }));
+  // 시계열 — **같은 평형** 거래만 월별 마지막 거래가로 이어 그린다.
+  //   · 단지 전체를 섮으면 84㎡ 거래 하나가 113㎡ 선을 꾸억 꾸어 내려 추이가 왜곡된다(검수 2026-11-28).
+  //   · 같은 평형 거래가 흔하면(3건 미만) 단지 전체로 대신한다.
+  const monthSeries = (list: MolitTransaction[]) => {
+    const byMonth = new Map<string, number>();
+    for (const p of [...list].sort((a, b) => a.dealDate.localeCompare(b.dealDate))) {
+      byMonth.set(p.dealDate.slice(0, 7), p.price);
+    }
+    return [...byMonth.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([ym, v]) => ({ t: Date.parse(`${ym}-01`), v }));
+  };
+  const all = peers.filter(
+    (p) =>
+      !p.canceled &&
+      p.price > 0 &&
+      p.umdNm === tx.umdNm &&
+      (tx.kind === "단독·다가구"
+        ? p.jibun === tx.jibun
+        : p.name === tx.name && (tx.kind === "아파트" || p.jibun === tx.jibun))
+  );
+  const series = monthSeries(same.length >= 3 ? same : all.length ? all : same);
 
   const pyeong = tx.areaSqm ? toPyeong(tx.areaSqm) : null;
   const areaText = tx.areaSqm
-    ? `${tx.areaSqm.toFixed(tx.areaSqm >= 100 ? 0 : 2).replace(/\.00$/, "")}m²${pyeong ? ` ${pyeong}평` : ""}`
+    ? `${tx.areaSqm.toFixed(2).replace(/\.?0+$/, "")}m²${pyeong ? ` ${pyeong}평` : ""}`
     : "면적 미상";
   const floorText = tx.floor ? `${tx.floor}층` : "층 미상";
   const dealText = tx.dealingType || "중개거래";
@@ -107,6 +111,12 @@ export function buildCardData(
 
   const firstYm = series[0]?.t ?? Date.parse(tx.dealDate);
   const months = Math.max(1, Math.round((Date.parse(tx.dealDate) - firstYm) / MONTH_MS));
+  const spanText = months >= 12 ? `${Math.round((months / 12) * 10) / 10}년 전` : `${months}개월 전`;
+  const first = series[0]?.v ?? tx.price;
+  const short = (v: number) => {
+    const s = splitEokWon(v);
+    return s.sub ? `${s.main} ${s.sub}` : s.main;
+  };
 
   return {
     name: tx.kind === "단독·다가구" ? `${tx.umdNm} ${tx.jibun}` : tx.name,
@@ -120,7 +130,7 @@ export function buildCardData(
     stats,
     series,
     chartTitle: months >= 12 ? `최근 ${Math.round((months / 12) * 10) / 10}년 실거래` : `최근 ${months}개월 실거래`,
-    chartFooter: `${same.length}건 · ${series.length}개 시점${tx.canceled ? " · 해제 거래" : ""}`,
+    chartFooter: `${spanText} ${short(first)} → 지금 ${short(tx.price)} · ${same.length}건`,
     watermark: "리디브 · 서울재개발사다리",
     watermarkRight: `redev-platform · ${new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}`,
   };

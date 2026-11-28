@@ -43,7 +43,7 @@ export type TradeCardData = {
 };
 
 export const CARD_W = 760;
-export const CARD_H = 980;
+export const CARD_H = 1040;
 
 const RED = "#c9302c";
 const RED_SOFT = "#fdecec";
@@ -176,15 +176,16 @@ export function drawTradeCard(ctx: CanvasRenderingContext2D, d: TradeCardData) {
   font(ctx, 500, 25);
   ctx.fillStyle = MUTED;
   const subLines = wrap(ctx, d.subline, innerW, 2);
-  let y = 146;
+  let y = 150;
   for (const line of subLines) {
     ctx.fillText(line, left, y);
-    y += 33;
+    y += 34;
   }
+  const subEnd = y - 34;
 
   // ── 큰 금액 + 증감 배지 ─────────────────────────────────────────────────
-  const priceTop = Math.max(y + 34, 218);
-  const bigSize = 74;
+  const priceTop = subEnd + 68;
+  const bigSize = 76;
   font(ctx, 800, bigSize);
   const mainW = ctx.measureText(d.price.main).width;
   ctx.fillStyle = RED;
@@ -219,9 +220,9 @@ export function drawTradeCard(ctx: CanvasRenderingContext2D, d: TradeCardData) {
   ctx.fillText(fit(ctx, d.meta, innerW), left, priceTop + 52);
 
   // ── 지표 4칸 (2×2) ─────────────────────────────────────────────────────
-  const statTop = priceTop + 84;
+  const statTop = priceTop + 106;
   const colW = innerW / 2;
-  const rowH = 52;
+  const rowH = 54;
   d.stats.slice(0, 4).forEach((s, i) => {
     const cx = left + (i % 2) * colW;
     const cy = statTop + Math.floor(i / 2) * rowH;
@@ -236,9 +237,9 @@ export function drawTradeCard(ctx: CanvasRenderingContext2D, d: TradeCardData) {
 
   // ── 추이 차트 ───────────────────────────────────────────────────────────
   const chartX = left;
-  const chartY = statTop + rowH * 2 + 12;
+  const chartY = statTop + rowH * 2 + 16;
   const chartW = innerW;
-  const chartH = H - 118 - chartY;
+  const chartH = H - 128 - chartY;
 
   ctx.fillStyle = "#fbfcfe";
   roundRect(ctx, chartX, chartY, chartW, chartH, 18);
@@ -351,7 +352,7 @@ function drawSeries(
   ctx.lineCap = "round";
   ctx.stroke();
 
-  // 마지막 거래 점 + 금액
+  // 마지막 거래 점 + 금액 — 오른쪽 끝에 걸리면 왼쪽으로 밀어 넣는다
   const last = coords[coords.length - 1];
   const lastVal = pts[pts.length - 1].v;
   ctx.beginPath();
@@ -364,20 +365,12 @@ function drawSeries(
 
   font(ctx, 800, 22);
   ctx.fillStyle = "#c9302c";
-  const label = `매매 ${splitEokWon(lastVal).main}${splitEokWon(lastVal).sub ? " " + splitEokWon(lastVal).sub : ""}`;
+  const sp = splitEokWon(lastVal);
+  const label = `매매 ${sp.main}${sp.sub ? " " + sp.sub : ""}`;
   const lw = ctx.measureText(label).width;
-  ctx.textAlign = "right";
-  ctx.fillText(label, Math.min(x + w, last.x + 60), Math.max(y + 14, last.y + 44));
-  ctx.textAlign = "left";
-
-  // 왼쪽 아래 시작 시점
-  if (pts.length > 1) {
-    const months = Math.max(1, Math.round((tMax - tMin) / (1000 * 60 * 60 * 24 * 30)));
-    font(ctx, 600, 19);
-    ctx.fillStyle = "#94a3b8";
-    const spanText = months >= 12 ? `${Math.round((months / 12) * 10) / 10}년 전` : `${months}개월 전`;
-    ctx.fillText(spanText, x + 2, y + h - 4);
-  }
+  const lx = Math.min(x + w - lw, Math.max(x + 4, last.x - lw - 14));
+  const ly = Math.max(y + 18, last.y - 16);
+  ctx.fillText(label, lx, ly);
 }
 
 /** 실제로 그려서 PNG Blob 을 만든다 (Retina 2배) */
