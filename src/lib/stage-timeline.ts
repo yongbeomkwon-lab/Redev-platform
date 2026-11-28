@@ -600,7 +600,12 @@ export function formatStageDate(d?: string): string | undefined {
   return d.replace(/-/g, ".");
 }
 
-export function buildStageTimeline(zone: {
+/**
+ * 사업 진행단계 카드에 들어가는 값 — 서울시 구역 레코드(SeoulZone) 전체가 아니어도 된다.
+ *   대표 구역 6곳처럼 패널이 샘플 데이터로 그려지는 곳도, 서울시 원본 레코드에서 이 값만
+ *   뽑아 같은 카드를 그린다(featured-stage.ts).
+ */
+export type StageTimelineInput = {
   type: MapZoneType | string;
   kind?: string;
   stage: string;
@@ -609,7 +614,9 @@ export function buildStageTimeline(zone: {
   stageDates?: Partial<Record<string, string>>;
   rightsDate?: string;
   datesAsOf?: string;
-}): StageTimeline {
+};
+
+export function buildStageTimeline(zone: StageTimelineInput): StageTimeline {
   const family = pickFamily(zone.type, zone.kind, zone.stage);
   const steps = FAMILY_STEPS[family];
   const rawStage = zone.stage ?? "";

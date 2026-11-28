@@ -28,6 +28,8 @@ import { clearLastView, readLastView, urlPinsView, writeLastView, type StoredVie
 import Icon from "@/components/Icon";
 import ZoneOfficialPanel from "@/components/ZoneOfficialPanel";
 import ZoneVitalStats from "@/components/ZoneVitalStats";
+import StageTimeline from "@/components/StageTimeline";
+import { featuredStageInput } from "@/lib/featured-stage";
 import ZoneTransactions from "@/components/ZoneTransactions";
 import LandPermitNotice from "@/components/LandPermitNotice";
 import { Badge, StageBadge, TypeBadge } from "@/components/Badges";
@@ -608,6 +610,10 @@ export default function ZoneExplorer() {
   const selected = zones.find((z) => z.id === selectedId);
   // 대표 구역이 아닌 구역 — 고시 레코드만 있는 구역
   const selectedSeoul = selected ? undefined : seoulZones.find((z) => z.id === selectedId);
+  // 대표 구역의 서울시 원본 레코드 — 같은 id 의 고시 레코드(단계·단계별 날짜·권리산정기준일).
+  //   대표 구역 패널은 샘플 값으로 그리지만, 「사업 진행단계」 카드는 일반 구역과 같은
+  //   서울시 원본으로 그린다(2026-11-28).
+  const selectedOfficial = selected ? seoulZones.find((z) => z.id === selected.id) : undefined;
   const selectedTx = transactions.filter((t) => t.zoneId === selectedId);
   // 지도 전체 실거래 가격표 — 지도가 뜬 뒤 한 번만 받아 둔다(700KB급, 화면을 막지 않게)
   useEffect(() => {
@@ -3152,6 +3158,11 @@ export default function ZoneExplorer() {
                   date={selected.consentDate}
                   note={selected.consentNote}
                 />
+
+                {/* 사업 진행단계 — 일반 구역과 같은 카드.
+                    서울시 원본 레코드의 단계·단계별 고시 날짜·권리산정기준일을 그대로 보여준다
+                    (없는 날짜는 비워 둔다). 샘플 값(세대수·비례율·시공사)과 달리 이 카드는 공식 값이다. */}
+                <StageTimeline zone={featuredStageInput(selected, selectedOfficial)} />
 
                 <div>
                   <h3 className="mb-1.5 text-xs font-bold text-slate-700">사업개요</h3>

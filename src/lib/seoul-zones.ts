@@ -101,6 +101,8 @@ export type SeoulZone = {
   rightsDate?: string;
   /** 단계 날짜 기준일(예: 2026-06-30 서울시 통계 기준) */
   datesAsOf?: string;
+  /** 이 구역 레코드의 자료 기준일(서울플랜+ 기준일, 예: 2026-09-10) — 화면에 '단계 기준'으로 쓴다 */
+  asOf?: string;
 };
 
 /**

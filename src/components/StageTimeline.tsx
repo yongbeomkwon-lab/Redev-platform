@@ -6,8 +6,7 @@
 //   날짜는 서울시 고시·공고 문자열에 적힌 것만 표시한다(비어 있으면 비워 둔다).
 //   후보지 취소·추천 제외처럼 멈춘 구역은 사다리 대신 중단 배지와 사유만 보여준다.
 // ─────────────────────────────────────────────────────────────────────────────
-import type { SeoulZone } from "@/lib/seoul-zones";
-import { buildStageTimeline } from "@/lib/stage-timeline";
+import { buildStageTimeline, type StageTimelineInput } from "@/lib/stage-timeline";
 
 function Check() {
   return (
@@ -17,7 +16,7 @@ function Check() {
   );
 }
 
-export default function StageTimeline({ zone }: { zone: SeoulZone }) {
+export default function StageTimeline({ zone }: { zone: StageTimelineInput }) {
   const t = buildStageTimeline(zone);
 
   // ── 멈춘 구역: 사다리 대신 중단 사유 ──────────────────────────────────────
