@@ -84,6 +84,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="font/woff2"
           crossOrigin="anonymous"
         />
+        {/* iOS 아이패드·아이폰 ‘홈 화면에 추가’ — 아이폰은 지금도 이 이름을 본다.
+            (Next metadata 의 mobile-web-app-capable 은 안드로이드·최신 브라우저용) */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       {/* 헤더는 슬림(52px) — 지도 탐색 화면이 화면 전체를 쓰도록 위아래 여백을 최소화한다 */}
       <body className="flex min-h-dvh flex-col bg-canvas text-ink antialiased">
